@@ -33,6 +33,13 @@ const (
 	LocationHeader    = "Location"
 	FrameworkName     = "Okapi"
 	TRUE              = "true"
+
+	AccessControlAllowOrigin      = "Access-Control-Allow-Origin"
+	AccessControlAllowHeaders     = "Access-Control-Allow-Headers"
+	AccessControlExposeHeaders    = "Access-Control-Expose-Headers"
+	AccessControlAllowMethods     = "Access-Control-Allow-Methods"
+	AccessControlMaxAge           = "Access-Control-Max-Age"
+	AccessControlAllowCredentials = "Access-Control-Allow-Credentials"
 )
 
 // Constants for HTTP Status Codes

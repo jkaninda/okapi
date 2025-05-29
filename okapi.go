@@ -39,6 +39,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -58,17 +59,20 @@ var (
 
 type (
 	Okapi struct {
-		context     *Context
-		router      *Router
-		middlewares []Middleware
-		Server      *http.Server
-		TLSServer   *http.Server
-		routes      []*Route
-		debug       bool
-		accessLog   bool
-		strictSlash bool
-		logger      *slog.Logger
-		Renderer    Renderer
+		context           *Context
+		router            *Router
+		middlewares       []Middleware
+		Server            *http.Server
+		TLSServer         *http.Server
+		routes            []*Route
+		debug             bool
+		accessLog         bool
+		strictSlash       bool
+		logger            *slog.Logger
+		Renderer          Renderer
+		enableCors        bool
+		cors              Cors
+		optionsRegistered map[string]bool // NEW
 	}
 	Router struct {
 		mux *mux.Router
@@ -146,6 +150,12 @@ func WithServer(server *http.Server) OptionFunc {
 func WithLogger(logger *slog.Logger) OptionFunc {
 	return func(o *Okapi) {
 		o.logger = logger
+	}
+}
+func WithCors(cors Cors) OptionFunc {
+	return func(o *Okapi) {
+		o.enableCors = true
+		o.cors = cors
 	}
 }
 
@@ -292,11 +302,13 @@ func Default(options ...OptionFunc) *Okapi {
 			Response:           &response{},
 			MaxMultipartMemory: defaultMaxMemory,
 		},
-		router:      newRouter(),
-		Server:      server,
-		logger:      slog.Default(),
-		accessLog:   true,
-		middlewares: []Middleware{handleAccessLog},
+		router:            newRouter(),
+		Server:            server,
+		logger:            slog.Default(),
+		accessLog:         true,
+		middlewares:       []Middleware{handleAccessLog},
+		optionsRegistered: make(map[string]bool),
+		cors:              Cors{},
 	}
 	return o.With(options...)
 }
@@ -319,7 +331,21 @@ func (o *Okapi) Start() error {
 	return o.StartServer(o.Server)
 }
 
-// Use adds middleware to the Okapi instance
+// Use registers one or more middleware functions to the Okapi instance.
+// These middleware will be executed in the order they are added for every request
+// before reaching the route handler. Middleware added here will apply to all routes
+// registered on this Okapi instance and any groups created from it.
+//
+// Middleware functions have the signature:
+//
+//	func(next HandleFunc) HandleFunc
+//
+// Example:
+//
+//	// Add logging and authentication middleware
+//	okapi.Use(LoggingMiddleware, AuthMiddleware)
+//
+// Note: For group-specific middleware, use Group.Use() instead.
 func (o *Okapi) Use(middlewares ...Middleware) {
 	o.middlewares = append(o.middlewares, middlewares...)
 }
@@ -362,22 +388,51 @@ func (o *Okapi) SetContext(ctx *Context) {
 
 // ********** HTTP METHODS ***************
 
-func (o *Okapi) Get(path string, h HandleFunc) *Route  { return o.addRoute(GET, path, h) }
+// Get registers a new GET route with the given path and handler function.
+// Returns the created *Route
+func (o *Okapi) Get(path string, h HandleFunc) *Route { return o.addRoute(GET, path, h) }
+
+// Post registers a new POST route with the given path and handler function.
+// Returns the created *Route for possible chaining or modification.
 func (o *Okapi) Post(path string, h HandleFunc) *Route { return o.addRoute(POST, path, h) }
-func (o *Okapi) Put(path string, h HandleFunc) *Route  { return o.addRoute(PUT, path, h) }
+
+// Put registers a new PUT route with the given path and handler function.
+// Returns the created *Route
+func (o *Okapi) Put(path string, h HandleFunc) *Route { return o.addRoute(PUT, path, h) }
+
+// Delete registers a new DELETE route with the given path and handler function.
+// Returns the created *Route
 func (o *Okapi) Delete(path string, h HandleFunc) *Route {
 	return o.addRoute(http.MethodDelete, path, h)
 }
+
+// Patch registers a new PATCH route with the given path and handler function.
+// Returns the created *Route
 func (o *Okapi) Patch(path string, h HandleFunc) *Route { return o.addRoute(PATCH, path, h) }
+
+// Options registers a new OPTIONS route with the given path and handler function.
+// Returns the created *Route
 func (o *Okapi) Options(path string, h HandleFunc) *Route {
 	return o.addRoute(http.MethodOptions, path, h)
 }
+
+// Head registers a new HEAD route with the given path and handler function.
+// Returns the created *Route
 func (o *Okapi) Head(path string, h HandleFunc) *Route { return o.addRoute(HEAD, path, h) }
+
+// Connect registers a new CONNECT route with the given path and handler function.
+// Returns the created *Route
 func (o *Okapi) Connect(path string, h HandleFunc) *Route {
 	return o.addRoute(http.MethodConnect, path, h)
 }
+
+// Trace registers a new TRACE route with the given path and handler function.
+// Returns the created *Route
 func (o *Okapi) Trace(path string, h HandleFunc) *Route { return o.addRoute(TRACE, path, h) }
-func (o *Okapi) Any(path string, h HandleFunc) *Route   { return o.addRoute("", path, h) }
+
+// Any registers a route that matches any HTTP method with the given path and handler function.
+// Returns the created *Route
+func (o *Okapi) Any(path string, h HandleFunc) *Route { return o.addRoute("", path, h) }
 
 // ********** Static Content ***************
 
@@ -406,6 +461,7 @@ func (o *Okapi) addRoute(method, path string, h HandleFunc) *Route {
 		panic("Path cannot be empty")
 	}
 	path = normalizeRoutePath(path)
+
 	route := &Route{
 		Name:   handleName(h),
 		Path:   path,
@@ -414,8 +470,10 @@ func (o *Okapi) addRoute(method, path string, h HandleFunc) *Route {
 		chain:  o,
 	}
 	o.routes = append(o.routes, route)
+
 	handler := o.Next(h)
 
+	// Main handler
 	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		ctx := Context{
 			Request:  r,
@@ -426,8 +484,120 @@ func (o *Okapi) addRoute(method, path string, h HandleFunc) *Route {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}).Methods(method)
-
+	// Register OPTIONS handler only once per path if CORS is enabled
+	o.registerOptionsHandler(path)
 	return route
+}
+
+// HandleFunc registers a new route with the specified HTTP method, path, and handler function.
+// It performs the following operations:
+//  1. Normalizes the route path
+//  2. Creates a new Route instance
+//  3. Applies all registered middlewares to the handler
+//  4. Registers the route with the underlying router
+//  5. Sets up error handling for the handler
+//
+// Parameters:
+//   - method: HTTP method (GET, POST, PUT, etc.)
+//   - path: URL path pattern (supports path parameters)
+//   - h: Handler function that processes the request
+//
+// Middleware Processing:
+//
+//	All middlewares registered via Use() will be applied in order before the handler.
+//	The middleware chain is built using the Next() method.
+//
+// Error Handling:
+//
+//	Any error returned by the handler will be converted to a 500 Internal Server Error.
+//
+// Example:
+//
+//	okapi.HandleFunc("GET", "/users/:id", func(c Context) error {
+//	    id := c.Param("id")
+//	    // ... handler logic
+//	    return nil
+//	})
+func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
+	path = normalizeRoutePath(path)
+
+	route := &Route{
+		Name:   handleName(h),
+		Path:   path,
+		Method: method,
+		Handle: h,
+		chain:  o,
+	}
+	o.routes = append(o.routes, route)
+
+	handler := o.Next(h)
+
+	// Register main method handler
+	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		ctx := Context{
+			Request:  r,
+			Response: &response{writer: w},
+			okapi:    o,
+		}
+		if err := handler(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}).Methods(method)
+	// Register OPTIONS handler only once per path if CORS is enabled
+	o.registerOptionsHandler(path)
+
+}
+
+// registerOptionsHandler registers OPTIONS handler
+func (o *Okapi) registerOptionsHandler(path string) {
+	// Register OPTIONS handler only once per path if CORS is enabled
+	if o.enableCors && !o.optionsRegistered[path] {
+		o.optionsRegistered[path] = true
+
+		o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if !allowedOrigin(o.cors.AllowedOrigins, origin) {
+				http.Error(w, "", http.StatusMethodNotAllowed)
+				return
+			}
+
+			header := w.Header()
+			header.Set(AccessControlAllowOrigin, origin)
+
+			if o.cors.AllowCredentials {
+				header.Set(AccessControlAllowCredentials, "true")
+			}
+
+			if len(o.cors.AllowedHeaders) > 0 {
+				header.Set(AccessControlAllowHeaders, strings.Join(o.cors.AllowedHeaders, ", "))
+			} else if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+				header.Set(AccessControlAllowHeaders, reqHeaders)
+			}
+
+			// Dynamically collect allowed methods for this path
+			var methods []string
+			for _, route := range o.routes {
+				if route.Path == path {
+					methods = append(methods, route.Method)
+				}
+			}
+			if len(o.cors.AllowMethods) > 0 {
+				header.Set(AccessControlAllowMethods, strings.Join(o.cors.AllowMethods, ", "))
+			} else if len(methods) > 0 {
+				header.Set(AccessControlAllowMethods, strings.Join(methods, ", "))
+			}
+
+			if len(o.cors.ExposeHeaders) > 0 {
+				header.Set(AccessControlExposeHeaders, strings.Join(o.cors.ExposeHeaders, ", "))
+			}
+
+			if o.cors.MaxAge > 0 {
+				header.Set(AccessControlMaxAge, strconv.Itoa(o.cors.MaxAge))
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+		}).Methods(http.MethodOptions)
+	}
 }
 
 // ServeHTTP implements the http.Handler interface
@@ -459,35 +629,6 @@ func (o *Okapi) Next(h HandleFunc) HandleFunc {
 	}
 	return next
 }
-
-// NewRouter
-
-// HandleFunc adds a route with a custom handler function
-func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
-	path = normalizeRoutePath(path)
-	route := &Route{
-		Name:   handleName(h),
-		Path:   path,
-		Method: method,
-		Handle: h,
-		chain:  o,
-	}
-	o.routes = append(o.routes, route)
-
-	// Apply middlewares to the handler
-	handler := o.Next(h)
-
-	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		ctx := Context{
-			Request:  r,
-			Response: &response{writer: w},
-			okapi:    o,
-		}
-		if err := handler(ctx); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}).Methods(method)
-}
 func (o *Okapi) Routes() []Route {
 	routes := make([]Route, 0, len(o.routes))
 	for _, route := range o.routes {
@@ -496,7 +637,18 @@ func (o *Okapi) Routes() []Route {
 	return routes
 }
 
-// Group creates a new group with the specified path
+// Group creates a new route group with the specified base path and optional middlewares.
+// The group inherits all existing middlewares from the parent Okapi instance.
+// Routes registered within the group will have their paths prefixed with the group's path,
+// and the group's middlewares will be executed before the route-specific handlers.
+//
+// Panics if the path is empty, as this would lead to ambiguous routing.
+//
+// Example:
+//
+//	api := okapi.Group("/api", AuthMiddleware) // All /api routes require auth
+//	api.Get("/users", getUserHandler)          // Handles /api/users
+//	api.Post("/users", createUserHandler)      // Handles /api/users
 func (o *Okapi) Group(path string, middlewares ...Middleware) *Group {
 	if len(path) == 0 {
 		panic("Group path cannot be empty")

@@ -17,10 +17,11 @@
 ## Features
 
 *  Clean and expressive API design
-*  Powerful binding from JSON, forms, query, headers, and path parameters
+*  Powerful binding from JSON, XML, forms, query, headers, and path parameters
 *  Route grouping and middleware chaining
 *  Built-in middleware: Basic Auth, JWT, OAuth
 *  Easy custom middleware support
+*  Cross-Origin Resource Sharing (CORS)
 *  Templating engine integration
 *  Static file serving
 *  Built entirely on Go’s standard library
@@ -219,6 +220,16 @@ auth := okapi.BasicAuthMiddleware{
 
 o.Use(auth.Middleware)
 o.Get("/admin", adminHandler)
+```
+
+### CORS middleware
+
+```go
+cors := okapi.Cors{AllowedOrigins: []string{"http://localhost:8080", "https://example.com"}, AllowedHeaders: []string{}}
+o := okapi.New(okapi.WithCors(cors))
+	o.Get("/", func(c okapi.Context) error {
+		return c.String(http.StatusOK, "Hello World!")
+	})
 ```
 
 ### Custom Middleware

@@ -25,6 +25,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/jkaninda/okapi"
 	"net/http"
 )
@@ -34,9 +35,21 @@ func main() {
 	// Create a new Okapi instance
 	o := okapi.Default()
 
-	o.Get("/", func(c okapi.Context) error {
+	o.Post("/", func(c okapi.Context) error {
+		name := c.FormValue("name")
+		logo, err := c.FormFile("logo")
+		if err != nil {
+			return c.AbortWithError(http.StatusBadRequest, err)
+		}
+		_, err = logo.Open()
+		if err != nil {
+			return c.AbortWithError(http.StatusBadRequest, err)
+
+		}
+		return c.String(http.StatusOK, fmt.Sprintf("Hello %s", name))
+
 		// Handler logic for the root route
-		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
+		//return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
 	})
 	o.Get("/greeting/:name", greetingHandler)
 

@@ -25,6 +25,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/jkaninda/okapi"
 	"log/slog"
@@ -109,8 +110,7 @@ func adminStore(c okapi.Context) error {
 func adminUpdate(c okapi.Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
-		errMessage := fmt.Sprintf("Failed to bind book: %v", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input " + errMessage})
+		return c.AbortBadRequest(err)
 	}
 	for _, book := range books {
 		if book.ID == newBook.ID {
@@ -121,7 +121,7 @@ func adminUpdate(c okapi.Context) error {
 			return c.JSON(http.StatusOK, book)
 		}
 	}
-	return c.JSON(http.StatusNotFound, okapi.M{"error": "Book not found"})
+	return c.AbortNotFound(errors.New("book not found"))
 }
 func index(c okapi.Context) error {
 	return c.JSON(http.StatusOK, books)

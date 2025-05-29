@@ -308,6 +308,37 @@ o.Get("/favicon.ico", func(c okapi.Context) error {
 o.Static("/static", "public/assets")
 ```
 
+## TLS Server
+
+```go
+ // Initialize TLS configuration for secure HTTPS connections
+	tls, err := okapi.LoadTLSConfig("path/to/cert.pem", "path/to/key.pem", "", false)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to load TLS configuration: %v", err))
+	}
+	// Create a new Okapi instance with default config
+	// Configured to listen on port 8080 for HTTP connections
+	o := okapi.Default(okapi.WithAddr(":8080"))
+
+	// Configure a secondary HTTPS server listening on port 8443
+	// This creates both HTTP (8080) and HTTPS (8443) endpoints
+	o.With(okapi.WithTLSServer(":8443", tls))
+
+	// Register application routes and handlers
+	o.Get("/", func(c okapi.Context) error {
+		return c.JSON(http.StatusOK, okapi.M{
+			"message": "Welcome to Okapi!",
+			"status":  "operational",
+		})
+	})
+	// Start the servers
+	// This will launch both HTTP and HTTPS listeners in separate goroutines
+	log.Println("Starting server on :8080 (HTTP) and :8443 (HTTPS)")
+	if err := o.Start(); err != nil {
+		panic(fmt.Sprintf("Server failed to start: %v", err))
+	}
+```
+
 ---
 
 ## Contributing
@@ -320,7 +351,7 @@ Contributions are welcome!
 4. Push to your fork
 5. Open a Pull Request
 
----
+
 
 ---
 ## Give a Star! ⭐

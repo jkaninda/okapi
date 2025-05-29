@@ -63,17 +63,11 @@ func main() {
 		return c.JSON(http.StatusOK, users)
 	})
 	// Get user
-	v1.Get("/users/:id", func(c okapi.Context) error {
-		return show(c)
-	})
+	v1.Get("/users/:id", show)
 	// Update user
-	v1.Put("/users/:id", func(c okapi.Context) error {
-		return update(c)
-	})
+	v1.Put("/users/:id", update)
 	// Create user
-	v1.Post("/users", func(c okapi.Context) error {
-		return store(c)
-	})
+	v1.Post("/users", store)
 
 	// Create a new group with a base path v2
 	v2 := api.Group("/v2")

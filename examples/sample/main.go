@@ -34,7 +34,7 @@ func main() {
 	// Create a new Okapi instance
 	o := okapi.Default()
 
-	o.Post("/", func(c okapi.Context) error {
+	o.Get("/", func(c okapi.Context) error {
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
 	})
 	o.Get("/greeting/:name", greetingHandler)

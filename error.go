@@ -24,6 +24,18 @@
 
 package okapi
 
+import "errors"
+
+// Constants for Error Handling
 var (
-// ErrorNotFound is returned when a route is not found
+	ErrNotFound               = errors.New("not found")
+	ErrFailedToParseMultiPart = errors.New("failed to parse multipart data")
+	ErrInvalidMultiPartData   = errors.New("invalid multipart data")
 )
+
+// ErrorResponse represents a standardized error response structure
+type ErrorResponse struct {
+	Code    int    `json:"code" xml:"code"`
+	Message string `json:"message" xml:"message"`
+	Details string `json:"details,omitempty" xml:"details,omitempty"`
+}

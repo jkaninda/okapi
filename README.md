@@ -125,15 +125,48 @@ o.Get("/books", func(c okapi.Context) error {
 })
 ```
 
-### Struct Binding
+---
 
-Bind request data into a struct from multiple sources:
+## Handling Form Data
+
+### Multipart Form (`multipart/form-data`)
+
+Handle standard form fields and file uploads:
+
+```go
+o.Post("/books", func(c okapi.Context) error {
+	name := c.FormValue("name")
+	price := c.FormValue("price")
+
+	logo, err := c.FormFile("logo")
+	if err != nil {
+		return c.AbortWithError(http.StatusBadRequest, err)
+	}
+	file, err := logo.Open()
+	if err != nil {
+		return c.AbortWithError(http.StatusBadRequest, err)
+	}
+	defer file.Close()
+	// You can now read or save the uploaded file
+	return c.String(http.StatusOK, "File uploaded successfully")
+})
+```
+
+---
+## Struct Binding
+
+Bind request data directly into a struct from multiple sources:
 
 ```go
 type Book struct {
 	ID    int    `json:"id" param:"id" query:"id" form:"id"`
-	Name  string `json:"name" form:"name" max:"50"`
+	Name  string `json:"name" xml:"name" form:"name" min:"4" max:"50" required:"true"`
 	Price int    `json:"price" form:"price" required:"true"`
+
+	Logo *multipart.FileHeader `form:"logo" required:"true"`
+
+	// Supports both ?tags=a&tags=b and ?tags=a,b
+	Tags []string `form:"tags" default:"a,b"`
 }
 
 o.Post("/books", func(c okapi.Context) error {
@@ -145,13 +178,31 @@ o.Post("/books", func(c okapi.Context) error {
 })
 ```
 
-Supported sources:
+### Supported Sources
 
-* Path parameters: `param`
-* Query parameters: `query`
-* Form fields: `form`
-* JSON body: `json`
-* Headers: `header`
+* **Path parameters**: `param`
+* **Query parameters**: `query`
+* **Form fields**: `form`
+* **JSON body**: `json`
+* **XML body**: `xml`
+* **Headers**: `header`
+
+---
+
+## Validation and Defaults
+
+Okapi supports simple, declarative validation using struct tags.
+
+### Semantics
+
+| Field Type | Tag               | Meaning                |
+|------------|-------------------|------------------------|
+| `string`   | `min:"10"`        | Minimum length = 10    |
+| `string`   | `max:"50"`        | Maximum length = 50    |
+| `number`   | `min:"5"`         | Minimum value = 5      |
+| `number`   | `max:"100"`       | Maximum value = 100    |
+| `any`      | `default:"..."`   | Default value if empty |
+| `any`      | `required:"true"` | Field must be provided |
 
 ---
 

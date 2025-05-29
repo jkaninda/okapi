@@ -35,7 +35,6 @@ func main() {
 	o := okapi.Default()
 
 	o.Get("/", func(c okapi.Context) error {
-		// Handler logic for the root route
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
 	})
 	o.Get("/greeting/:name", greetingHandler)

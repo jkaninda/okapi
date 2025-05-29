@@ -25,8 +25,12 @@
 package okapi
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -133,4 +137,49 @@ func allowedOrigin(allowed []string, origin string) bool {
 	}
 	return false
 
+}
+
+// LoadTLSConfig creates a TLS configuration from certificate and key files
+// Parameters:
+//   - certFile: Path to the certificate file (PEM format)
+//   - keyFile: Path to the private key file (PEM format)
+//   - caFile: Optional path to CA certificate file for client verification (set to "" to disable)
+//   - clientAuth: Whether to require client certificate verification
+//
+// Returns:
+//   - *tls.Config configured with the certificate and settings
+//   - error if any occurred during loading
+func LoadTLSConfig(certFile, keyFile, caFile string, clientAuth bool) (*tls.Config, error) {
+	// Load server certificate and key
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	config := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12, // Enforce minimum TLS version 1.2
+	}
+
+	// If caFile is provided, set up client certificate verification
+	if caFile != "" {
+		caCert, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, err
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			_, _ = fmt.Fprintf(DefaultErrorWriter, "Warning: failed to append CA certs from PEM")
+		}
+
+		config.ClientCAs = caCertPool
+		if clientAuth {
+			config.ClientAuth = tls.RequireAndVerifyClientCert
+		} else {
+			config.ClientAuth = tls.VerifyClientCertIfGiven
+		}
+	}
+
+	return config, nil
 }

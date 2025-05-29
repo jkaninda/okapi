@@ -28,11 +28,11 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
 	goutils "github.com/jkaninda/go-utils"
 	"io"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -46,8 +46,8 @@ import (
 var (
 	DefaultWriter      io.Writer = os.Stdout
 	DefaultErrorWriter io.Writer = os.Stderr
-	DefaultPort        int       = 8080
-	DefaultAddr        string    = ":8080"
+	DefaultPort                  = 8080
+	DefaultAddr                  = ":8080"
 )
 
 type (
@@ -57,8 +57,8 @@ type (
 		middlewares       []Middleware
 		Server            *http.Server
 		TLSServer         *http.Server
-		tlsServerConfig   *tls.Config
 		tlsConfig         *tls.Config
+		tlsServerConfig   *tls.Config
 		withTlsServer     bool
 		tlsAddr           string
 		routes            []*Route
@@ -67,13 +67,13 @@ type (
 		strictSlash       bool
 		logger            *slog.Logger
 		Renderer          Renderer
-		enableCors        bool
+		corsEnabled       bool
 		disableKeepAlives bool
 		cors              Cors
 		writeTimeout      int
 		readTimeout       int
 		idleTimeout       int
-		optionsRegistered map[string]bool // NEW
+		optionsRegistered map[string]bool
 	}
 	Router struct {
 		mux *mux.Router
@@ -133,17 +133,38 @@ func WithMux(mux *mux.Router) OptionFunc {
 	}
 }
 
-// WithTLSServer sets the TLS server for the Okapi instance
-func WithTLSServer(server *http.Server) OptionFunc {
-	return func(o *Okapi) {
-		o.TLSServer = server
-	}
-}
-
 // WithServer sets the HTTP server for the Okapi instance
 func WithServer(server *http.Server) OptionFunc {
 	return func(o *Okapi) {
 		o.Server = server
+	}
+}
+
+// WithTls sets tls config to HTTP Server for the Okapi instance
+//
+// Use okapi.LoadTLSConfig() to create a TLS configuration from certificate and key files
+func WithTls(tlsConfig *tls.Config) OptionFunc {
+	return func(o *Okapi) {
+		if tlsConfig != nil {
+			o.tlsConfig = tlsConfig
+		}
+	}
+}
+
+// WithTLSServer sets the TLS server for the Okapi instance
+//
+// Use okapi.LoadTLSConfig() to create a TLS configuration from certificate and key files
+func WithTLSServer(addr string, tlsConfig *tls.Config) OptionFunc {
+	return func(o *Okapi) {
+		if len(addr) != 0 && tlsConfig != nil {
+			if !ValidateAddr(addr) {
+				panic("Invalid address for the TLS Server")
+			}
+			o.withTlsServer = true
+			o.tlsAddr = addr
+			o.tlsServerConfig = tlsConfig
+		}
+
 	}
 }
 
@@ -162,7 +183,7 @@ func WithLogger(logger *slog.Logger) OptionFunc {
 //	o := okapi.New(okapi.WithCors(cors))
 func WithCors(cors Cors) OptionFunc {
 	return func(o *Okapi) {
-		o.enableCors = true
+		o.corsEnabled = true
 		o.cors = cors
 	}
 }
@@ -212,11 +233,6 @@ func WithIdleTimeout(t int) OptionFunc {
 func WithDisabledKeepAlives() OptionFunc {
 	return func(o *Okapi) {
 		o.disableKeepAlives = true
-	}
-}
-func WithTls(tlsConfig *tls.Config) OptionFunc {
-	return func(o *Okapi) {
-		o.tlsConfig = tlsConfig
 	}
 }
 
@@ -365,6 +381,7 @@ func Default(options ...OptionFunc) *Okapi {
 		},
 		router:            newRouter(),
 		Server:            server,
+		TLSServer:         &http.Server{},
 		logger:            slog.Default(),
 		accessLog:         true,
 		middlewares:       []Middleware{handleAccessLog},
@@ -379,16 +396,24 @@ func (o *Okapi) With(options ...OptionFunc) *Okapi {
 	for _, option := range options {
 		option(o)
 	}
+
 	if o.debug {
-		o.logger = slog.New(slog.NewJSONHandler(DefaultWriter,
-			&slog.HandlerOptions{Level: slog.LevelDebug},
+		o.logger = slog.New(slog.NewJSONHandler(
+			DefaultWriter,
+			&slog.HandlerOptions{
+				Level:     slog.LevelDebug,
+				AddSource: true,
+			},
 		))
 	}
-	// Update Server
-	o.Server.ReadTimeout = time.Duration(o.readTimeout) * time.Second
-	o.Server.WriteTimeout = time.Duration(o.writeTimeout) * time.Second
-	o.Server.IdleTimeout = time.Duration(o.idleTimeout) * time.Second
-	o.Server.SetKeepAlivesEnabled(!o.disableKeepAlives)
+	o.applyServerConfig(o.Server)
+
+	if o.tlsServerConfig != nil {
+		o.TLSServer.TLSConfig = o.tlsServerConfig
+		o.TLSServer.Addr = o.tlsAddr
+		o.applyServerConfig(o.TLSServer)
+	}
+
 	return o
 }
 
@@ -418,29 +443,71 @@ func (o *Okapi) Use(middlewares ...Middleware) {
 
 // StartServer starts the Okapi server with the specified HTTP server
 func (o *Okapi) StartServer(server *http.Server) error {
-	// Validate the server address
 	if !ValidateAddr(server.Addr) {
 		o.logger.Error("Invalid server address", slog.String("addr", server.Addr))
 		panic("Invalid server address")
 	}
+
 	o.Server = server
 	server.Handler = o
 	o.router.mux.StrictSlash(o.strictSlash)
 	o.context.okapi = o
-	_, _ = fmt.Fprintf(DefaultWriter, "Starting Server on %s\n", o.Server.Addr)
+
+	_, err := fmt.Fprintf(DefaultWriter, "Starting HTTP Server on %s\n", server.Addr)
+	if err != nil {
+		return err
+	}
+	// Serve with TLS if configured
+	if server.TLSConfig != nil {
+		return server.ListenAndServeTLS("", "")
+	}
+
+	// Serve with separate TLS server if enabled
+	if o.withTlsServer && o.tlsServerConfig != nil {
+		go func() {
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				o.logger.Error("HTTP server error", slog.String("error", err.Error()))
+				panic(err)
+			}
+		}()
+
+		o.TLSServer.Handler = o
+		_, err := fmt.Fprintf(DefaultWriter, "Starting HTTPS Server on %s\n", o.TLSServer.Addr)
+		if err != nil {
+			return err
+		}
+		return o.TLSServer.ListenAndServeTLS("", "")
+	}
+
+	// Default HTTP only
 	return server.ListenAndServe()
 }
 
-// Stop stops the Okapi server
+// Stop gracefully shuts down the Okapi server(s)
 func (o *Okapi) Stop() {
-	o.logger.Info("Stopping Server on...")
-	err := o.Server.Shutdown(context.Background())
-	if err != nil {
-		log.Fatal(err)
+	o.logger.Info("Stopping HTTP Server...", slog.String("addr", o.Server.Addr))
+
+	if err := o.Shutdown(o.Server); err != nil {
+		o.logger.Error("Failed to shutdown HTTP server", slog.String("error", err.Error()))
+		panic(err)
 	}
 	o.Server = nil
+
+	if o.withTlsServer && o.tlsServerConfig != nil && o.TLSServer != nil {
+		o.logger.Info("Stopping HTTPS Server...", slog.String("addr", o.TLSServer.Addr))
+		if err := o.Shutdown(o.TLSServer); err != nil {
+			o.logger.Error("Failed to shutdown HTTPS server", slog.String("error", err.Error()))
+			panic(err)
+		}
+		o.TLSServer = nil
+	}
 }
+
+// Shutdown wraps graceful server shutdown with context
 func (o *Okapi) Shutdown(server *http.Server) error {
+	if server == nil {
+		return nil
+	}
 	return server.Shutdown(context.Background())
 }
 
@@ -617,7 +684,7 @@ func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
 // registerOptionsHandler registers OPTIONS handler
 func (o *Okapi) registerOptionsHandler(path string) {
 	// Register OPTIONS handler only once per path if CORS is enabled
-	if o.enableCors && !o.optionsRegistered[path] {
+	if o.corsEnabled && !o.optionsRegistered[path] {
 		o.optionsRegistered[path] = true
 
 		o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
@@ -725,6 +792,14 @@ func (o *Okapi) Group(path string, middlewares ...Middleware) *Group {
 		middlewares: middlewares,
 	}
 	return group
+}
+
+// applyServerConfig sets common server timeout and keep-alive configurations
+func (o *Okapi) applyServerConfig(s *http.Server) {
+	s.ReadTimeout = time.Duration(o.readTimeout) * time.Second
+	s.WriteTimeout = time.Duration(o.writeTimeout) * time.Second
+	s.IdleTimeout = time.Duration(o.idleTimeout) * time.Second
+	s.SetKeepAlivesEnabled(!o.disableKeepAlives)
 }
 
 // handleName returns the name of the handler function.

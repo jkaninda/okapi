@@ -165,15 +165,15 @@ type Book struct {
 	Price int    `json:"price" form:"price" required:"true"`
 
 	Logo *multipart.FileHeader `form:"logo" required:"true"`
-
+    Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
 	// Supports both ?tags=a&tags=b and ?tags=a,b
-	Tags []string `form:"tags" default:"a,b"`
+	Tags []string `form:"tags" query:"tags" default:"a,b"`
 }
 
 o.Post("/books", func(c okapi.Context) error {
 	book := &Book{}
 	if err := c.Bind(book); err != nil {
-		return err
+		return c.AbortBadRequest(err)
 	}
 	return c.JSON(http.StatusOK, book)
 })

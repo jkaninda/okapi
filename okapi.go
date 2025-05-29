@@ -27,7 +27,6 @@ package okapi
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
 	goutils "github.com/jkaninda/go-utils"
@@ -41,13 +40,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
-
-// Constants for Error Handling
-var (
-	ErrNotFound               = errors.New("not found")
-	ErrFailedToParseMultiPart = errors.New("failed to parse multipart data")
-	ErrInvalidMultiPartData   = errors.New("invalid multipart data")
 )
 
 var (

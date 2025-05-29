@@ -313,12 +313,6 @@ func (c *Context) WriteStatus(code int) {
 	c.Response.WriteHeader(code)
 }
 
-// AbortWithError writes an error response with the given status code.
-// Returns the error for chaining.
-func (c *Context) AbortWithError(code int, err error) error {
-	return c.JSON(code, err.Error()) // Send error as JSON
-}
-
 // writeResponse is a helper for writing responses with common headers and status.
 // Takes care of content type, status code, and error handling.
 func (c *Context) writeResponse(code int, contentType string, writeFunc func() error) error {
@@ -432,7 +426,10 @@ func (c *Context) ServeFileFromFS(filepath string, fs http.FileSystem) {
 	// Sanitize the path to prevent directory traversal
 	filepath = path.Clean(filepath)
 	if filepath == "." || strings.Contains(filepath, "..") {
-		c.NotFoundError(http.StatusText(http.StatusNotFound))
+		err := c.ErrorNotFound("Not found")
+		if err != nil {
+			return
+		}
 	}
 
 	// Preserve original URL.Path
@@ -458,35 +455,125 @@ func (c *Context) ServeFileInline(path, filename string) {
 // ********** Error Handling *************
 
 // Error writes an error response with the given status code and message.
+// Returns an error if writing the response fails.
 func (c *Context) Error(code int, message string) error {
-	c.Response.WriteHeader(code)              // Set status code
-	_, err := fmt.Fprint(c.Response, message) // Write error message
+	c.Response.WriteHeader(code)
+	_, err := c.Response.Write([]byte(message))
 	if err != nil {
 		return fmt.Errorf("failed to write error response: %w", err)
 	}
-	return nil // Return nil if successful
+	return nil
 }
 
-// NotFoundError writes a 404 Not Found response.
-func (c *Context) NotFoundError(message string) {
-	err := c.Error(http.StatusNotFound, message)
-	if err != nil {
-		return
-	}
+// ErrorNotFound writes a 404 Not Found response.
+// Returns an error if writing the response fails.
+func (c *Context) ErrorNotFound(message string) error {
+	return c.Error(http.StatusNotFound, message)
 }
 
-// InternalServerError writes a 500 Internal Server Error response.
-func (c *Context) InternalServerError(message string) {
-	err := c.Error(http.StatusInternalServerError, message)
-	if err != nil {
-		return
-	}
+// ErrorInternalServerError writes a 500 Internal Server Error response.
+// Returns an error if writing the response fails.
+func (c *Context) ErrorInternalServerError(message string) error {
+	return c.Error(http.StatusInternalServerError, message)
 }
 
-// BadRequestError writes a 400 Bad Request response.
-func (c *Context) BadRequestError(message string) {
-	err := c.Error(http.StatusBadRequest, message)
-	if err != nil {
-		return
-	}
+// ErrorBadRequest writes a 400 Bad Request response.
+// Returns an error if writing the response fails.
+func (c *Context) ErrorBadRequest(message string) error {
+	return c.Error(http.StatusBadRequest, message)
+}
+
+// ErrorUnauthorized writes a 401 Unauthorized response.
+func (c *Context) ErrorUnauthorized(message string) error {
+	return c.Error(http.StatusUnauthorized, message)
+}
+
+// ErrorForbidden writes a 403 Forbidden response.
+func (c *Context) ErrorForbidden(message string) error {
+	return c.Error(http.StatusForbidden, message)
+}
+
+// ErrorConflict writes a 409 Conflict response.
+func (c *Context) ErrorConflict(message string) error {
+	return c.Error(http.StatusConflict, message)
+}
+
+// ErrorUnprocessableEntity writes a 422 Unprocessable Entity response.
+func (c *Context) ErrorUnprocessableEntity(message string) error {
+	return c.Error(http.StatusUnprocessableEntity, message)
+}
+
+// ErrorTooManyRequests writes a 429 Too Many Requests response.
+func (c *Context) ErrorTooManyRequests(message string) error {
+	return c.Error(http.StatusTooManyRequests, message)
+}
+
+// ErrorServiceUnavailable writes a 503 Service Unavailable response.
+func (c *Context) ErrorServiceUnavailable(message string) error {
+	return c.Error(http.StatusServiceUnavailable, message)
+}
+
+// AbortWithError writes an error response with the given status code and standardized format.
+// Returns the error for chaining.
+func (c *Context) AbortWithError(code int, err error) error {
+	return c.JSON(code, ErrorResponse{
+		Code:    code,
+		Message: http.StatusText(code),
+		Details: err.Error(),
+	})
+}
+
+// Abort writes an error response with 500 status code and standardized format.
+func (c *Context) Abort(err error) error {
+	return c.AbortWithError(http.StatusInternalServerError, err)
+}
+
+// AbortBadRequest writes an error response with 400 status code and standardized format.
+func (c *Context) AbortBadRequest(err error) error {
+	return c.AbortWithError(http.StatusBadRequest, err)
+}
+
+// AbortUnauthorized writes an error response with 401 status code.
+func (c *Context) AbortUnauthorized(err error) error {
+	return c.AbortWithError(http.StatusUnauthorized, err)
+}
+
+// AbortForbidden writes an error response with 403 status code.
+func (c *Context) AbortForbidden(err error) error {
+	return c.AbortWithError(http.StatusForbidden, err)
+}
+
+// AbortNotFound writes an error response with 404 status code.
+func (c *Context) AbortNotFound(err error) error {
+	return c.AbortWithError(http.StatusNotFound, err)
+}
+
+// AbortConflict writes an error response with 409 status code.
+func (c *Context) AbortConflict(err error) error {
+	return c.AbortWithError(http.StatusConflict, err)
+}
+
+// AbortValidationError writes an error response with 422 status code.
+func (c *Context) AbortValidationError(err error) error {
+	return c.AbortWithError(http.StatusUnprocessableEntity, err)
+}
+
+// AbortTooManyRequests writes an error response with 429 status code.
+func (c *Context) AbortTooManyRequests(err error) error {
+	return c.AbortWithError(http.StatusTooManyRequests, err)
+}
+
+// AbortWithStatus writes an error response with the given status code and message.
+// Useful when you don't have an error object but just a message.
+func (c *Context) AbortWithStatus(code int, message string) error {
+	return c.JSON(code, ErrorResponse{
+		Code:    code,
+		Message: http.StatusText(code),
+		Details: message,
+	})
+}
+
+// AbortWithJSON writes a custom JSON error response with the given status code.
+func (c *Context) AbortWithJSON(code int, jsonObj interface{}) error {
+	return c.JSON(code, jsonObj)
 }

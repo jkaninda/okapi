@@ -22,4 +22,21 @@
  *  SOFTWARE.
  */
 
+// Package okapi is a modern, minimalist HTTP web framework for Go, inspired by the simplicity of FastAPI.
+//
+// Designed to be intuitive, lightweight, and powerful, Okapi makes it easy to build fast and flexible
+// web applications and REST APIs.
+//
+// Features:
+//
+//   - Clean and expressive API design
+//   - Powerful binding from JSON, XML, forms, query, headers, and path parameters
+//   - Route grouping and middleware chaining
+//   - Built-in middleware: Basic Auth, JWT, OAuth
+//   - Easy custom middleware support
+//   - Cross-Origin Resource Sharing (CORS)
+//   - Templating engine integration
+//   - Static file serving
+//   - Built entirely on Go’s standard library
+//   - Simple and clear documentation
 package okapi

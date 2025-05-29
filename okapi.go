@@ -27,6 +27,7 @@ package okapi
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"github.com/gorilla/mux"
 	goutils "github.com/jkaninda/go-utils"
@@ -56,6 +57,10 @@ type (
 		middlewares       []Middleware
 		Server            *http.Server
 		TLSServer         *http.Server
+		tlsServerConfig   *tls.Config
+		tlsConfig         *tls.Config
+		withTlsServer     bool
+		tlsAddr           string
 		routes            []*Route
 		debug             bool
 		accessLog         bool
@@ -63,7 +68,11 @@ type (
 		logger            *slog.Logger
 		Renderer          Renderer
 		enableCors        bool
+		disableKeepAlives bool
 		cors              Cors
+		writeTimeout      int
+		readTimeout       int
+		idleTimeout       int
 		optionsRegistered map[string]bool // NEW
 	}
 	Router struct {
@@ -144,10 +153,70 @@ func WithLogger(logger *slog.Logger) OptionFunc {
 		o.logger = logger
 	}
 }
+
+// WithCors returns an OptionFunc that configures CORS (Cross-Origin Resource Sharing) settings for the Okapi instance.
+// The provided Cors configuration will be applied to all routes.
+// Example:
+//
+//	cors := okapi.Cors{AllowedOrigins: []string{"https://example.com"}}
+//	o := okapi.New(okapi.WithCors(cors))
 func WithCors(cors Cors) OptionFunc {
 	return func(o *Okapi) {
 		o.enableCors = true
 		o.cors = cors
+	}
+}
+
+// WithWriteTimeout returns an OptionFunc that sets the maximum duration before timing out writes
+// of the response. The timeout includes processing time and writing the response body.
+// The value should be specified in seconds.
+// A value of 0 means no timeout.
+// Default: 0 (no timeout)
+func WithWriteTimeout(t int) OptionFunc {
+	return func(o *Okapi) {
+		o.writeTimeout = t
+	}
+}
+
+// WithReadTimeout returns an OptionFunc that sets the maximum duration for reading the entire request,
+// including the body. The value should be specified in seconds.
+// A value of 0 means no timeout.
+// Default: 0 (no timeout)
+// Note: This helps protect against slow-client attacks.
+func WithReadTimeout(t int) OptionFunc {
+	return func(o *Okapi) {
+		o.readTimeout = t
+	}
+}
+
+// WithIdleTimeout returns an OptionFunc that sets the maximum amount of time to wait for the next request
+// when keep-alives are enabled. The value should be specified in seconds.
+// If IdleTimeout is 0, the value of ReadTimeout is used.
+// Default: 0 (uses ReadTimeout value)
+// Note: This helps free up server resources for inactive connections.
+func WithIdleTimeout(t int) OptionFunc {
+	return func(o *Okapi) {
+		o.idleTimeout = t
+	}
+}
+
+// WithDisabledKeepAlives returns an OptionFunc that disables HTTP keep-alive
+// connections for the Okapi server. When enabled, the server will close
+// connections after responding to each request.
+//
+// Example:
+//
+//	o := okapi.New(okapi.WithDisabledKeepAlives())
+//
+// Default: keep-alives enabled (true)
+func WithDisabledKeepAlives() OptionFunc {
+	return func(o *Okapi) {
+		o.disableKeepAlives = true
+	}
+}
+func WithTls(tlsConfig *tls.Config) OptionFunc {
+	return func(o *Okapi) {
+		o.tlsConfig = tlsConfig
 	}
 }
 
@@ -315,6 +384,11 @@ func (o *Okapi) With(options ...OptionFunc) *Okapi {
 			&slog.HandlerOptions{Level: slog.LevelDebug},
 		))
 	}
+	// Update Server
+	o.Server.ReadTimeout = time.Duration(o.readTimeout) * time.Second
+	o.Server.WriteTimeout = time.Duration(o.writeTimeout) * time.Second
+	o.Server.IdleTimeout = time.Duration(o.idleTimeout) * time.Second
+	o.Server.SetKeepAlivesEnabled(!o.disableKeepAlives)
 	return o
 }
 

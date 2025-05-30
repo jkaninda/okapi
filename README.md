@@ -7,8 +7,9 @@
 [![GitHub Release](https://img.shields.io/github/v/release/jkaninda/okapi)](https://github.com/jkaninda/okapi/releases)
 
 
-**Okapi** is a modern, minimalist HTTP web framework for Go, inspired by the simplicity of FastAPI. Designed to be intuitive, lightweight, and powerful, Okapi makes it easy to build fast and flexible web applications and REST APIs.
+**Okapi** is a modern, minimalist HTTP web framework for Go, inspired by the simplicity of FastAPI. Designed to be intuitive, lightweight, and high-performance, Okapi makes it easy to build fast and flexible web applications and REST APIs.
 
+The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to the rainforests of the northeastern Democratic Republic of the Congo. Just like its namesake — which resembles a blend of giraffe and zebra — Okapi blends simplicity and strength in a unique, powerful package.
 <p align="center">
   <img src="https://raw.githubusercontent.com/jkaninda/okapi/main/logo.png" width="150" alt="Okapi logo">
 </p>

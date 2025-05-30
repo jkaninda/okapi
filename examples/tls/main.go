@@ -42,6 +42,8 @@ func main() {
 	// Create a new Okapi instance with default config
 	// Configured to listen on port 8080 for HTTP connections
 	o := okapi.Default(okapi.WithAddr(":8080"))
+	// Use HTTPS
+	// o := okapi.Default(okapi.WithTls(tls))
 
 	// Configure a secondary HTTPS server listening on port 8443
 	// This creates both HTTP (8080) and HTTPS (8443) endpoints

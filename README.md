@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
+[![Go](https://img.shields.io/github/go-mod/go-version/jkaninda/okapi)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jkaninda/okapi.svg)](https://pkg.go.dev/github.com/jkaninda/okapi)
 [![GitHub Release](https://img.shields.io/github/v/release/jkaninda/okapi)](https://github.com/jkaninda/okapi/releases)
 
@@ -319,6 +320,8 @@ o.Static("/static", "public/assets")
 	// Create a new Okapi instance with default config
 	// Configured to listen on port 8080 for HTTP connections
 	o := okapi.Default(okapi.WithAddr(":8080"))
+    // Use HTTPS
+    // o := okapi.Default(okapi.WithTls(tls))
 
 	// Configure a secondary HTTPS server listening on port 8443
 	// This creates both HTTP (8080) and HTTPS (8443) endpoints

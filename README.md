@@ -26,7 +26,6 @@ The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful m
 *  Cross-Origin Resource Sharing (CORS)
 *  Templating engine integration
 *  Static file serving
-*  Built entirely on Go’s standard library
 *  Simple and clear documentation
 
 ---

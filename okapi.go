@@ -171,7 +171,9 @@ func WithTLSServer(addr string, tlsConfig *tls.Config) OptionFunc {
 // WithLogger sets the logger for the Okapi instance
 func WithLogger(logger *slog.Logger) OptionFunc {
 	return func(o *Okapi) {
-		o.logger = logger
+		if logger != nil {
+			o.logger = logger
+		}
 	}
 }
 
@@ -465,7 +467,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	// Serve with separate TLS server if enabled
 	if o.withTlsServer && o.tlsServerConfig != nil {
 		go func() {
-			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				o.logger.Error("HTTP server error", slog.String("error", err.Error()))
 				panic(err)
 			}
@@ -831,7 +833,7 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 		err := next(c)
 
 		duration := goutils.FormatDuration(time.Since(startTime), 2)
-		slog.Info("[Okapi]",
+		c.okapi.logger.Info("[okapi]",
 			"method", c.Request.Method,
 			"url", c.Request.URL.Path,
 			"client_ip", c.RealIP(),

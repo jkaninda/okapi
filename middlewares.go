@@ -32,7 +32,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	goutils "github.com/jkaninda/go-utils"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -74,7 +73,7 @@ func LoggerMiddleware(next HandleFunc) HandleFunc {
 		startTime := time.Now()
 		err := next(c)
 		duration := goutils.FormatDuration(time.Since(startTime), 2)
-		slog.Info("[Okapi]",
+		c.okapi.logger.Info("[okapi]",
 			"method", c.Request.Method,
 			"url", c.Request.URL.Path,
 			"client_ip", c.RealIP(),

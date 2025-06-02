@@ -515,52 +515,66 @@ func (c *Context) ErrorServiceUnavailable(message string) error {
 
 // AbortWithError writes an error response with the given status code and standardized format.
 // Returns the error for chaining.
-func (c *Context) AbortWithError(code int, err error) error {
+func (c *Context) AbortWithError(code int, msg string, err error) error {
+	details := ""
+	if err != nil {
+		details = err.Error()
+	}
+
 	return c.JSON(code, ErrorResponse{
 		Code:    code,
-		Message: http.StatusText(code),
-		Details: err.Error(),
+		Message: msg,
+		Details: details,
 	})
 }
 
 // Abort writes an error response with 500 status code and standardized format.
 func (c *Context) Abort(err error) error {
-	return c.AbortWithError(http.StatusInternalServerError, err)
+	return c.AbortWithError(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError), err)
+}
+
+// abortWithStatus is a helper for status-only abort functions
+func (c *Context) abortWithStatus(code int, defaultMsg string, msg ...string) error {
+	message := defaultMsg
+	if len(msg) > 0 && msg[0] != "" {
+		message = msg[0]
+	}
+	return c.AbortWithError(code, message, nil)
 }
 
 // AbortBadRequest writes an error response with 400 status code and standardized format.
-func (c *Context) AbortBadRequest(err error) error {
-	return c.AbortWithError(http.StatusBadRequest, err)
+func (c *Context) AbortBadRequest(msg ...string) error {
+	return c.abortWithStatus(http.StatusBadRequest, http.StatusText(http.StatusBadRequest), msg...)
 }
 
 // AbortUnauthorized writes an error response with 401 status code.
-func (c *Context) AbortUnauthorized(err error) error {
-	return c.AbortWithError(http.StatusUnauthorized, err)
+func (c *Context) AbortUnauthorized(msg ...string) error {
+	return c.abortWithStatus(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized), msg...)
 }
 
 // AbortForbidden writes an error response with 403 status code.
-func (c *Context) AbortForbidden(err error) error {
-	return c.AbortWithError(http.StatusForbidden, err)
+func (c *Context) AbortForbidden(msg ...string) error {
+	return c.abortWithStatus(http.StatusForbidden, http.StatusText(http.StatusForbidden), msg...)
 }
 
 // AbortNotFound writes an error response with 404 status code.
-func (c *Context) AbortNotFound(err error) error {
-	return c.AbortWithError(http.StatusNotFound, err)
+func (c *Context) AbortNotFound(msg ...string) error {
+	return c.abortWithStatus(http.StatusNotFound, http.StatusText(http.StatusNotFound), msg...)
 }
 
 // AbortConflict writes an error response with 409 status code.
-func (c *Context) AbortConflict(err error) error {
-	return c.AbortWithError(http.StatusConflict, err)
+func (c *Context) AbortConflict(msg ...string) error {
+	return c.abortWithStatus(http.StatusConflict, http.StatusText(http.StatusConflict), msg...)
 }
 
 // AbortValidationError writes an error response with 422 status code.
-func (c *Context) AbortValidationError(err error) error {
-	return c.AbortWithError(http.StatusUnprocessableEntity, err)
+func (c *Context) AbortValidationError(msg ...string) error {
+	return c.abortWithStatus(http.StatusUnprocessableEntity, http.StatusText(http.StatusUnprocessableEntity), msg...)
 }
 
 // AbortTooManyRequests writes an error response with 429 status code.
-func (c *Context) AbortTooManyRequests(err error) error {
-	return c.AbortWithError(http.StatusTooManyRequests, err)
+func (c *Context) AbortTooManyRequests(msg ...string) error {
+	return c.abortWithStatus(http.StatusTooManyRequests, http.StatusText(http.StatusTooManyRequests), msg...)
 }
 
 // AbortWithStatus writes an error response with the given status code and message.

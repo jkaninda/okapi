@@ -683,6 +683,64 @@ func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
 
 }
 
+// Handle registers a new route with the specified HTTP method, path, and http.Handler.
+// It wraps the standard http.Handler into a HandleFunc signature and processes it similarly to HandleFunc.
+//
+// Parameters:
+//   - method: HTTP method (GET, POST, PUT, etc.)
+//   - path: URL path pattern (supports path parameters)
+//   - h: Standard http.Handler that processes the request
+//
+// Middleware Processing:
+//
+//	All middlewares registered via Use() will be applied in order before the handler.
+//	The middleware chain is built using the Next() method.
+//
+// Differences from HandleFunc:
+//   - Accepts standard http.Handler instead of HandleFunc
+//   - Handler errors must be handled by the http.Handler itself
+//   - Returns nil error by default since http.Handler doesn't return errors
+//
+// Example:
+//
+//	okapi.Handle("GET", "/static", http.FileServer(http.Dir("./public")))
+func (o *Okapi) Handle(method, path string, h http.Handler) {
+	path = normalizeRoutePath(path)
+
+	// Wrap http.Handler into HandleFunc signature
+	handleFunc := func(ctx Context) error {
+		h.ServeHTTP(ctx.Response, ctx.Request)
+		return nil
+	}
+
+	// Register like in HandleFunc
+	route := &Route{
+		Name:   handleName(handleFunc),
+		Path:   path,
+		Method: method,
+		Handle: handleFunc,
+		chain:  o,
+	}
+	o.routes = append(o.routes, route)
+
+	handler := o.Next(handleFunc)
+
+	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		ctx := Context{
+			Request:  r,
+			Response: &response{writer: w},
+			okapi:    o,
+		}
+
+		if err := handler(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}).Methods(method)
+
+	// Register OPTIONS handler for CORS
+	o.registerOptionsHandler(path)
+}
+
 // registerOptionsHandler registers OPTIONS handler
 func (o *Okapi) registerOptionsHandler(path string) {
 	// Register OPTIONS handler only once per path if CORS is enabled

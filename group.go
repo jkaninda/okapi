@@ -31,10 +31,9 @@ type Group struct {
 }
 
 // newGroup creates a new route group with the specified base path, Okapi reference,
-// and optional middlewares. It automatically includes LoggerMiddleware by default.
+// and optional middlewares.
 func newGroup(basePath string, okapi *Okapi, middlewares ...Middleware) *Group {
-	// Prepend LoggerMiddleware to any provided middlewares
-	mws := append([]Middleware{LoggerMiddleware}, middlewares...)
+	mws := append([]Middleware{}, middlewares...)
 	return &Group{
 		basePath:    basePath,
 		middlewares: mws,
@@ -68,51 +67,61 @@ func (g *Group) Use(m ...Middleware) {
 
 // add is an internal method that handles route registration with the combined
 // middlewares from both the group and parent Okapi instance.
-func (g *Group) add(method, path string, h HandleFunc) *Route {
-	// Create a temporary Okapi instance with combined middlewares
-	tempOkapi := &Okapi{
-		context:     g.okapi.context,
-		router:      g.okapi.router,
-		middlewares: append(g.okapi.middlewares, g.middlewares...),
-		Server:      g.okapi.Server,
-		TLSServer:   g.okapi.TLSServer,
-		debug:       g.okapi.debug,
-		logger:      g.okapi.logger,
+func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Route {
+	fullPath := joinPaths(g.basePath, path)
+	// Wrap handler with combined middlewares
+	finalHandler := h
+	for i := len(g.middlewares) - 1; i >= 0; i-- {
+		finalHandler = g.middlewares[i](finalHandler)
 	}
 	// Register the route with the joined base path and route path
-	return tempOkapi.addRoute(method, joinPaths(g.basePath, path), h)
+	return g.okapi.addRoute(method, fullPath, g.basePath, finalHandler, opts...)
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
-func (g *Group) handle(method, path string, h HandleFunc) *Route {
-	return g.add(method, path, h)
+func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.add(method, path, h, opts...)
 }
 
 // Get registers a GET route within the group with the given path and handler.
-func (g *Group) Get(path string, h HandleFunc) *Route { return g.handle(GET, path, h) }
+func (g *Group) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(GET, path, h, opts...)
+}
 
 // Post registers a POST route within the group with the given path and handler.
-func (g *Group) Post(path string, h HandleFunc) *Route { return g.handle(POST, path, h) }
+func (g *Group) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(POST, path, h, opts...)
+}
 
 // Put registers a PUT route within the group with the given path and handler.
-func (g *Group) Put(path string, h HandleFunc) *Route { return g.handle(PUT, path, h) }
+func (g *Group) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(PUT, path, h, opts...)
+}
 
 // Delete registers a DELETE route within the group with the given path and handler.
-func (g *Group) Delete(path string, h HandleFunc) *Route { return g.handle(DELETE, path, h) }
+func (g *Group) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(DELETE, path, h, opts...)
+}
 
 // Patch registers a PATCH route within the group with the given path and handler.
-func (g *Group) Patch(path string, h HandleFunc) *Route { return g.handle(PATCH, path, h) }
+func (g *Group) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(PATCH, path, h, opts...)
+}
 
 // Options registers an OPTIONS route within the group with the given path and handler.
-func (g *Group) Options(path string, h HandleFunc) *Route {
-	return g.handle(OPTIONS, path, h)
+func (g *Group) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(OPTIONS, path, h, opts...)
 }
 
 // Head registers a HEAD route within the group with the given path and handler.
-func (g *Group) Head(path string, h HandleFunc) *Route { return g.handle(HEAD, path, h) }
+func (g *Group) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(HEAD, path, h, opts...)
+}
 
 // Trace registers a TRACE route within the group with the given path and handler.
-func (g *Group) Trace(path string, h HandleFunc) *Route { return g.handle(TRACE, path, h) }
+func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(TRACE, path, h, opts...)
+}
 
 // Group creates a nested subgroup with an additional path segment and optional middlewares.
 // The new group inherits all middlewares from its parent group.

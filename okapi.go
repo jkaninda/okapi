@@ -28,15 +28,20 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	goutils "github.com/jkaninda/go-utils"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"reflect"
 	"strconv"
 	"strings"
@@ -68,12 +73,14 @@ type (
 		logger            *slog.Logger
 		Renderer          Renderer
 		corsEnabled       bool
-		disableKeepAlives bool
 		cors              Cors
 		writeTimeout      int
 		readTimeout       int
 		idleTimeout       int
 		optionsRegistered map[string]bool
+		openapiSpec       *openapi3.T
+		openAPi           *OpenAPI
+		openApiEnabled    bool
 	}
 	Router struct {
 		mux *mux.Router
@@ -84,11 +91,20 @@ type (
 	M map[string]any
 
 	Route struct {
-		Name   string
-		Path   string
-		Method string
-		Handle HandleFunc
-		chain  chain
+		Name         string
+		Path         string
+		Method       string
+		Handle       HandleFunc
+		chain        chain
+		GroupPath    string
+		Tags         []string
+		Summary      string
+		Request      *openapi3.SchemaRef
+		Response     *openapi3.SchemaRef
+		PathParams   []*openapi3.ParameterRef
+		QueryParams  []*openapi3.ParameterRef
+		Headers      []*openapi3.ParameterRef
+		RequiresAuth bool
 	}
 	// Response interface defines the methods for writing HTTP responses.
 	Response interface {
@@ -129,21 +145,25 @@ func (r *response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // WithMux sets the router for the Okapi instance
 func WithMux(mux *mux.Router) OptionFunc {
 	return func(o *Okapi) {
-		o.router.mux = mux
+		if mux != nil {
+			o.router.mux = mux
+		}
 	}
 }
 
 // WithServer sets the HTTP server for the Okapi instance
 func WithServer(server *http.Server) OptionFunc {
 	return func(o *Okapi) {
-		o.Server = server
+		if server != nil {
+			o.Server = server
+		}
 	}
 }
 
-// WithTls sets tls config to HTTP Server for the Okapi instance
+// WithTLS sets tls config to HTTP Server for the Okapi instance
 //
 // Use okapi.LoadTLSConfig() to create a TLS configuration from certificate and key files
-func WithTls(tlsConfig *tls.Config) OptionFunc {
+func WithTLS(tlsConfig *tls.Config) OptionFunc {
 	return func(o *Okapi) {
 		if tlsConfig != nil {
 			o.tlsConfig = tlsConfig
@@ -158,13 +178,12 @@ func WithTLSServer(addr string, tlsConfig *tls.Config) OptionFunc {
 	return func(o *Okapi) {
 		if len(addr) != 0 && tlsConfig != nil {
 			if !ValidateAddr(addr) {
-				panic("Invalid address for the TLS Server")
+				log.Panicf("Invalid address for the TLS Server: %s", addr)
 			}
 			o.withTlsServer = true
 			o.tlsAddr = addr
 			o.tlsServerConfig = tlsConfig
 		}
-
 	}
 }
 
@@ -177,12 +196,7 @@ func WithLogger(logger *slog.Logger) OptionFunc {
 	}
 }
 
-// WithCors returns an OptionFunc that configures CORS (Cross-Origin Resource Sharing) settings for the Okapi instance.
-// The provided Cors configuration will be applied to all routes.
-// Example:
-//
-//	cors := okapi.Cors{AllowedOrigins: []string{"https://example.com"}}
-//	o := okapi.New(okapi.WithCors(cors))
+// WithCors returns an OptionFunc that configures CORS settings
 func WithCors(cors Cors) OptionFunc {
 	return func(o *Okapi) {
 		o.corsEnabled = true
@@ -190,62 +204,38 @@ func WithCors(cors Cors) OptionFunc {
 	}
 }
 
-// WithWriteTimeout returns an OptionFunc that sets the maximum duration before timing out writes
-// of the response. The timeout includes processing time and writing the response body.
-// The value should be specified in seconds.
-// A value of 0 means no timeout.
-// Default: 0 (no timeout)
+// WithWriteTimeout returns an OptionFunc that sets the write timeout
 func WithWriteTimeout(t int) OptionFunc {
 	return func(o *Okapi) {
 		o.writeTimeout = t
+		o.Server.WriteTimeout = secondsToDuration(t)
 	}
 }
 
-// WithReadTimeout returns an OptionFunc that sets the maximum duration for reading the entire request,
-// including the body. The value should be specified in seconds.
-// A value of 0 means no timeout.
-// Default: 0 (no timeout)
-// Note: This helps protect against slow-client attacks.
+// WithReadTimeout returns an OptionFunc that sets the read timeout
 func WithReadTimeout(t int) OptionFunc {
 	return func(o *Okapi) {
 		o.readTimeout = t
+		o.Server.ReadTimeout = secondsToDuration(t)
 	}
 }
 
-// WithIdleTimeout returns an OptionFunc that sets the maximum amount of time to wait for the next request
-// when keep-alives are enabled. The value should be specified in seconds.
-// If IdleTimeout is 0, the value of ReadTimeout is used.
-// Default: 0 (uses ReadTimeout value)
-// Note: This helps free up server resources for inactive connections.
+// WithIdleTimeout returns an OptionFunc that sets the idle timeout
 func WithIdleTimeout(t int) OptionFunc {
 	return func(o *Okapi) {
 		o.idleTimeout = t
+		o.Server.IdleTimeout = secondsToDuration(t)
 	}
 }
 
-// WithDisabledKeepAlives returns an OptionFunc that disables HTTP keep-alive
-// connections for the Okapi server. When enabled, the server will close
-// connections after responding to each request.
-//
-// Example:
-//
-//	o := okapi.New(okapi.WithDisabledKeepAlives())
-//
-// Default: keep-alives enabled (true)
-func WithDisabledKeepAlives() OptionFunc {
-	return func(o *Okapi) {
-		o.disableKeepAlives = true
-	}
-}
-
-// WithStrictSlash sets the strict slash mode for the Okapi instance
+// WithStrictSlash sets whether to enforce strict slash handling
 func WithStrictSlash(strict bool) OptionFunc {
 	return func(o *Okapi) {
 		o.strictSlash = strict
 	}
 }
 
-// WithDebug sets the debug mode for the Okapi instance
+// WithDebug enables debug mode and access logging
 func WithDebug() OptionFunc {
 	return func(o *Okapi) {
 		o.debug = true
@@ -253,43 +243,124 @@ func WithDebug() OptionFunc {
 	}
 }
 
-// WithAccessLogDisabled disables the access log for the Okapi instance
+// WithAccessLogDisabled disables access logging
 func WithAccessLogDisabled() OptionFunc {
 	return func(o *Okapi) {
 		o.accessLog = false
 	}
 }
 
-// WithPort sets the port for the Okapi instance
+// WithPort sets the server port
 func WithPort(port int) OptionFunc {
 	return func(o *Okapi) {
 		if port <= 0 {
 			port = DefaultPort
 		}
-		o.Server.Addr = ":" + strconv.Itoa(port)
+		host, _, err := net.SplitHostPort(o.Server.Addr)
+		if err != nil || host == "" {
+			host = ""
+		}
+		o.Server.Addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
 }
 
-// WithAddr sets the address for the Okapi instance
+// WithAddr sets the server address
 func WithAddr(addr string) OptionFunc {
 	return func(o *Okapi) {
-		if len(addr) == 0 {
+		if strings.TrimSpace(addr) == "" || addr == ":" {
 			addr = DefaultAddr
 		}
 		if _, _, err := net.SplitHostPort(addr); err != nil {
-			// If no port is specified, use the default port
-			if addr == "" {
-				addr = DefaultAddr
-			} else {
-				// Append the default port if no port is specified
-				addr = net.JoinHostPort(addr, strconv.Itoa(DefaultPort))
-			}
-		} else if addr == ":" {
-			// If addr is just a colon, set it to the default address
-			addr = DefaultAddr
+			addr = net.JoinHostPort(addr, strconv.Itoa(DefaultPort))
 		}
 		o.Server.Addr = addr
 	}
+}
+
+// ************* Chaining methods *************
+// These methods reuse the OptionFunc implementations
+
+func (o *Okapi) WithLogger(logger *slog.Logger) *Okapi {
+	return o.apply(WithLogger(logger))
+}
+
+func (o *Okapi) WithCORS(cors Cors) *Okapi {
+	return o.apply(WithCors(cors))
+}
+
+func (o *Okapi) WithWriteTimeout(seconds int) *Okapi {
+	return o.apply(WithWriteTimeout(seconds))
+}
+
+func (o *Okapi) WithReadTimeout(seconds int) *Okapi {
+	return o.apply(WithReadTimeout(seconds))
+}
+
+func (o *Okapi) WithIdleTimeout(seconds int) *Okapi {
+	return o.apply(WithIdleTimeout(seconds))
+}
+
+func (o *Okapi) WithStrictSlash(strict bool) *Okapi {
+	return o.apply(WithStrictSlash(strict))
+}
+
+func (o *Okapi) WithDebug() *Okapi {
+	return o.apply(WithDebug())
+}
+
+func (o *Okapi) WithPort(port int) *Okapi {
+	return o.apply(WithPort(port))
+}
+
+func (o *Okapi) WithAddr(addr string) *Okapi {
+	return o.apply(WithAddr(addr))
+}
+
+func (o *Okapi) DisableAccessLog() *Okapi {
+	return o.apply(WithAccessLogDisabled())
+}
+
+// WithOpenAPIDocs registers the OpenAPI JSON and Swagger UI handlers
+// at the configured PathPrefix (default: /docs).
+//
+// UI Path: /docs
+// JSON Path: /docs/openapi.json
+func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
+	o.openApiEnabled = true
+
+	if len(cfg) > 0 {
+		config := cfg[0]
+
+		if config.Title != "" {
+			o.openAPi.Title = config.Title
+		}
+		if config.PathPrefix != "" {
+			o.openAPi.PathPrefix = config.PathPrefix
+		}
+		if config.Version != "" {
+			o.openAPi.Version = config.Version
+		}
+		if len(config.Servers) > 0 {
+			o.openAPi.Servers = config.Servers
+		}
+	}
+	if !strings.HasPrefix(o.openAPi.PathPrefix, "/") {
+		o.openAPi.PathPrefix = "/" + o.openAPi.PathPrefix
+	}
+	o.buildOpenAPISpec()
+
+	specPath := path.Join(o.openAPi.PathPrefix, "/openapi.json")
+
+	o.router.mux.HandleFunc(specPath, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(o.openapiSpec)
+	})
+
+	o.router.mux.PathPrefix(o.openAPi.PathPrefix).Handler(httpSwagger.Handler(
+		httpSwagger.URL(specPath),
+	))
+
+	return o
 }
 
 // ****** END OKAPI OPTIONS ******
@@ -364,50 +435,29 @@ func newRouter() *Router {
 
 // ********** OKAPI **********//
 
-// New creates a new Okapi instance
-func New(options ...OptionFunc) (e *Okapi) {
-	return Default(options...)
-
+// New creates a new Okapi instance with the provided options.
+func New(options ...OptionFunc) *Okapi {
+	return initConfig(options...)
 }
 
-// Default creates a new Okapi instance with default settings
-func Default(options ...OptionFunc) *Okapi {
-	server := &http.Server{
-		Addr: DefaultAddr,
+// Default creates a new Okapi instance with default settings.
+func Default() *Okapi {
+	return New(
+		withDefaultConfig(),
+	)
+}
+
+func withDefaultConfig() OptionFunc {
+	return func(o *Okapi) {
+		o.openApiEnabled = true
 	}
-	o := &Okapi{
-		context: &Context{
-			Request:            new(http.Request),
-			Response:           &response{},
-			MaxMultipartMemory: defaultMaxMemory,
-		},
-		router:            newRouter(),
-		Server:            server,
-		TLSServer:         &http.Server{},
-		logger:            slog.Default(),
-		accessLog:         true,
-		middlewares:       []Middleware{handleAccessLog},
-		optionsRegistered: make(map[string]bool),
-		cors:              Cors{},
-	}
-	return o.With(options...)
 }
 
 // With applies the provided options to the Okapi instance
 func (o *Okapi) With(options ...OptionFunc) *Okapi {
-	for _, option := range options {
-		option(o)
-	}
 
-	if o.debug {
-		o.logger = slog.New(slog.NewJSONHandler(
-			DefaultWriter,
-			&slog.HandlerOptions{
-				Level:     slog.LevelDebug,
-				AddSource: true,
-			},
-		))
-	}
+	o.apply(options...)
+
 	o.applyServerConfig(o.Server)
 
 	if o.tlsServerConfig != nil {
@@ -415,7 +465,9 @@ func (o *Okapi) With(options ...OptionFunc) *Okapi {
 		o.TLSServer.Addr = o.tlsAddr
 		o.applyServerConfig(o.TLSServer)
 	}
-
+	if o.openApiEnabled {
+		o.WithOpenAPIDocs()
+	}
 	return o
 }
 
@@ -449,7 +501,9 @@ func (o *Okapi) StartServer(server *http.Server) error {
 		o.logger.Error("Invalid server address", slog.String("addr", server.Addr))
 		panic("Invalid server address")
 	}
-
+	if o.openApiEnabled {
+		o.WithOpenAPIDocs()
+	}
 	o.Server = server
 	server.Handler = o
 	o.router.mux.StrictSlash(o.strictSlash)
@@ -525,49 +579,63 @@ func (o *Okapi) SetContext(ctx *Context) {
 
 // Get registers a new GET route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Get(path string, h HandleFunc) *Route { return o.addRoute(GET, path, h) }
+func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(GET, path, "", h, opts...)
+}
 
 // Post registers a new POST route with the given path and handler function.
 // Returns the created *Route for possible chaining or modification.
-func (o *Okapi) Post(path string, h HandleFunc) *Route { return o.addRoute(POST, path, h) }
+func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(POST, path, "", h, opts...)
+}
 
 // Put registers a new PUT route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Put(path string, h HandleFunc) *Route { return o.addRoute(PUT, path, h) }
+func (o *Okapi) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(PUT, path, "", h, opts...)
+}
 
 // Delete registers a new DELETE route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Delete(path string, h HandleFunc) *Route {
-	return o.addRoute(http.MethodDelete, path, h)
+func (o *Okapi) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(http.MethodDelete, path, "", h, opts...)
 }
 
 // Patch registers a new PATCH route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Patch(path string, h HandleFunc) *Route { return o.addRoute(PATCH, path, h) }
+func (o *Okapi) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(PATCH, path, "", h, opts...)
+}
 
 // Options registers a new OPTIONS route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Options(path string, h HandleFunc) *Route {
-	return o.addRoute(http.MethodOptions, path, h)
+func (o *Okapi) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(http.MethodOptions, path, "", h, opts...)
 }
 
 // Head registers a new HEAD route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Head(path string, h HandleFunc) *Route { return o.addRoute(HEAD, path, h) }
+func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(HEAD, path, "", h, opts...)
+}
 
 // Connect registers a new CONNECT route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Connect(path string, h HandleFunc) *Route {
-	return o.addRoute(http.MethodConnect, path, h)
+func (o *Okapi) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(http.MethodConnect, path, "", h, opts...)
 }
 
 // Trace registers a new TRACE route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Trace(path string, h HandleFunc) *Route { return o.addRoute(TRACE, path, h) }
+func (o *Okapi) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(TRACE, path, "", h, opts...)
+}
 
 // Any registers a route that matches any HTTP method with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Any(path string, h HandleFunc) *Route { return o.addRoute("", path, h) }
+func (o *Okapi) Any(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute("", path, "", h, opts...)
+}
 
 // ********** Static Content ***************
 
@@ -591,18 +659,24 @@ func (o *Okapi) StaticFS(prefix string, fs http.FileSystem) {
 }
 
 // addRoute adds a route with the specified method to the Okapi instance
-func (o *Okapi) addRoute(method, path string, h HandleFunc) *Route {
+func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...RouteOption) *Route {
 	if path == "" {
 		panic("Path cannot be empty")
 	}
+	if groupPath == "" {
+		groupPath = "default"
+	}
 	path = normalizeRoutePath(path)
-
 	route := &Route{
-		Name:   handleName(h),
-		Path:   path,
-		Method: method,
-		Handle: h,
-		chain:  o,
+		Name:      handleName(h),
+		Path:      path,
+		Method:    method,
+		GroupPath: groupPath,
+		Handle:    h,
+		chain:     o,
+	}
+	for _, opt := range opts {
+		opt(route)
 	}
 	o.routes = append(o.routes, route)
 
@@ -653,7 +727,7 @@ func (o *Okapi) addRoute(method, path string, h HandleFunc) *Route {
 //	    // ... handler logic
 //	    return nil
 //	})
-func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
+func (o *Okapi) HandleFunc(method, path string, h HandleFunc, opts ...RouteOption) {
 	path = normalizeRoutePath(path)
 
 	route := &Route{
@@ -662,6 +736,9 @@ func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
 		Method: method,
 		Handle: h,
 		chain:  o,
+	}
+	for _, opt := range opts {
+		opt(route)
 	}
 	o.routes = append(o.routes, route)
 
@@ -704,7 +781,7 @@ func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
 // Example:
 //
 //	okapi.Handle("GET", "/static", http.FileServer(http.Dir("./public")))
-func (o *Okapi) Handle(method, path string, h http.Handler) {
+func (o *Okapi) Handle(method, path string, h http.Handler, opts ...RouteOption) {
 	path = normalizeRoutePath(path)
 
 	// Wrap http.Handler into HandleFunc signature
@@ -720,6 +797,9 @@ func (o *Okapi) Handle(method, path string, h http.Handler) {
 		Method: method,
 		Handle: handleFunc,
 		chain:  o,
+	}
+	for _, opt := range opts {
+		opt(route)
 	}
 	o.routes = append(o.routes, route)
 
@@ -815,12 +895,10 @@ func (o *Okapi) Middlewares() []Middleware {
 // Next applies the middlewares in correct order
 func (o *Okapi) Next(h HandleFunc) HandleFunc {
 	// Start with the original handler
-	next := h
-	// Apply middlewares in the order they were added
-	for _, m := range o.middlewares {
-		next = m(next)
+	for i := len(o.middlewares) - 1; i >= 0; i-- {
+		h = o.middlewares[i](h)
 	}
-	return next
+	return h
 }
 func (o *Okapi) Routes() []Route {
 	routes := make([]Route, 0, len(o.routes))
@@ -854,12 +932,50 @@ func (o *Okapi) Group(path string, middlewares ...Middleware) *Group {
 	return group
 }
 
+// initConfig initializes a new Okapi instance.
+func initConfig(options ...OptionFunc) *Okapi {
+	server := &http.Server{
+		Addr: DefaultAddr,
+	}
+
+	o := &Okapi{
+		context: &Context{
+			Request:            new(http.Request),
+			Response:           &response{},
+			MaxMultipartMemory: defaultMaxMemory,
+		},
+		router:            newRouter(),
+		Server:            server,
+		TLSServer:         &http.Server{},
+		logger:            slog.Default(),
+		accessLog:         true,
+		middlewares:       []Middleware{handleAccessLog},
+		optionsRegistered: make(map[string]bool),
+		cors:              Cors{},
+		openAPi: &OpenAPI{
+			Title:      FrameworkName,
+			Version:    "1.0.0",
+			PathPrefix: OpenApiDocPrefix,
+			Servers:    openapi3.Servers{{URL: OpenApiURL}},
+		},
+	}
+
+	return o.With(options...)
+}
+
 // applyServerConfig sets common server timeout and keep-alive configurations
 func (o *Okapi) applyServerConfig(s *http.Server) {
-	s.ReadTimeout = time.Duration(o.readTimeout) * time.Second
-	s.WriteTimeout = time.Duration(o.writeTimeout) * time.Second
-	s.IdleTimeout = time.Duration(o.idleTimeout) * time.Second
-	s.SetKeepAlivesEnabled(!o.disableKeepAlives)
+	s.ReadTimeout = secondsToDuration(o.readTimeout)
+	s.WriteTimeout = secondsToDuration(o.writeTimeout)
+	s.IdleTimeout = secondsToDuration(o.idleTimeout)
+}
+
+// apply is a helper method to apply an OptionFunc to the Okapi instance
+func (o *Okapi) apply(options ...OptionFunc) *Okapi {
+	for _, option := range options {
+		option(o)
+	}
+	return o
 }
 
 // handleName returns the name of the handler function.

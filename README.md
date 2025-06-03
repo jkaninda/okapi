@@ -1,4 +1,4 @@
-# OKAPI - Lightweight Go Web Framework
+# OKAPI - Lightweight Go Web Framework with OpenAPI 3.0 & Swagger UI
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
@@ -7,26 +7,57 @@
 [![GitHub Release](https://img.shields.io/github/v/release/jkaninda/okapi)](https://github.com/jkaninda/okapi/releases)
 
 
-**Okapi** is a modern, minimalist HTTP web framework for Go, inspired by the simplicity of FastAPI. Designed to be intuitive, lightweight, and high-performance, Okapi makes it easy to build fast and flexible web applications and REST APIs.
+**Okapi** is a modern, minimalist HTTP web framework for Go, inspired by **FastAPI**'s elegance. Designed for simplicity, performance, and developer happiness, it helps you build **fast, scalable, and well-documented APIs** with minimal boilerplate.
 
 The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to the rainforests of the northeastern Democratic Republic of the Congo. Just like its namesake — which resembles a blend of giraffe and zebra — Okapi blends simplicity and strength in a unique, powerful package.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/jkaninda/okapi/main/logo.png" width="150" alt="Okapi logo">
 </p>
 
 ---
 
-## Features
+### ✨ **Key Features**
 
-*  Clean and expressive API design
-*  Powerful binding from JSON, XML, forms, query, headers, and path parameters
-*  Route grouping and middleware chaining
-*  Built-in middleware: Basic Auth, JWT, OAuth
-*  Easy custom middleware support
-*  Cross-Origin Resource Sharing (CORS)
-*  Templating engine integration
-*  Static file serving
-*  Simple and clear documentation
+✔ **Intuitive & Expressive API** – Clean, declarative syntax for effortless route and middleware definition.
+
+✔ **Automatic Request Binding** – Seamlessly parse **JSON, XML, form data, query params, headers, and path variables** into structs.
+
+✔ **Built-in Auth & Security** – Native support for **JWT, OAuth2, Basic Auth**, and custom middleware.
+
+✔ **Blazing Fast Routing** – Optimized HTTP router with low overhead for high-performance applications.
+
+✔ **First-Class Documentation** – **OpenAPI 3.0 & Swagger UI** integrated out of the box—auto-generate API docs with minimal effort.
+
+✔ **Modern Tooling** –
+- Route grouping & middleware chaining
+- Static file serving
+- Templating engine support
+- CORS management
+- Fine-grained timeout controls
+
+✔ **Developer Experience** –
+- Minimal boilerplate
+- Clear error handling
+- Structured logging
+- Easy testing
+
+Built for **speed, simplicity, and real-world use**—whether you're prototyping or running in production.
+
+---
+
+### Why Okapi?
+
+✅ **Fast to learn** – If you know Go, you’re already halfway there.  
+✅ **Flexible** – Adapts to your needs, not the other way around.  
+✅ **Production-ready** – Robust enough for serious workloads.
+
+Perfect for:
+- **REST & JSON APIs**
+- **Microservices**
+- **Prototyping**
+- **Educational projects**
+
 
 ---
 
@@ -53,7 +84,7 @@ import (
 )
 
 func main() {
-	o := okapi.New()
+	o := okapi.Default()
 
 	o.Get("/", func(c okapi.Context) error {
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
@@ -76,6 +107,8 @@ Visit [`http://localhost:8080`](http://localhost:8080) to see the response:
 ```json
 {"message": "Welcome to Okapi!"}
 ```
+
+Visit [`http://localhost:8080/docs`](http://localhost:8080/docs) to se the documentation
 
 ---
 
@@ -153,7 +186,6 @@ o.Post("/books", func(c okapi.Context) error {
 	return c.String(http.StatusOK, "File uploaded successfully")
 })
 ```
-
 ---
 ## Struct Binding
 
@@ -250,6 +282,94 @@ o.Use(logger)
 
 ---
 
+### OpenAPI/Swagger Integration
+
+Okapi provides automatic OpenAPI (Swagger) documentation generation with built-in UI support. The documentation is dynamically generated from your route definitions.
+
+#### Quick Start
+
+To enable OpenAPI docs with default settings:
+
+```go
+o := okapi.Default()  // Docs available at /docs
+```
+
+#### Custom Configuration
+
+Configure OpenAPI settings during initialization:
+
+```go
+o := okapi.New().WithOpenAPIDocs(
+    okapi.OpenAPI{
+        PathPrefix: "/swagger",  // Documentation path
+        Title:     "My API",    // API title
+        Version:   "1.0",       // API version
+    }
+)
+```
+
+### Documenting Routes
+
+#### Example: Create Book Endpoint
+
+```go
+o.Post("/books", createBook,
+    okapi.DocSummary("Create a new book"),
+    okapi.DocTag("bookController"),
+    okapi.DocBearerAuth(),  // Enable Bearer token authentication
+    
+    // Request documentation
+    okapi.DocRequest(BookRequest{}),
+    
+    // Response documentation
+    okapi.DocResponse(BookResponse{}),
+    
+    // Header parameter
+    okapi.DocHeader("Key", "1234", "API Key", true),
+)
+```
+
+#### Example: Get Book Endpoint
+
+```go
+o.Get("/books/{id}", getBook,
+    okapi.DocSummary("Get book by ID"),
+    okapi.DocTag("bookController"),
+    okapi.DocBearerAuth(),
+    
+    // Path parameter
+    okapi.DocPathParam("id", "int", "Book ID"),
+    
+    // Query parameter
+    okapi.DocQueryParam("country", "string", "Country filter", true),
+    
+    // Response documentation
+    okapi.DocResponse(BookResponse{}),
+)
+```
+
+### Available Documentation Options
+
+| Method            | Description                          |
+|-------------------|--------------------------------------|
+| `DocSummary()`    | Short endpoint description           |
+| `DocTag()`        | Groups related endpoints             |
+| `DocTags()`       | Groups related endpoints             |
+| `DocBearerAuth()` | Enables Bearer token authentication  |
+| `DocRequest()`    | Documents request body structure     |
+| `DocResponse()`   | Documents response structure         |
+| `DocPathParam()`  | Documents path parameters            |
+| `DocQueryParam()` | Documents query parameters           |
+| `DocHeader()`     | Documents header parameters          |
+
+### Swagger UI Preview
+
+The automatically generated Swagger UI provides interactive documentation:
+
+![Okapi Swagger Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
+
+---
+
 ## Templating
 
 ### Using a Custom Renderer
@@ -302,7 +422,8 @@ Serve static assets and individual files:
 ```go
 // Serve a single file
 o.Get("/favicon.ico", func(c okapi.Context) error {
-	return c.ServeFile("public/favicon.ico")
+	c.ServeFile("public/favicon.ico")
+	return nil
 })
 
 // Serve an entire directory
@@ -312,34 +433,40 @@ o.Static("/static", "public/assets")
 ## TLS Server
 
 ```go
- // Initialize TLS configuration for secure HTTPS connections
-	tls, err := okapi.LoadTLSConfig("path/to/cert.pem", "path/to/key.pem", "", false)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to load TLS configuration: %v", err))
-	}
-	// Create a new Okapi instance with default config
-	// Configured to listen on port 8080 for HTTP connections
-	o := okapi.Default(okapi.WithAddr(":8080"))
+// Initialize TLS configuration for secure HTTPS connections
+    tls, err := okapi.LoadTLSConfig("public/cert.pem", "public/key.pem", "", false)
+    if err != nil {
+    panic(fmt.Sprintf("Failed to load TLS configuration: %v", err))
+    }
+    // Create a new Okapi instance with default config
+    // With OpenAPI enabled, /docs
+    o := okapi.Default()
     // Use HTTPS
-    // o := okapi.Default(okapi.WithTls(tls))
-
-	// Configure a secondary HTTPS server listening on port 8443
-	// This creates both HTTP (8080) and HTTPS (8443) endpoints
-	o.With(okapi.WithTLSServer(":8443", tls))
-
-	// Register application routes and handlers
-	o.Get("/", func(c okapi.Context) error {
-		return c.JSON(http.StatusOK, okapi.M{
-			"message": "Welcome to Okapi!",
-			"status":  "operational",
-		})
-	})
-	// Start the servers
-	// This will launch both HTTP and HTTPS listeners in separate goroutines
-	log.Println("Starting server on :8080 (HTTP) and :8443 (HTTPS)")
-	if err := o.Start(); err != nil {
-		panic(fmt.Sprintf("Server failed to start: %v", err))
-	}
+    // o := okapi.New(okapi.WithTLS(tls))
+    
+    // Configure a secondary HTTPS server listening on port 8443
+    // This creates both HTTP (8080) and HTTPS (8443) endpoints
+    o.With(okapi.WithTLSServer(":443", tls))
+    
+    // Register application routes and handlers
+    o.Get("/", func(c okapi.Context) error {
+    return c.JSON(http.StatusOK, okapi.M{
+    "message": "Welcome to Okapi!",
+    "status":  "operational",
+    })
+    })
+    // Start the servers
+    // This will launch both HTTP and HTTPS listeners in separate goroutines
+    log.Println("Starting server on :8080 (HTTP) and :8443 (HTTPS)")
+    if err := o.Start(); err != nil {
+    panic(fmt.Sprintf("Server failed to start: %v", err))
+    }
+    // Start the server
+    err = o.Start()
+    if err != nil {
+    panic(err)
+    
+    }
 ```
 
 ---

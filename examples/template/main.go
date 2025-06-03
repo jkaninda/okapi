@@ -44,7 +44,7 @@ func main() {
 	}
 	// Example usage of the Okapi framework
 	// Create a new Okapi instance
-	o := okapi.Default(okapi.WithDebug())
+	o := okapi.Default()
 
 	// Set the renderer
 	o.Renderer = t

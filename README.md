@@ -302,7 +302,8 @@ Serve static assets and individual files:
 ```go
 // Serve a single file
 o.Get("/favicon.ico", func(c okapi.Context) error {
-	return c.ServeFile("public/favicon.ico")
+	c.ServeFile("public/favicon.ico")
+	return nil
 })
 
 // Serve an entire directory

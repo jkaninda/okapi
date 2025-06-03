@@ -28,15 +28,19 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	goutils "github.com/jkaninda/go-utils"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"reflect"
 	"strconv"
 	"strings"
@@ -74,6 +78,9 @@ type (
 		readTimeout       int
 		idleTimeout       int
 		optionsRegistered map[string]bool
+		openapiSpec       *openapi3.T
+		openAPi           *OpenAPI
+		openApiEnabled    bool
 	}
 	Router struct {
 		mux *mux.Router
@@ -84,11 +91,18 @@ type (
 	M map[string]any
 
 	Route struct {
-		Name   string
-		Path   string
-		Method string
-		Handle HandleFunc
-		chain  chain
+		Name         string
+		Path         string
+		Method       string
+		Handle       HandleFunc
+		chain        chain
+		Summary      string
+		Request      *openapi3.SchemaRef
+		Response     *openapi3.SchemaRef
+		PathParams   []*openapi3.ParameterRef
+		QueryParams  []*openapi3.ParameterRef
+		Headers      []*openapi3.ParameterRef
+		RequiresAuth bool
 	}
 	// Response interface defines the methods for writing HTTP responses.
 	Response interface {
@@ -292,6 +306,33 @@ func WithAddr(addr string) OptionFunc {
 	}
 }
 
+// EnableOpenAPI enables OpenAPI with default configuration.
+func EnableOpenAPI() OptionFunc {
+	return func(o *Okapi) {
+		o.openApiEnabled = true
+	}
+}
+
+// WithOpenAPI applies the provided OpenAPI configuration.
+func WithOpenAPI(cfg OpenAPI) OptionFunc {
+	return func(o *Okapi) {
+		o.openApiEnabled = true
+
+		if cfg.Title != "" {
+			o.openAPi.Title = cfg.Title
+		}
+		if cfg.PathPrefix != "" {
+			o.openAPi.PathPrefix = cfg.PathPrefix
+		}
+		if cfg.Version != "" {
+			o.openAPi.Version = cfg.Version
+		}
+		if len(cfg.Servers) > 0 {
+			o.openAPi.Servers = cfg.Servers
+		}
+	}
+}
+
 // ****** END OKAPI OPTIONS ******
 
 // ****** RESPONSE WRITER ******
@@ -389,6 +430,12 @@ func Default(options ...OptionFunc) *Okapi {
 		middlewares:       []Middleware{handleAccessLog},
 		optionsRegistered: make(map[string]bool),
 		cors:              Cors{},
+		openAPi: &OpenAPI{
+			Title:      FrameworkName,
+			Version:    "1.0.0",
+			PathPrefix: "/docs",
+			Servers:    openapi3.Servers{{URL: OpenApiURL}},
+		},
 	}
 	return o.With(options...)
 }
@@ -415,7 +462,9 @@ func (o *Okapi) With(options ...OptionFunc) *Okapi {
 		o.TLSServer.Addr = o.tlsAddr
 		o.applyServerConfig(o.TLSServer)
 	}
-
+	if o.openApiEnabled {
+		o.swaggerHandler()
+	}
 	return o
 }
 
@@ -449,7 +498,9 @@ func (o *Okapi) StartServer(server *http.Server) error {
 		o.logger.Error("Invalid server address", slog.String("addr", server.Addr))
 		panic("Invalid server address")
 	}
-
+	if o.openApiEnabled {
+		o.swaggerHandler()
+	}
 	o.Server = server
 	server.Handler = o
 	o.router.mux.StrictSlash(o.strictSlash)
@@ -525,49 +576,63 @@ func (o *Okapi) SetContext(ctx *Context) {
 
 // Get registers a new GET route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Get(path string, h HandleFunc) *Route { return o.addRoute(GET, path, h) }
+func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(GET, path, h, opts...)
+}
 
 // Post registers a new POST route with the given path and handler function.
 // Returns the created *Route for possible chaining or modification.
-func (o *Okapi) Post(path string, h HandleFunc) *Route { return o.addRoute(POST, path, h) }
+func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(POST, path, h, opts...)
+}
 
 // Put registers a new PUT route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Put(path string, h HandleFunc) *Route { return o.addRoute(PUT, path, h) }
+func (o *Okapi) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(PUT, path, h, opts...)
+}
 
 // Delete registers a new DELETE route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Delete(path string, h HandleFunc) *Route {
-	return o.addRoute(http.MethodDelete, path, h)
+func (o *Okapi) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(http.MethodDelete, path, h, opts...)
 }
 
 // Patch registers a new PATCH route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Patch(path string, h HandleFunc) *Route { return o.addRoute(PATCH, path, h) }
+func (o *Okapi) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(PATCH, path, h, opts...)
+}
 
 // Options registers a new OPTIONS route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Options(path string, h HandleFunc) *Route {
-	return o.addRoute(http.MethodOptions, path, h)
+func (o *Okapi) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(http.MethodOptions, path, h, opts...)
 }
 
 // Head registers a new HEAD route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Head(path string, h HandleFunc) *Route { return o.addRoute(HEAD, path, h) }
+func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(HEAD, path, h, opts...)
+}
 
 // Connect registers a new CONNECT route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Connect(path string, h HandleFunc) *Route {
-	return o.addRoute(http.MethodConnect, path, h)
+func (o *Okapi) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(http.MethodConnect, path, h, opts...)
 }
 
 // Trace registers a new TRACE route with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Trace(path string, h HandleFunc) *Route { return o.addRoute(TRACE, path, h) }
+func (o *Okapi) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute(TRACE, path, h, opts...)
+}
 
 // Any registers a route that matches any HTTP method with the given path and handler function.
 // Returns the created *Route
-func (o *Okapi) Any(path string, h HandleFunc) *Route { return o.addRoute("", path, h) }
+func (o *Okapi) Any(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return o.addRoute("", path, h, opts...)
+}
 
 // ********** Static Content ***************
 
@@ -591,18 +656,20 @@ func (o *Okapi) StaticFS(prefix string, fs http.FileSystem) {
 }
 
 // addRoute adds a route with the specified method to the Okapi instance
-func (o *Okapi) addRoute(method, path string, h HandleFunc) *Route {
+func (o *Okapi) addRoute(method, path string, h HandleFunc, opts ...RouteOption) *Route {
 	if path == "" {
 		panic("Path cannot be empty")
 	}
 	path = normalizeRoutePath(path)
-
 	route := &Route{
 		Name:   handleName(h),
 		Path:   path,
 		Method: method,
 		Handle: h,
 		chain:  o,
+	}
+	for _, opt := range opts {
+		opt(route)
 	}
 	o.routes = append(o.routes, route)
 
@@ -653,7 +720,7 @@ func (o *Okapi) addRoute(method, path string, h HandleFunc) *Route {
 //	    // ... handler logic
 //	    return nil
 //	})
-func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
+func (o *Okapi) HandleFunc(method, path string, h HandleFunc, opts ...RouteOption) {
 	path = normalizeRoutePath(path)
 
 	route := &Route{
@@ -662,6 +729,9 @@ func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
 		Method: method,
 		Handle: h,
 		chain:  o,
+	}
+	for _, opt := range opts {
+		opt(route)
 	}
 	o.routes = append(o.routes, route)
 
@@ -704,7 +774,7 @@ func (o *Okapi) HandleFunc(method, path string, h HandleFunc) {
 // Example:
 //
 //	okapi.Handle("GET", "/static", http.FileServer(http.Dir("./public")))
-func (o *Okapi) Handle(method, path string, h http.Handler) {
+func (o *Okapi) Handle(method, path string, h http.Handler, opts ...RouteOption) {
 	path = normalizeRoutePath(path)
 
 	// Wrap http.Handler into HandleFunc signature
@@ -720,6 +790,9 @@ func (o *Okapi) Handle(method, path string, h http.Handler) {
 		Method: method,
 		Handle: handleFunc,
 		chain:  o,
+	}
+	for _, opt := range opts {
+		opt(route)
 	}
 	o.routes = append(o.routes, route)
 
@@ -860,6 +933,17 @@ func (o *Okapi) applyServerConfig(s *http.Server) {
 	s.WriteTimeout = time.Duration(o.writeTimeout) * time.Second
 	s.IdleTimeout = time.Duration(o.idleTimeout) * time.Second
 	s.SetKeepAlivesEnabled(!o.disableKeepAlives)
+}
+func (o *Okapi) swaggerHandler() {
+	o.buildOpenAPISpec()
+	o.router.mux.HandleFunc(path.Join(o.openAPi.PathPrefix, "/openapi.json"), func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(o.openapiSpec)
+	})
+
+	o.router.mux.PathPrefix(path.Join(o.openAPi.PathPrefix, "/")).Handler(httpSwagger.Handler(
+		httpSwagger.URL(path.Join(o.openAPi.PathPrefix, "/openapi.json")),
+	))
 }
 
 // handleName returns the name of the handler function.

@@ -23,3 +23,12 @@
  */
 
 package okapi
+
+import "time"
+
+func secondsToDuration(sec int) time.Duration {
+	if sec <= 0 {
+		return 0
+	}
+	return time.Duration(sec) * time.Second
+}

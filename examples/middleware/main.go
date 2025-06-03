@@ -52,7 +52,7 @@ func main() {
 	// Example usage of middlewares handling in Okapi
 	// Create a new Okapi instance
 	// Disable access log for cleaner output in this example
-	o := okapi.New(okapi.WithOpenAPI(okapi.OpenAPI{PathPrefix: "/docs"}))
+	o := okapi.New().WithOpenAPIDocs()
 
 	o.Get("/", func(c okapi.Context) error {
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
@@ -80,7 +80,7 @@ func main() {
 	// Apply custom middleware to the v1 group
 	v1.Use(customMiddleware)
 	// Use the built-in Okapi logger middleware for logging requests
-	v1.Use(okapi.LoggerMiddleware)
+	//v1.Use(okapi.LoggerMiddleware)
 
 	// Define routes for the v1 group
 	v1.Get("/books", index, okapi.DocSummary("Get all books"))

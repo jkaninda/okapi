@@ -56,10 +56,16 @@ func main() {
 
 	o.Get("/", func(c okapi.Context) error {
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
-	}, okapi.DocSummary("Update User "))
+	}, okapi.DocSummary("Home "))
 
-	o.Get("/books/{id}", show, okapi.DocSummary("Get book by ID"),
+	o.Get("/books/{id}", show,
+		okapi.DocSummary("Get book by ID"),
 		okapi.DocPathParam("id", "int", "Book ID"),
+		okapi.DocQueryParam("country", "string", "Country Name", true),
+		okapi.DocHeader("Key", "1234", "API Key", true),
+		okapi.DocTag("bookController"),
+		okapi.DocBearerAuth(),
+		okapi.DocRequest(Book{}),
 		okapi.DocResponse(Book{}))
 	// ******* Admin Routes | Restricted Area ********
 	basicAuth := okapi.BasicAuthMiddleware{
@@ -73,18 +79,19 @@ func main() {
 	// Create a new group with a base path for admin routes and apply basic auth middleware
 	adminApi := api.Group("/admin", basicAuth.Middleware) // This group will require basic authentication
 	adminApi.Put("/books/:id", adminUpdate)
-	adminApi.Post("/books", adminStore)
+	adminApi.Post("/books", adminStore,
+		okapi.DocSummary("Store books"),
+		okapi.DocResponse(Book{}),
+		okapi.DocRequest(Book{}))
 
 	// ******* Public API Routes ********
 	v1 := api.Group("/v1")
 	// Apply custom middleware to the v1 group
 	v1.Use(customMiddleware)
-	// Use the built-in Okapi logger middleware for logging requests
-	//v1.Use(okapi.LoggerMiddleware)
 
 	// Define routes for the v1 group
-	v1.Get("/books", index, okapi.DocSummary("Get all books"))
-	v1.Get("/books/:id", show, okapi.DocSummary("Show book")).Name = "show_book" // Named route for easier reference
+	v1.Get("/books", index, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
+	v1.Get("/books/:id", show, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
 
 	// Start the server
 	err := o.Start()

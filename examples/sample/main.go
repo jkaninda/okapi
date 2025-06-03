@@ -36,7 +36,9 @@ func main() {
 
 	o.Get("/", func(c okapi.Context) error {
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
-	})
+	},
+		okapi.DocSummary("Welcome page"),
+	)
 	o.Get("/greeting/:name", greetingHandler)
 
 	// Start the server

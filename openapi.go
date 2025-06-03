@@ -33,6 +33,17 @@ import (
 	"time"
 )
 
+const (
+	Int      = "int"
+	Int64    = "int64"
+	Float    = "float"
+	DateTime = "date-time"
+	Date     = "date"
+	UUID     = "uuid"
+	Bool     = "bool"
+	String   = "string"
+)
+
 // RouteOption defines a function type that modifies a Route's documentation properties
 type RouteOption func(*Route)
 
@@ -315,7 +326,7 @@ func typeToSchema(t reflect.Type) *openapi3.SchemaRef {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		schema := openapi3.NewIntegerSchema()
 		if t.Kind() == reflect.Int64 {
-			schema.Format = "int64"
+			schema.Format = Int64
 		} else {
 			schema.Format = "int32"
 		}
@@ -334,7 +345,7 @@ func typeToSchema(t reflect.Type) *openapi3.SchemaRef {
 	case reflect.Float32, reflect.Float64:
 		schema := openapi3.NewFloat64Schema()
 		if t.Kind() == reflect.Float32 {
-			schema.Format = "float"
+			schema.Format = Float
 		} else {
 			schema.Format = "double"
 		}
@@ -516,29 +527,29 @@ func inferTypeFromParamName(name string) string {
 
 	// Common ID patterns
 	if strings.HasSuffix(name, "_id") || name == "id" {
-		return "uuid" // Assume UUIDs for IDs
+		return UUID // Assume UUIDs for IDs
 	}
 
 	// Numeric patterns
 	if strings.Contains(name, "count") || strings.Contains(name, "limit") ||
 		strings.Contains(name, "offset") || strings.Contains(name, "page") ||
 		strings.Contains(name, "size") || strings.Contains(name, "number") {
-		return "int"
+		return Int
 	}
 
 	// Date patterns
 	if strings.Contains(name, "date") || strings.Contains(name, "time") {
-		return "date"
+		return Date
 	}
 
 	// Boolean patterns
 	if strings.HasPrefix(name, "is_") || strings.HasPrefix(name, "has_") ||
 		strings.HasPrefix(name, "can_") || strings.HasPrefix(name, "should_") {
-		return "bool"
+		return Bool
 	}
 
 	// Default to string
-	return "string"
+	return String
 }
 
 // generateParamDescription generates a human-readable description for a parameter
@@ -585,15 +596,15 @@ func getSchemaForType(typ string) *openapi3.SchemaRef {
 		return openapi3.NewSchemaRef("", openapi3.NewBoolSchema())
 	case "uuid":
 		schema := openapi3.NewStringSchema()
-		schema.Format = "uuid"
+		schema.Format = UUID
 		return openapi3.NewSchemaRef("", schema)
 	case "date":
 		schema := openapi3.NewStringSchema()
-		schema.Format = "date"
+		schema.Format = Date
 		return openapi3.NewSchemaRef("", schema)
-	case "datetime", "date-time":
+	case "datetime", DateTime:
 		schema := openapi3.NewStringSchema()
-		schema.Format = "date-time"
+		schema.Format = DateTime
 		return openapi3.NewSchemaRef("", schema)
 	default:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())

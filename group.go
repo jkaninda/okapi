@@ -31,10 +31,9 @@ type Group struct {
 }
 
 // newGroup creates a new route group with the specified base path, Okapi reference,
-// and optional middlewares. It automatically includes LoggerMiddleware by default.
+// and optional middlewares.
 func newGroup(basePath string, okapi *Okapi, middlewares ...Middleware) *Group {
-	// Prepend LoggerMiddleware to any provided middlewares
-	mws := append([]Middleware{LoggerMiddleware}, middlewares...)
+	mws := append([]Middleware{}, middlewares...)
 	return &Group{
 		basePath:    basePath,
 		middlewares: mws,
@@ -128,7 +127,7 @@ func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
 // The new group inherits all middlewares from its parent group.
 func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 	return newGroup(
-		joinPaths(g.basePath, path), // Combine paths
-		g.okapi,                     // Share the same Okapi instance
+		joinPaths(g.basePath, path),              // Combine paths
+		g.okapi,                                  // Share the same Okapi instance
 		append(g.middlewares, middlewares...)...) // Combine middlewares
 }

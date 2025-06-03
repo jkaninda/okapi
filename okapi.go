@@ -73,7 +73,6 @@ type (
 		logger            *slog.Logger
 		Renderer          Renderer
 		corsEnabled       bool
-		disableKeepAlives bool
 		cors              Cors
 		writeTimeout      int
 		readTimeout       int
@@ -229,14 +228,6 @@ func WithIdleTimeout(t int) OptionFunc {
 	}
 }
 
-// WithDisabledKeepAlives returns an OptionFunc that disables keep-alives
-func WithDisabledKeepAlives() OptionFunc {
-	return func(o *Okapi) {
-		o.disableKeepAlives = true
-		o.Server.SetKeepAlivesEnabled(false)
-	}
-}
-
 // WithStrictSlash sets whether to enforce strict slash handling
 func WithStrictSlash(strict bool) OptionFunc {
 	return func(o *Okapi) {
@@ -309,10 +300,6 @@ func (o *Okapi) WithIdleTimeout(seconds int) *Okapi {
 	return o.apply(WithIdleTimeout(seconds))
 }
 
-func (o *Okapi) WithDisabledKeepAlives() *Okapi {
-	return o.apply(WithDisabledKeepAlives())
-}
-
 func (o *Okapi) WithStrictSlash(strict bool) *Okapi {
 	return o.apply(WithStrictSlash(strict))
 }
@@ -331,9 +318,6 @@ func (o *Okapi) WithAddr(addr string) *Okapi {
 
 func (o *Okapi) DisableAccessLog() *Okapi {
 	return o.apply(WithAccessLogDisabled())
-}
-func (o *Okapi) DisabledKeepAlives() *Okapi {
-	return o.apply(WithDisabledKeepAlives())
 }
 
 // WithOpenAPIDocs registers the OpenAPI JSON and Swagger UI handlers
@@ -984,7 +968,6 @@ func (o *Okapi) applyServerConfig(s *http.Server) {
 	s.ReadTimeout = secondsToDuration(o.readTimeout)
 	s.WriteTimeout = secondsToDuration(o.writeTimeout)
 	s.IdleTimeout = secondsToDuration(o.idleTimeout)
-	s.SetKeepAlivesEnabled(!o.disableKeepAlives)
 }
 
 // apply is a helper method to apply an OptionFunc to the Okapi instance

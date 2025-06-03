@@ -33,21 +33,32 @@ import (
 	"time"
 )
 
+// RouteOption defines a function type that modifies a Route's documentation properties
 type RouteOption func(*Route)
+
+// OpenAPI contains configuration for generating OpenAPI/Swagger documentation
 type OpenAPI struct {
-	Title   string
-	Version string
-	// PathPrefix Doc path prefix,
-	PathPrefix string // e.g., "/docs" (default)
-	Servers    openapi3.Servers
+	Title   string // Title of the API
+	Version string // Version of the API
+	// PathPrefix is the URL prefix for accessing the documentation
+	PathPrefix string           // e.g., "/docs" (default)
+	Servers    openapi3.Servers // List of server URLs where the API is hosted
 }
 
+// ptr is a helper function that returns a pointer to any value
 func ptr[T any](v T) *T { return &v }
+
+// DocSummary sets a short summary description for the route
 func DocSummary(summary string) RouteOption {
 	return func(doc *Route) {
 		doc.Summary = summary
 	}
 }
+
+// DocPathParam adds a path parameter to the route documentation
+// name: parameter name
+// typ: parameter type (e.g., "string", "int", "uuid")
+// desc: parameter description
 func DocPathParam(name, typ, desc string) RouteOption {
 	return func(doc *Route) {
 		schema := getSchemaForType(typ)
@@ -64,6 +75,8 @@ func DocPathParam(name, typ, desc string) RouteOption {
 }
 
 // DocAutoPathParams automatically extracts path parameters from the route path
+// and adds them to the documentation.
+// It skips parameters that are already defined.
 func DocAutoPathParams() RouteOption {
 	return func(doc *Route) {
 		pathParams := extractPathParams(doc.Path)
@@ -83,6 +96,11 @@ func DocAutoPathParams() RouteOption {
 	}
 }
 
+// DocQueryParam adds a query parameter to the route documentation
+// name: parameter name
+// typ: parameter type (e.g., "string", "int")
+// desc: parameter description
+// required: whether the parameter is required
 func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 	return func(doc *Route) {
 		schema := getSchemaForType(typ)
@@ -97,6 +115,12 @@ func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 		})
 	}
 }
+
+// DocHeader adds a header parameter to the route documentation
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description
+// required: whether the header is required
 func DocHeader(name, typ, desc string, required bool) RouteOption {
 	return func(doc *Route) {
 		schema := getSchemaForType(typ)
@@ -112,6 +136,22 @@ func DocHeader(name, typ, desc string, required bool) RouteOption {
 	}
 }
 
+// DocTag adds a single tag to categorize the route
+func DocTag(tag string) RouteOption {
+	return func(doc *Route) {
+		doc.Tags = append(doc.Tags, tag)
+	}
+}
+
+// DocTags adds multiple tags to categorize the route
+func DocTags(tags ...string) RouteOption {
+	return func(doc *Route) {
+		doc.Tags = append(doc.Tags, tags...)
+	}
+}
+
+// DocResponse defines the response schema for the route
+// v: a Go value whose type will be used to generate the response schema
 func DocResponse(v any) RouteOption {
 	return func(doc *Route) {
 		if v == nil {
@@ -121,6 +161,8 @@ func DocResponse(v any) RouteOption {
 	}
 }
 
+// DocRequest defines the request body schema for the route
+// v: a Go value whose type will be used to generate the request schema
 func DocRequest(v any) RouteOption {
 	return func(doc *Route) {
 		if v == nil {
@@ -130,10 +172,126 @@ func DocRequest(v any) RouteOption {
 	}
 }
 
+// DocBearerAuth marks the route as requiring Bearer token authentication
 func DocBearerAuth() RouteOption {
 	return func(doc *Route) {
 		doc.RequiresAuth = true
 	}
+}
+
+// buildOpenAPISpec constructs the complete OpenAPI specification document
+// by aggregating all the route documentation into a single OpenAPI 3.0 spec
+func (o *Okapi) buildOpenAPISpec() {
+	spec := &openapi3.T{
+		OpenAPI: OpenApiVersion,
+		Info: &openapi3.Info{
+			Title:   o.openAPi.Title,
+			Version: o.openAPi.Version,
+		},
+		Paths:   &openapi3.Paths{},
+		Servers: o.openAPi.Servers,
+		Components: &openapi3.Components{
+			SecuritySchemes: openapi3.SecuritySchemes{
+				"BearerAuth": &openapi3.SecuritySchemeRef{
+					Value: &openapi3.SecurityScheme{
+						Type:         "http",
+						Scheme:       "bearer",
+						BearerFormat: "JWT",
+					},
+				},
+			},
+		},
+	}
+
+	// Process all registered routes
+	for _, r := range o.routes {
+		// Auto-extract path parameters if none are defined
+		if len(r.PathParams) == 0 {
+			DocAutoPathParams()(r)
+		}
+		tags := r.Tags
+		if tags == nil {
+			tags = append(tags, r.GroupPath)
+		}
+		item := spec.Paths.Value(r.Path)
+		if item == nil {
+			item = &openapi3.PathItem{}
+			spec.Paths.Set(r.Path, item)
+		}
+
+		op := &openapi3.Operation{
+			Summary:    r.Summary,
+			Tags:       tags,
+			Parameters: append(append(r.PathParams, r.QueryParams...), r.Headers...),
+			Responses:  &openapi3.Responses{},
+		}
+
+		if r.RequiresAuth {
+			op.Security = &openapi3.SecurityRequirements{
+				openapi3.SecurityRequirement{
+					"BearerAuth": {},
+				},
+			}
+		}
+
+		if r.Request != nil {
+			op.RequestBody = &openapi3.RequestBodyRef{
+				Value: &openapi3.RequestBody{
+					Content: openapi3.NewContentWithJSONSchemaRef(r.Request),
+				},
+			}
+		}
+
+		if r.Response != nil {
+			op.Responses.Set("200", &openapi3.ResponseRef{
+				Value: &openapi3.Response{
+					Description: ptr("Success"),
+					Content:     openapi3.NewContentWithJSONSchemaRef(r.Response),
+				},
+			})
+		}
+
+		// Add default error responses
+		op.Responses.Set("400", &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: ptr("Bad Request"),
+			},
+		})
+
+		if r.RequiresAuth {
+			op.Responses.Set("401", &openapi3.ResponseRef{
+				Value: &openapi3.Response{
+					Description: ptr("Unauthorized"),
+				},
+			})
+		}
+
+		op.Responses.Set("500", &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: ptr("Internal Server Error"),
+			},
+		})
+
+		// Assign operation to correct HTTP verb
+		switch r.Method {
+		case "GET":
+			item.Get = op
+		case "POST":
+			item.Post = op
+		case "PUT":
+			item.Put = op
+		case "DELETE":
+			item.Delete = op
+		case "PATCH":
+			item.Patch = op
+		case "HEAD":
+			item.Head = op
+		case "OPTIONS":
+			item.Options = op
+		}
+	}
+
+	o.openapiSpec = spec
 }
 
 // reflectToSchema converts a Go type to an OpenAPI schema using reflection
@@ -311,7 +469,7 @@ func isRequiredField(field reflect.StructField) bool {
 // - /users/{id:int} -> id (int)
 // - /users/{user_id:uuid} -> user_id (uuid)
 func extractPathParams(path string) []*openapi3.ParameterRef {
-	var params []*openapi3.ParameterRef
+	params := []*openapi3.ParameterRef{}
 
 	// Find all parameters in curly braces
 	re := regexp.MustCompile(`\{([^}]+)\}`)
@@ -440,112 +598,4 @@ func getSchemaForType(typ string) *openapi3.SchemaRef {
 	default:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())
 	}
-}
-
-func (o *Okapi) buildOpenAPISpec() {
-	spec := &openapi3.T{
-		OpenAPI: OpenApiVersion,
-		Info: &openapi3.Info{
-			Title:   o.openAPi.Title,
-			Version: o.openAPi.Version,
-		},
-		Paths:   &openapi3.Paths{},
-		Servers: o.openAPi.Servers,
-		Components: &openapi3.Components{
-			SecuritySchemes: openapi3.SecuritySchemes{
-				"BearerAuth": &openapi3.SecuritySchemeRef{
-					Value: &openapi3.SecurityScheme{
-						Type:         "http",
-						Scheme:       "bearer",
-						BearerFormat: "JWT",
-					},
-				},
-			},
-		},
-	}
-
-	for _, r := range o.routes {
-		// Auto-extract path parameters if none are defined
-		if len(r.PathParams) == 0 {
-			DocAutoPathParams()(r)
-		}
-
-		item := spec.Paths.Value(r.Path)
-		if item == nil {
-			item = &openapi3.PathItem{}
-			spec.Paths.Set(r.Path, item)
-		}
-
-		op := &openapi3.Operation{
-			Summary:    r.Summary,
-			Parameters: append(append(r.PathParams, r.QueryParams...), r.Headers...),
-			Responses:  &openapi3.Responses{},
-		}
-
-		if r.RequiresAuth {
-			op.Security = &openapi3.SecurityRequirements{
-				openapi3.SecurityRequirement{
-					"BearerAuth": {},
-				},
-			}
-		}
-
-		if r.Request != nil {
-			op.RequestBody = &openapi3.RequestBodyRef{
-				Value: &openapi3.RequestBody{
-					Content: openapi3.NewContentWithJSONSchemaRef(r.Request),
-				},
-			}
-		}
-
-		if r.Response != nil {
-			op.Responses.Set("200", &openapi3.ResponseRef{
-				Value: &openapi3.Response{
-					Description: ptr("Success"),
-					Content:     openapi3.NewContentWithJSONSchemaRef(r.Response),
-				},
-			})
-		}
-
-		// Add default error responses
-		op.Responses.Set("400", &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: ptr("Bad Request"),
-			},
-		})
-
-		if r.RequiresAuth {
-			op.Responses.Set("401", &openapi3.ResponseRef{
-				Value: &openapi3.Response{
-					Description: ptr("Unauthorized"),
-				},
-			})
-		}
-
-		op.Responses.Set("500", &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: ptr("Internal Server Error"),
-			},
-		})
-
-		// Assign operation to correct HTTP verb
-		switch r.Method {
-		case "GET":
-			item.Get = op
-		case "POST":
-			item.Post = op
-		case "PUT":
-			item.Put = op
-		case "DELETE":
-			item.Delete = op
-		case "PATCH":
-			item.Patch = op
-		case "HEAD":
-			item.Head = op
-		case "OPTIONS":
-			item.Options = op
-		}
-	}
-
-	o.openapiSpec = spec
 }

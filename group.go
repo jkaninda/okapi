@@ -69,22 +69,14 @@ func (g *Group) Use(m ...Middleware) {
 // add is an internal method that handles route registration with the combined
 // middlewares from both the group and parent Okapi instance.
 func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Route {
-	// Create a temporary Okapi instance with combined middlewares
-	tempOkapi := &Okapi{
-		context:           g.okapi.context,
-		router:            g.okapi.router,
-		middlewares:       append(g.okapi.middlewares, g.middlewares...),
-		Server:            g.okapi.Server,
-		TLSServer:         g.okapi.TLSServer,
-		debug:             g.okapi.debug,
-		logger:            g.okapi.logger,
-		optionsRegistered: g.okapi.optionsRegistered,
-		openAPi:           g.okapi.openAPi,
-		openApiEnabled:    g.okapi.openApiEnabled,
-		openapiSpec:       g.okapi.openapiSpec,
+	fullPath := joinPaths(g.basePath, path)
+	// Wrap handler with combined middlewares
+	finalHandler := h
+	for i := len(g.middlewares) - 1; i >= 0; i-- {
+		finalHandler = g.middlewares[i](finalHandler)
 	}
 	// Register the route with the joined base path and route path
-	return tempOkapi.addRoute(method, joinPaths(g.basePath, path), h, opts...)
+	return g.okapi.addRoute(method, fullPath, g.basePath, finalHandler, opts...)
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
@@ -136,7 +128,7 @@ func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
 // The new group inherits all middlewares from its parent group.
 func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 	return newGroup(
-		joinPaths(g.basePath, path),              // Combine paths
-		g.okapi,                                  // Share the same Okapi instance
+		joinPaths(g.basePath, path), // Combine paths
+		g.okapi,                     // Share the same Okapi instance
 		append(g.middlewares, middlewares...)...) // Combine middlewares
 }

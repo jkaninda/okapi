@@ -1,4 +1,4 @@
-# OKAPI - Lightweight Go Web Framework
+# OKAPI - Lightweight Go Web Framework with OpenAPI 3.0 & Swagger UI
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
@@ -7,26 +7,57 @@
 [![GitHub Release](https://img.shields.io/github/v/release/jkaninda/okapi)](https://github.com/jkaninda/okapi/releases)
 
 
-**Okapi** is a modern, minimalist HTTP web framework for Go, inspired by the simplicity of FastAPI. Designed to be intuitive, lightweight, and high-performance, Okapi makes it easy to build fast and flexible web applications and REST APIs.
+**Okapi** is a modern, minimalist HTTP web framework for Go, inspired by **FastAPI**'s elegance. Designed for simplicity, performance, and developer happiness, it helps you build **fast, scalable, and well-documented APIs** with minimal boilerplate.
 
 The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to the rainforests of the northeastern Democratic Republic of the Congo. Just like its namesake — which resembles a blend of giraffe and zebra — Okapi blends simplicity and strength in a unique, powerful package.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/jkaninda/okapi/main/logo.png" width="150" alt="Okapi logo">
 </p>
 
 ---
 
-## Features
+### ✨ **Key Features**
 
-*  Clean and expressive API design
-*  Powerful binding from JSON, XML, forms, query, headers, and path parameters
-*  Route grouping and middleware chaining
-*  Built-in middleware: Basic Auth, JWT, OAuth
-*  Easy custom middleware support
-*  Cross-Origin Resource Sharing (CORS)
-*  Templating engine integration
-*  Static file serving
-*  Simple and clear documentation
+✔ **Intuitive & Expressive API** – Clean, declarative syntax for effortless route and middleware definition.
+
+✔ **Automatic Request Binding** – Seamlessly parse **JSON, XML, form data, query params, headers, and path variables** into structs.
+
+✔ **Built-in Auth & Security** – Native support for **JWT, OAuth2, Basic Auth**, and custom middleware.
+
+✔ **Blazing Fast Routing** – Optimized HTTP router with low overhead for high-performance applications.
+
+✔ **First-Class Documentation** – **OpenAPI 3.0 & Swagger UI** integrated out of the box—auto-generate API docs with minimal effort.
+
+✔ **Modern Tooling** –
+- Route grouping & middleware chaining
+- Static file serving
+- Templating engine support
+- CORS management
+- Fine-grained timeout controls
+
+✔ **Developer Experience** –
+- Minimal boilerplate
+- Clear error handling
+- Structured logging
+- Easy testing
+
+Built for **speed, simplicity, and real-world use**—whether you're prototyping or running in production.
+
+---
+
+### Why Okapi?
+
+✅ **Fast to learn** – If you know Go, you’re already halfway there.  
+✅ **Flexible** – Adapts to your needs, not the other way around.  
+✅ **Production-ready** – Robust enough for serious workloads.
+
+Perfect for:
+- **REST & JSON APIs**
+- **Microservices**
+- **Prototyping**
+- **Educational projects**
+
 
 ---
 
@@ -317,7 +348,7 @@ o.Get("/books/{id}", getBook,
 )
 ```
 
-## Available Documentation Options
+### Available Documentation Options
 
 | Method            | Description                          |
 |-------------------|--------------------------------------|
@@ -331,7 +362,7 @@ o.Get("/books/{id}", getBook,
 | `DocQueryParam()` | Documents query parameters           |
 | `DocHeader()`     | Documents header parameters          |
 
-## Swagger UI Preview
+### Swagger UI Preview
 
 The automatically generated Swagger UI provides interactive documentation:
 

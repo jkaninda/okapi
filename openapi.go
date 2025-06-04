@@ -182,15 +182,21 @@ func DocResponse(v any) RouteOption {
 	}
 }
 
-// DocRequest defines the request body schema for the route
+// DocRequestBody defines the request body schema for the route
 // v: a Go value whose type will be used to generate the request schema
-func DocRequest(v any) RouteOption {
+func DocRequestBody(v any) RouteOption {
 	return func(doc *Route) {
 		if v == nil {
 			return
 		}
 		doc.Request = reflectToSchemaWithInfo(v).Schema
 	}
+}
+
+// DocRequest defines the request schema for the route in the API documentation.
+// This is an alias for RequestBody
+func DocRequest(v any) RouteOption {
+	return DocRequestBody(v)
 }
 
 // DocBearerAuth marks the route as requiring Bearer token authentication

@@ -41,7 +41,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path"
 	"reflect"
 	"strconv"
 	"strings"
@@ -335,7 +334,7 @@ func (o *Okapi) DisableAccessLog() *Okapi {
 // at the configured PathPrefix (default: /docs).
 //
 // UI Path: /docs
-// JSON Path: /docs/openapi.json
+// JSON Path: /openapi.json
 func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	o.openApiEnabled = true
 
@@ -355,20 +354,24 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 			o.openAPI.Servers = config.Servers
 		}
 	}
-	if !strings.HasPrefix(o.openAPI.PathPrefix, "/") {
-		o.openAPI.PathPrefix = "/" + o.openAPI.PathPrefix
+	if !strings.HasSuffix(o.openAPI.PathPrefix, "/") {
+		o.openAPI.PathPrefix += "/"
 	}
+
+	// Ensure /docs redirects to /docs/
+	o.router.mux.HandleFunc(strings.TrimSuffix(o.openAPI.PathPrefix, "/"), func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, o.openAPI.PathPrefix, http.StatusMovedPermanently)
+	})
+
 	o.buildOpenAPISpec()
 
-	specPath := path.Join(o.openAPI.PathPrefix, "/openapi.json")
-
-	o.router.mux.HandleFunc(specPath, func(w http.ResponseWriter, r *http.Request) {
+	o.router.mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(o.openapiSpec)
 	})
 
 	o.router.mux.PathPrefix(o.openAPI.PathPrefix).Handler(httpSwagger.Handler(
-		httpSwagger.URL(specPath),
+		httpSwagger.URL("/openapi.json"),
 	))
 
 	return o

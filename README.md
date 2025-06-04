@@ -87,8 +87,10 @@ func main() {
 	o := okapi.Default()
 
 	o.Get("/", func(c okapi.Context) error {
-		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
-	})
+		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
+	},
+		okapi.DocSummary("Welcome page"),
+	)
 
 	if err := o.Start(); err != nil {
 		panic(err)
@@ -108,7 +110,7 @@ Visit [`http://localhost:8080`](http://localhost:8080) to see the response:
 {"message": "Welcome to Okapi!"}
 ```
 
-Visit [`http://localhost:8080/docs`](http://localhost:8080/docs) to se the documentation
+Visit [`http://localhost:8080/docs/`](http://localhost:8080/docs/) to se the documentation
 
 ---
 
@@ -132,7 +134,11 @@ Organize routes with nesting and middleware:
 api := o.Group("/api")
 
 v1 := api.Group("/v1")
+v2 := api.Group("/v2")
+
 v1.Get("/users", getUsers)
+v2.Get("/users", getUsers)
+
 
 admin := api.Group("/admin", adminMiddleware)
 admin.Get("/dashboard", getDashboard)
@@ -196,7 +202,6 @@ type Book struct {
 	ID    int    `json:"id" param:"id" query:"id" form:"id"`
 	Name  string `json:"name" xml:"name" form:"name" min:"4" max:"50" required:"true"`
 	Price int    `json:"price" form:"price" required:"true"`
-
 	Logo *multipart.FileHeader `form:"logo" required:"true"`
     Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
 	// Supports both ?tags=a&tags=b and ?tags=a,b
@@ -206,7 +211,7 @@ type Book struct {
 o.Post("/books", func(c okapi.Context) error {
 	book := &Book{}
 	if err := c.Bind(book); err != nil {
-		return c.AbortBadRequest(err)
+		return c.ErrorBadRequest(err)
 	}
 	return c.JSON(http.StatusOK, book)
 })
@@ -318,8 +323,8 @@ o.Post("/books", createBook,
     okapi.DocTag("bookController"),
     okapi.DocBearerAuth(),  // Enable Bearer token authentication
     
-    // Request documentation
-    okapi.DocRequest(BookRequest{}),
+    // RequestBody documentation
+    okapi.RequestBody(BookRequest{}),
     
     // Response documentation
     okapi.DocResponse(BookResponse{}),
@@ -350,17 +355,17 @@ o.Get("/books/{id}", getBook,
 
 ### Available Documentation Options
 
-| Method            | Description                          |
-|-------------------|--------------------------------------|
-| `DocSummary()`    | Short endpoint description           |
-| `DocTag()`        | Groups related endpoints             |
-| `DocTags()`       | Groups related endpoints             |
-| `DocBearerAuth()` | Enables Bearer token authentication  |
-| `DocRequest()`    | Documents request body structure     |
-| `DocResponse()`   | Documents response structure         |
-| `DocPathParam()`  | Documents path parameters            |
-| `DocQueryParam()` | Documents query parameters           |
-| `DocHeader()`     | Documents header parameters          |
+| Method             | Description                         |
+|--------------------|-------------------------------------|
+| `DocSummary()`     | Short endpoint description          |
+| `DocTag()`         | Groups related endpoints            |
+| `DocTags()`        | Groups related endpoints            |
+| `DocBearerAuth()`  | Enables Bearer token authentication |
+| `DocRequestBody()` | Documents request body structure    |
+| `DocResponse()`    | Documents response structure        |
+| `DocPathParam()`   | Documents path parameters           |
+| `DocQueryParam()`  | Documents query parameters          |
+| `DocHeader()`      | Documents header parameters         |
 
 ### Swagger UI Preview
 
@@ -446,7 +451,7 @@ o.Static("/static", "public/assets")
     
     // Configure a secondary HTTPS server listening on port 8443
     // This creates both HTTP (8080) and HTTPS (8443) endpoints
-    o.With(okapi.WithTLSServer(":443", tls))
+    o.With(okapi.WithTLSServer(":8443", tls))
     
     // Register application routes and handlers
     o.Get("/", func(c okapi.Context) error {

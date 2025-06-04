@@ -22,21 +22,41 @@
  *  SOFTWARE.
  */
 
-// Package okapi is a modern, minimalist HTTP web framework for Go, inspired by the simplicity of FastAPI.
+// Package okapi is a modern, minimalist HTTP web framework for Go,
+// inspired by FastAPI's elegance. Designed for simplicity, performance,
+// and developer happiness, it helps you build fast, scalable, and well-documented APIs
+// with minimal boilerplate.
 //
-// Designed to be intuitive, lightweight, and powerful, Okapi makes it easy to build fast and flexible
-// web applications and REST APIs.
+// The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal
+// native to the rainforests of the northeastern Democratic Republic of the Congo.
+// Just like its namesake — which resembles a blend of giraffe and zebra — Okapi blends
+// simplicity and strength in a unique, powerful package.
 //
-// Features:
+// Key Features:
 //
-//   - Clean and expressive API design
-//   - Powerful binding from JSON, XML, forms, query, headers, and path parameters
-//   - Route grouping and middleware chaining
-//   - Built-in middleware: Basic Auth, JWT, OAuth
-//   - Easy custom middleware support
-//   - Cross-Origin Resource Sharing (CORS)
-//   - Templating engine integration
-//   - Static file serving
-//   - Built entirely on Go’s standard library
-//   - Simple and clear documentation
+//   - Intuitive & Expressive API:
+//     Clean, declarative syntax for effortless route and middleware definition.
+//
+//   - Automatic Request Binding:
+//     Seamlessly parse JSON, XML, form data, query params, headers, and path variables into structs.
+//
+//   - Built-in Auth & Security:
+//     Native support for JWT, OAuth2, Basic Auth, and custom middleware.
+//
+//   - Blazing Fast Routing:
+//     Optimized HTTP router with low overhead for high-performance applications.
+//
+//   - First-Class Documentation:
+//     OpenAPI 3.0 & Swagger UI integrated out of the box—auto-generate API docs with minimal effort.
+//
+//   - Modern Tooling:
+//     Route grouping, middleware chaining, static file serving, templating engine support,
+//     CORS management, fine-grained timeout controls.
+//
+//   - Developer Experience:
+//     Minimal boilerplate, clear error handling, structured logging, and easy testing.
+//
+// Okapi is built for speed, simplicity, and real-world use—whether you're prototyping or running in production.
+//
+// For more information and documentation, visit: https://github.com/jkaninda/okapi
 package okapi

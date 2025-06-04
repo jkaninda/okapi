@@ -25,12 +25,15 @@
 package okapi
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"github.com/getkin/kin-openapi/openapi3"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -47,13 +50,115 @@ const (
 // RouteOption defines a function type that modifies a Route's documentation properties
 type RouteOption func(*Route)
 
-// OpenAPI contains configuration for generating OpenAPI/Swagger documentation
+// OpenAPI contains configuration for generating OpenAPI/Swagger documentation.
+// It includes metadata about the API and its documentation.
 type OpenAPI struct {
 	Title   string // Title of the API
 	Version string // Version of the API
 	// PathPrefix is the URL prefix for accessing the documentation
-	PathPrefix string           // e.g., "/docs" (default)
-	Servers    openapi3.Servers // List of server URLs where the API is hosted
+	PathPrefix string  // e.g., "/docs" (default)
+	Servers    Servers // List of server URLs where the API is hosted
+	Licence    License // License information for the API
+	Contact    Contact // Contact information for the API maintainers
+}
+
+// License contains license information for the API.
+// It follows the OpenAPI specification format.
+type License struct {
+	Extensions map[string]any `json:"-" yaml:"-"`                         // Custom extensions not part of OpenAPI spec
+	Name       string         `json:"name" yaml:"name"`                   // Required license name (e.g., "MIT")
+	URL        string         `json:"url,omitempty" yaml:"url,omitempty"` // Optional URL to the license
+}
+
+// Servers is a list of Server objects representing API server locations
+type Servers []Server
+
+// Server represents an API server location where the API is hosted
+type Server struct {
+	Extensions map[string]any `json:"-" yaml:"-"`
+	// Server URL (e.g., "https://api.example.com/v1")
+	URL string `json:"url" yaml:"url"`
+	// Optional server description
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+}
+
+// Contact contains contact information for the API maintainers
+type Contact struct {
+	Extensions map[string]any `json:"-" yaml:"-"`                             // Custom extensions not part of OpenAPI spec
+	Name       string         `json:"name,omitempty" yaml:"name,omitempty"`   // Optional contact name
+	URL        string         `json:"url,omitempty" yaml:"url,omitempty"`     // Optional contact URL
+	Email      string         `json:"email,omitempty" yaml:"email,omitempty"` // Optional contact email
+}
+
+// ToOpenAPI converts License to openapi3.License.
+// It transforms the custom License type to the format expected by the openapi3 package.
+func (l License) ToOpenAPI() *openapi3.License {
+	license := &openapi3.License{
+		Name: l.Name,
+		URL:  l.URL,
+	}
+	// Copy any extensions to the target license object
+	for k, v := range l.Extensions {
+		license.Extensions[k] = v
+	}
+	return license
+}
+
+// ToOpenAPI converts Servers to openapi3.Servers.
+// It transforms the custom Servers type to the format expected by the openapi3 package.
+func (s Servers) ToOpenAPI() openapi3.Servers {
+	var servers openapi3.Servers
+	for _, srv := range s {
+		server := &openapi3.Server{
+			URL:         srv.URL,
+			Description: srv.Description,
+		}
+		// Copy any extensions to the target server object
+		if len(srv.Extensions) > 0 {
+			for k, v := range srv.Extensions {
+				server.Extensions[k] = v
+			}
+		}
+		servers = append(servers, server)
+	}
+	return servers
+}
+
+// ToOpenAPISpec converts OpenAPI to *openapi3.T.
+// It transforms the custom OpenAPI configuration to a complete OpenAPI specification object.
+func (o OpenAPI) ToOpenAPISpec() *openapi3.T {
+	return &openapi3.T{
+		Info: &openapi3.Info{
+			Title:   o.Title,
+			Version: o.Version,
+			License: o.Licence.ToOpenAPI(),
+			Contact: o.Contact.ToOpenAPI(),
+		},
+		Servers: o.Servers.ToOpenAPI(),
+	}
+}
+
+// ToOpenAPI converts Contact to openapi3.Contact.
+// It transforms the custom Contact type to the format expected by the openapi3 package.
+func (c Contact) ToOpenAPI() *openapi3.Contact {
+	contact := &openapi3.Contact{
+		Name:  c.Name,
+		URL:   c.URL,
+		Email: c.Email,
+	}
+	// Copy any extensions to the target contact object
+	for k, v := range c.Extensions {
+		contact.Extensions[k] = v
+	}
+	return contact
+}
+
+// SchemaInfo holds additional information about a schema for better naming.
+// It's used when generating OpenAPI schemas from Go types.
+type SchemaInfo struct {
+	Schema   *openapi3.SchemaRef // Reference to the OpenAPI schema
+	TypeName string              // The original Go type name
+	Package  string              // The package name (optional)
 }
 
 // ptr is a helper function that returns a pointer to any value
@@ -168,19 +273,25 @@ func DocResponse(v any) RouteOption {
 		if v == nil {
 			return
 		}
-		doc.Response = reflectToSchema(v)
+		doc.Response = reflectToSchemaWithInfo(v).Schema
 	}
 }
 
-// DocRequest defines the request body schema for the route
+// DocRequestBody defines the request body schema for the route
 // v: a Go value whose type will be used to generate the request schema
-func DocRequest(v any) RouteOption {
+func DocRequestBody(v any) RouteOption {
 	return func(doc *Route) {
 		if v == nil {
 			return
 		}
-		doc.Request = reflectToSchema(v)
+		doc.Request = reflectToSchemaWithInfo(v).Schema
 	}
+}
+
+// DocRequest defines the request schema for the route in the API documentation.
+// This is an alias for RequestBody
+func DocRequest(v any) RouteOption {
+	return DocRequestBody(v)
 }
 
 // DocBearerAuth marks the route as requiring Bearer token authentication
@@ -196,11 +307,13 @@ func (o *Okapi) buildOpenAPISpec() {
 	spec := &openapi3.T{
 		OpenAPI: OpenApiVersion,
 		Info: &openapi3.Info{
-			Title:   o.openAPi.Title,
-			Version: o.openAPi.Version,
+			Title:   o.openAPI.Title,
+			Version: o.openAPI.Version,
+			License: o.openAPI.Licence.ToOpenAPI(),
+			Contact: o.openAPI.Contact.ToOpenAPI(),
 		},
 		Paths:   &openapi3.Paths{},
-		Servers: o.openAPi.Servers,
+		Servers: o.openAPI.Servers.ToOpenAPI(),
 		Components: &openapi3.Components{
 			SecuritySchemes: openapi3.SecuritySchemes{
 				"BearerAuth": &openapi3.SecuritySchemeRef{
@@ -211,8 +324,12 @@ func (o *Okapi) buildOpenAPISpec() {
 					},
 				},
 			},
+			Schemas: make(openapi3.Schemas),
 		},
 	}
+
+	// Initialize schema registry for reusable components
+	schemaRegistry := make(map[string]*SchemaInfo)
 
 	// Process all registered routes
 	for _, r := range o.routes {
@@ -220,10 +337,12 @@ func (o *Okapi) buildOpenAPISpec() {
 		if len(r.PathParams) == 0 {
 			DocAutoPathParams()(r)
 		}
+
 		tags := r.Tags
 		if tags == nil {
 			tags = append(tags, r.GroupPath)
 		}
+
 		item := spec.Paths.Value(r.Path)
 		if item == nil {
 			item = &openapi3.PathItem{}
@@ -231,10 +350,11 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 
 		op := &openapi3.Operation{
-			Summary:    r.Summary,
-			Tags:       tags,
-			Parameters: append(append(r.PathParams, r.QueryParams...), r.Headers...),
-			Responses:  &openapi3.Responses{},
+			Summary:     r.Summary,
+			Description: r.Description,
+			Tags:        tags,
+			Parameters:  append(append(r.PathParams, r.QueryParams...), r.Headers...),
+			Responses:   &openapi3.Responses{},
 		}
 
 		if r.RequiresAuth {
@@ -245,43 +365,40 @@ func (o *Okapi) buildOpenAPISpec() {
 			}
 		}
 
+		// Handle request body
 		if r.Request != nil {
-			op.RequestBody = &openapi3.RequestBodyRef{
-				Value: &openapi3.RequestBody{
-					Content: openapi3.NewContentWithJSONSchemaRef(r.Request),
-				},
+			// Generate reusable schema component if it's a complex type
+			schemaRef := o.getOrCreateSchemaComponent(r.Request, schemaRegistry, spec.Components.Schemas)
+
+			requestBody := &openapi3.RequestBody{
+				Content:  openapi3.NewContentWithJSONSchemaRef(schemaRef),
+				Required: true,
 			}
+
+			// Add example if available
+			if r.RequestExample != nil {
+				requestBody.Content["application/json"].Example = r.RequestExample
+			}
+
+			op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
 		}
 
+		// Handle responses
 		if r.Response != nil {
-			op.Responses.Set("200", &openapi3.ResponseRef{
-				Value: &openapi3.Response{
-					Description: ptr("Success"),
-					Content:     openapi3.NewContentWithJSONSchemaRef(r.Response),
-				},
-			})
+			schemaRef := o.getOrCreateSchemaComponent(r.Response, schemaRegistry, spec.Components.Schemas)
+			apiResponse := &openapi3.Response{
+				Description: ptr("OK"),
+				Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
+			}
+
+			// Add example if available
+			if r.ResponseExample != nil {
+				apiResponse.Content["application/json"].Example = r.ResponseExample
+			}
+
+			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
 		}
-
-		// Add default error responses
-		op.Responses.Set("400", &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: ptr("Bad Request"),
-			},
-		})
-
-		if r.RequiresAuth {
-			op.Responses.Set("401", &openapi3.ResponseRef{
-				Value: &openapi3.Response{
-					Description: ptr("Unauthorized"),
-				},
-			})
-		}
-
-		op.Responses.Set("500", &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: ptr("Internal Server Error"),
-			},
-		})
+		o.addDefaultErrorResponses(op, r)
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {
@@ -305,8 +422,152 @@ func (o *Okapi) buildOpenAPISpec() {
 	o.openapiSpec = spec
 }
 
-// reflectToSchema converts a Go type to an OpenAPI schema using reflection
-func reflectToSchema(v any) *openapi3.SchemaRef {
+// getOrCreateSchemaComponent creates reusable schema components for complex types
+func (o *Okapi) getOrCreateSchemaComponent(schema *openapi3.SchemaRef,
+	registry map[string]*SchemaInfo,
+	components openapi3.Schemas) *openapi3.SchemaRef {
+	if schema == nil || schema.Value == nil {
+		return schema
+	}
+
+	// Only create components for object schemas (structs)
+	if schema.Value.Type == nil || !schema.Value.Type.Is("object") || len(schema.Value.Properties) == 0 {
+		return schema
+	}
+
+	// Try to find existing schema info in registry by comparing schema structure
+	for componentName, schemaInfo := range registry {
+		if o.schemasEqual(schema, schemaInfo.Schema) {
+			return &openapi3.SchemaRef{Ref: fmt.Sprintf("#/components/schemas/%s", componentName)}
+		}
+	}
+
+	// Generate a component name based on the schema title or structure
+	componentName := o.generateComponentName(schema)
+
+	// Ensure uniqueness
+	originalName := componentName
+	counter := 1
+	for _, exists := registry[componentName]; exists; _, exists = registry[componentName] {
+		componentName = fmt.Sprintf("%s%d", originalName, counter)
+		counter++
+	}
+
+	// Register the schema as a component
+	schemaInfo := &SchemaInfo{
+		Schema:   schema,
+		TypeName: schema.Value.Title,
+	}
+	registry[componentName] = schemaInfo
+	components[componentName] = schema
+
+	// Return a reference to the component
+	return &openapi3.SchemaRef{Ref: fmt.Sprintf("#/components/schemas/%s", componentName)}
+}
+
+// schemasEqual compares two schemas for structural equality
+func (o *Okapi) schemasEqual(a, b *openapi3.SchemaRef) bool {
+	if a == nil || b == nil || a.Value == nil || b.Value == nil {
+		return a == b
+	}
+
+	// Compare basic properties
+	if a.Value.Title != b.Value.Title {
+		return false
+	}
+
+	// Compare type
+	if (a.Value.Type == nil) != (b.Value.Type == nil) {
+		return false
+	}
+	if a.Value.Type != nil && b.Value.Type != nil && !a.Value.Type.Is(b.Value.Type.Slice()[0]) {
+		return false
+	}
+
+	// Compare properties count
+	if len(a.Value.Properties) != len(b.Value.Properties) {
+		return false
+	}
+
+	// Compare required fields
+	if len(a.Value.Required) != len(b.Value.Required) {
+		return false
+	}
+
+	// Simple structural comparison - you might want to make this more sophisticated
+	for name := range a.Value.Properties {
+		if _, exists := b.Value.Properties[name]; !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+// generateComponentName generates a meaningful name for a schema component
+func (o *Okapi) generateComponentName(schema *openapi3.SchemaRef) string {
+	if schema == nil || schema.Value == nil {
+		return "UnknownSchema"
+	}
+
+	// First priority: use the title if available (this comes from struct name)
+	if schema.Value.Title != "" {
+		return o.sanitizeComponentName(schema.Value.Title)
+	}
+
+	// Handle nil Type
+	if schema.Value.Type == nil {
+		if len(schema.Value.Properties) > 0 {
+			return "AnonymousObject"
+		}
+		return "UnknownSchema"
+	}
+
+	// Fallback: create name based on properties
+	if len(schema.Value.Properties) > 0 {
+		properties := make([]string, 0, len(schema.Value.Properties))
+		for propName := range schema.Value.Properties {
+			properties = append(properties, propName)
+		}
+
+		// Sort for consistency
+		sort.Strings(properties)
+
+		// Create a hash-based name if we have many properties
+		if len(properties) > 3 {
+			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(properties, ","))))
+			return fmt.Sprintf("Schema_%s", hash[:8])
+		}
+
+		// Use property names for simpler schemas, but make it cleaner
+		name := strings.Join(properties, "")
+		return o.sanitizeComponentName(name + "Object")
+	}
+
+	return "EmptySchema"
+}
+
+// sanitizeComponentName ensures the component name follows OpenAPI naming conventions
+func (o *Okapi) sanitizeComponentName(name string) string {
+	// Remove any non-alphanumeric characters except underscores
+	reg := regexp.MustCompile(`[^a-zA-Z0-9_]`)
+	name = reg.ReplaceAllString(name, "")
+
+	// Ensure it starts with a letter
+	if len(name) > 0 && !unicode.IsLetter(rune(name[0])) {
+		name = "Schema_" + name
+	}
+
+	// Ensure it's not empty
+	if name == "" {
+		name = "Schema"
+	}
+
+	return name
+}
+
+// reflectToSchemaWithInfo converts a Go type to an OpenAPI schema with type information
+func reflectToSchemaWithInfo(v any) *SchemaInfo {
 	t := reflect.TypeOf(v)
 
 	// Handle pointers
@@ -314,11 +575,17 @@ func reflectToSchema(v any) *openapi3.SchemaRef {
 		t = t.Elem()
 	}
 
-	return typeToSchema(t)
+	schema := typeToSchemaWithInfo(t)
+
+	return &SchemaInfo{
+		Schema:   schema,
+		TypeName: t.Name(),
+		Package:  t.PkgPath(),
+	}
 }
 
-// typeToSchema converts a reflect.Type to an OpenAPI SchemaRef
-func typeToSchema(t reflect.Type) *openapi3.SchemaRef {
+// typeToSchemaWithInfo converts a reflect.Type to an OpenAPI SchemaRef with proper naming
+func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 	switch t.Kind() {
 	case reflect.String:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())
@@ -355,14 +622,14 @@ func typeToSchema(t reflect.Type) *openapi3.SchemaRef {
 		return openapi3.NewSchemaRef("", openapi3.NewBoolSchema())
 
 	case reflect.Slice, reflect.Array:
-		elemSchema := typeToSchema(t.Elem())
+		elemSchema := typeToSchemaWithInfo(t.Elem())
 		schema := openapi3.NewArraySchema()
 		schema.Items = elemSchema
 		return openapi3.NewSchemaRef("", schema)
 
 	case reflect.Map:
 		if t.Key().Kind() == reflect.String {
-			valueSchema := typeToSchema(t.Elem())
+			valueSchema := typeToSchemaWithInfo(t.Elem())
 			schema := openapi3.NewObjectSchema()
 			schema.AdditionalProperties = openapi3.AdditionalProperties{
 				Schema: valueSchema,
@@ -373,7 +640,7 @@ func typeToSchema(t reflect.Type) *openapi3.SchemaRef {
 		return openapi3.NewSchemaRef("", openapi3.NewObjectSchema())
 
 	case reflect.Struct:
-		return structToSchema(t)
+		return structToSchemaWithInfo(t)
 
 	case reflect.Interface:
 		// For interface{}, return a generic schema
@@ -385,8 +652,8 @@ func typeToSchema(t reflect.Type) *openapi3.SchemaRef {
 	}
 }
 
-// structToSchema converts a struct type to an OpenAPI schema
-func structToSchema(t reflect.Type) *openapi3.SchemaRef {
+// structToSchemaWithInfo converts a struct type to an OpenAPI schema with proper naming
+func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 	// Handle special types
 	if t == reflect.TypeOf(time.Time{}) {
 		schema := openapi3.NewStringSchema()
@@ -396,6 +663,11 @@ func structToSchema(t reflect.Type) *openapi3.SchemaRef {
 
 	schema := openapi3.NewObjectSchema()
 	required := make([]string, 0)
+
+	// Set the title to the struct name for better component naming
+	if t.Name() != "" {
+		schema.Title = t.Name()
+	}
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
@@ -410,7 +682,7 @@ func structToSchema(t reflect.Type) *openapi3.SchemaRef {
 			continue
 		}
 
-		fieldSchema := typeToSchema(field.Type)
+		fieldSchema := typeToSchemaWithInfo(field.Type)
 
 		// Add description from comments or tags
 		if desc := field.Tag.Get("description"); desc != "" {
@@ -578,6 +850,7 @@ func generateParamDescription(name, typ string) string {
 		return readable
 	}
 }
+
 func getSchemaForType(typ string) *openapi3.SchemaRef {
 	switch strings.ToLower(typ) {
 	case "string":

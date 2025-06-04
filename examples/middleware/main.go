@@ -59,7 +59,7 @@ func main() {
 	o := okapi.New().WithOpenAPIDocs()
 
 	o.Get("/", func(c okapi.Context) error {
-		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
+		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
 	}, okapi.DocSummary("Home "))
 
 	o.Get("/books/{id}", findById,
@@ -150,10 +150,10 @@ func findById(c okapi.Context) error {
 
 	for _, book := range books {
 		if book.ID == newBook.ID {
-			return c.JSON(http.StatusOK, book)
+			return c.OK(book)
 		}
 	}
-	return c.JSON(http.StatusNotFound, okapi.M{"error": "Book not found"})
+	return c.ErrorNotFound(okapi.M{"error": "Book not found"})
 }
 
 func customMiddleware(next okapi.HandleFunc) okapi.HandleFunc {

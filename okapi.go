@@ -353,6 +353,9 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		if len(config.Servers) > 0 {
 			o.openAPI.Servers = config.Servers
 		}
+		o.openAPI.Licence = config.Licence
+		o.openAPI.Contact = config.Contact
+
 	}
 	if !strings.HasSuffix(o.openAPI.PathPrefix, "/") {
 		o.openAPI.PathPrefix += "/"
@@ -963,7 +966,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 			Title:      FrameworkName,
 			Version:    "1.0.0",
 			PathPrefix: OpenApiDocPrefix,
-			Servers:    openapi3.Servers{{URL: OpenApiURL}},
+			Servers:    Servers{{URL: OpenApiURL}},
 		},
 	}
 

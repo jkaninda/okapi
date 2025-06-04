@@ -50,20 +50,115 @@ const (
 // RouteOption defines a function type that modifies a Route's documentation properties
 type RouteOption func(*Route)
 
-// OpenAPI contains configuration for generating OpenAPI/Swagger documentation
+// OpenAPI contains configuration for generating OpenAPI/Swagger documentation.
+// It includes metadata about the API and its documentation.
 type OpenAPI struct {
 	Title   string // Title of the API
 	Version string // Version of the API
 	// PathPrefix is the URL prefix for accessing the documentation
-	PathPrefix string           // e.g., "/docs" (default)
-	Servers    openapi3.Servers // List of server URLs where the API is hosted
+	PathPrefix string  // e.g., "/docs" (default)
+	Servers    Servers // List of server URLs where the API is hosted
+	Licence    License // License information for the API
+	Contact    Contact // Contact information for the API maintainers
 }
 
-// SchemaInfo holds additional information about a schema for better naming
+// License contains license information for the API.
+// It follows the OpenAPI specification format.
+type License struct {
+	Extensions map[string]any `json:"-" yaml:"-"`                         // Custom extensions not part of OpenAPI spec
+	Name       string         `json:"name" yaml:"name"`                   // Required license name (e.g., "MIT")
+	URL        string         `json:"url,omitempty" yaml:"url,omitempty"` // Optional URL to the license
+}
+
+// Servers is a list of Server objects representing API server locations
+type Servers []Server
+
+// Server represents an API server location where the API is hosted
+type Server struct {
+	Extensions map[string]any `json:"-" yaml:"-"`
+	// Server URL (e.g., "https://api.example.com/v1")
+	URL string `json:"url" yaml:"url"`
+	// Optional server description
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+}
+
+// Contact contains contact information for the API maintainers
+type Contact struct {
+	Extensions map[string]any `json:"-" yaml:"-"`                             // Custom extensions not part of OpenAPI spec
+	Name       string         `json:"name,omitempty" yaml:"name,omitempty"`   // Optional contact name
+	URL        string         `json:"url,omitempty" yaml:"url,omitempty"`     // Optional contact URL
+	Email      string         `json:"email,omitempty" yaml:"email,omitempty"` // Optional contact email
+}
+
+// ToOpenAPI converts License to openapi3.License.
+// It transforms the custom License type to the format expected by the openapi3 package.
+func (l License) ToOpenAPI() *openapi3.License {
+	license := &openapi3.License{
+		Name: l.Name,
+		URL:  l.URL,
+	}
+	// Copy any extensions to the target license object
+	for k, v := range l.Extensions {
+		license.Extensions[k] = v
+	}
+	return license
+}
+
+// ToOpenAPI converts Servers to openapi3.Servers.
+// It transforms the custom Servers type to the format expected by the openapi3 package.
+func (s Servers) ToOpenAPI() openapi3.Servers {
+	var servers openapi3.Servers
+	for _, srv := range s {
+		server := &openapi3.Server{
+			URL:         srv.URL,
+			Description: srv.Description,
+		}
+		// Copy any extensions to the target server object
+		if len(srv.Extensions) > 0 {
+			for k, v := range srv.Extensions {
+				server.Extensions[k] = v
+			}
+		}
+		servers = append(servers, server)
+	}
+	return servers
+}
+
+// ToOpenAPISpec converts OpenAPI to *openapi3.T.
+// It transforms the custom OpenAPI configuration to a complete OpenAPI specification object.
+func (o OpenAPI) ToOpenAPISpec() *openapi3.T {
+	return &openapi3.T{
+		Info: &openapi3.Info{
+			Title:   o.Title,
+			Version: o.Version,
+			License: o.Licence.ToOpenAPI(),
+			Contact: o.Contact.ToOpenAPI(),
+		},
+		Servers: o.Servers.ToOpenAPI(),
+	}
+}
+
+// ToOpenAPI converts Contact to openapi3.Contact.
+// It transforms the custom Contact type to the format expected by the openapi3 package.
+func (c Contact) ToOpenAPI() *openapi3.Contact {
+	contact := &openapi3.Contact{
+		Name:  c.Name,
+		URL:   c.URL,
+		Email: c.Email,
+	}
+	// Copy any extensions to the target contact object
+	for k, v := range c.Extensions {
+		contact.Extensions[k] = v
+	}
+	return contact
+}
+
+// SchemaInfo holds additional information about a schema for better naming.
+// It's used when generating OpenAPI schemas from Go types.
 type SchemaInfo struct {
-	Schema   *openapi3.SchemaRef
-	TypeName string // The original Go type name
-	Package  string // The package name (optional)
+	Schema   *openapi3.SchemaRef // Reference to the OpenAPI schema
+	TypeName string              // The original Go type name
+	Package  string              // The package name (optional)
 }
 
 // ptr is a helper function that returns a pointer to any value
@@ -214,9 +309,11 @@ func (o *Okapi) buildOpenAPISpec() {
 		Info: &openapi3.Info{
 			Title:   o.openAPI.Title,
 			Version: o.openAPI.Version,
+			License: o.openAPI.Licence.ToOpenAPI(),
+			Contact: o.openAPI.Contact.ToOpenAPI(),
 		},
 		Paths:   &openapi3.Paths{},
-		Servers: o.openAPI.Servers,
+		Servers: o.openAPI.Servers.ToOpenAPI(),
 		Components: &openapi3.Components{
 			SecuritySchemes: openapi3.SecuritySchemes{
 				"BearerAuth": &openapi3.SecuritySchemeRef{

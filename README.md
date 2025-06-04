@@ -87,7 +87,7 @@ func main() {
 	o := okapi.Default()
 
 	o.Get("/", func(c okapi.Context) error {
-		return c.JSON(http.StatusOK,okapi.M{"message": "Welcome to Okapi!"})
+		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
 	},
 		okapi.DocSummary("Welcome page"),
 	)
@@ -134,7 +134,11 @@ Organize routes with nesting and middleware:
 api := o.Group("/api")
 
 v1 := api.Group("/v1")
+v2 := api.Group("/v2")
+
 v1.Get("/users", getUsers)
+v2.Get("/users", getUsers)
+
 
 admin := api.Group("/admin", adminMiddleware)
 admin.Get("/dashboard", getDashboard)
@@ -198,7 +202,6 @@ type Book struct {
 	ID    int    `json:"id" param:"id" query:"id" form:"id"`
 	Name  string `json:"name" xml:"name" form:"name" min:"4" max:"50" required:"true"`
 	Price int    `json:"price" form:"price" required:"true"`
-
 	Logo *multipart.FileHeader `form:"logo" required:"true"`
     Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
 	// Supports both ?tags=a&tags=b and ?tags=a,b
@@ -208,7 +211,7 @@ type Book struct {
 o.Post("/books", func(c okapi.Context) error {
 	book := &Book{}
 	if err := c.Bind(book); err != nil {
-		return c.AbortBadRequest(err)
+		return c.ErrorBadRequest(err)
 	}
 	return c.JSON(http.StatusOK, book)
 })

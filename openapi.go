@@ -274,8 +274,8 @@ func (o *Okapi) buildOpenAPISpec() {
 			schemaRef := o.getOrCreateSchemaComponent(r.Request, schemaRegistry, spec.Components.Schemas)
 
 			requestBody := &openapi3.RequestBody{
-				Content: openapi3.NewContentWithJSONSchemaRef(schemaRef),
-				// Required: ptr(true),
+				Content:  openapi3.NewContentWithJSONSchemaRef(schemaRef),
+				Required: true,
 			}
 
 			// Add example if available
@@ -289,22 +289,19 @@ func (o *Okapi) buildOpenAPISpec() {
 		// Handle responses
 		if r.Response != nil {
 			schemaRef := o.getOrCreateSchemaComponent(r.Response, schemaRegistry, spec.Components.Schemas)
-
-			response := &openapi3.Response{
-				Description: ptr("Success"),
+			apiResponse := &openapi3.Response{
+				Description: ptr("OK"),
 				Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
 			}
 
 			// Add example if available
 			if r.ResponseExample != nil {
-				response.Content["application/json"].Example = r.ResponseExample
+				apiResponse.Content["application/json"].Example = r.ResponseExample
 			}
 
-			op.Responses.Set("200", &openapi3.ResponseRef{Value: response})
+			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
 		}
-
-		// TODO: Add default error responses if not already defined
-		// o.addDefaultErrorResponses(op, r.RequiresAuth)
+		o.addDefaultErrorResponses(op, r)
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {

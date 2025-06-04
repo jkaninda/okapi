@@ -1027,3 +1027,27 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 		return err
 	}
 }
+
+func (o *Okapi) addDefaultErrorResponses(op *openapi3.Operation, r *Route) {
+	// Add default error responses
+	op.Responses.Set("400", &openapi3.ResponseRef{
+		Value: &openapi3.Response{
+			Description: ptr("Bad Request"),
+		},
+	})
+
+	if r.RequiresAuth {
+		op.Responses.Set("401", &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: ptr("Unauthorized"),
+			},
+		})
+	}
+
+	op.Responses.Set("500", &openapi3.ResponseRef{
+		Value: &openapi3.Response{
+			Description: ptr("Internal Server Error"),
+		},
+	})
+
+}

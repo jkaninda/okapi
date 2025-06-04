@@ -332,6 +332,11 @@ func (c *Context) JSON(code int, v any) error {
 	})
 }
 
+// OK writes a JSON response with 200 status code.
+func (c *Context) OK(v any) error {
+	return c.JSON(http.StatusOK, v)
+}
+
 // XML writes an XML response with the given status code.
 func (c *Context) XML(code int, v any) error {
 	return c.writeResponse(code, XML, func() error {

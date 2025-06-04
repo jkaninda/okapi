@@ -33,13 +33,13 @@ import (
 
 type Book struct {
 	ID     int    `json:"id" param:"id" query:"id" form:"id" xml:"id" max:"50" `
-	Name   string `json:"name" form:"name"  max:"50" default:"anonymous" required:"true" description:"Book name"`
-	Price  int    `json:"price" form:"price" query:"price" yaml:"price" `
-	Qty    int    `json:"qty" form:"qty" query:"qty" yaml:"qty" required:"true"`
-	Author Author `json:"author" form:"author"`
+	Name   string `json:"name" form:"name"  max:"50" default:"anonymous" description:"Book name"`
+	Price  int    `json:"price" form:"price" query:"price" yaml:"price" description:"Book price"`
+	Qty    int    `json:"qty" form:"qty" query:"qty" yaml:"qty"`
+	Author Author `json:"author" form:"author" yaml:"author" description:"Author"`
 }
 type Author struct {
-	Name string `json:"name" form:"name"  max:"50" default:"anonymous" required:"true"`
+	Name string `json:"name" form:"name"  max:"50" default:"anonymous" description:"Author name"`
 }
 
 var (

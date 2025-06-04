@@ -109,8 +109,7 @@ func main() {
 func adminStore(c okapi.Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
-		errMessage := fmt.Sprintf("Failed to bind book: %v", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input " + errMessage})
+		return c.AbortBadRequest(fmt.Sprintf("Failed to bind book: %v", err))
 	}
 	// Get username
 	username := c.GetString("username")
@@ -145,8 +144,7 @@ func findById(c okapi.Context) error {
 	// Bind the book ID from the request parameters using `param` tags
 	// You can also use c.Param("id") to get the ID from the URL
 	if ok, err := c.ShouldBind(&newBook); !ok {
-		errMessage := fmt.Sprintf("Failed to bind book: %v", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input " + errMessage})
+		return c.AbortBadRequest(fmt.Sprintf("Failed to bind book: %v", err))
 	}
 	// time.Sleep(2 * time.Second) // Simulate a delay for demonstration purposes
 

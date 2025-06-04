@@ -79,7 +79,7 @@ type (
 		idleTimeout       int
 		optionsRegistered map[string]bool
 		openapiSpec       *openapi3.T
-		openAPi           *OpenAPI
+		openAPI           *OpenAPI
 		openApiEnabled    bool
 	}
 	Router struct {
@@ -91,20 +91,24 @@ type (
 	M map[string]any
 
 	Route struct {
-		Name         string
-		Path         string
-		Method       string
-		Handle       HandleFunc
-		chain        chain
-		GroupPath    string
-		Tags         []string
-		Summary      string
-		Request      *openapi3.SchemaRef
-		Response     *openapi3.SchemaRef
-		PathParams   []*openapi3.ParameterRef
-		QueryParams  []*openapi3.ParameterRef
-		Headers      []*openapi3.ParameterRef
-		RequiresAuth bool
+		Name            string
+		Path            string
+		Method          string
+		Handle          HandleFunc
+		chain           chain
+		GroupPath       string
+		Tags            []string
+		Summary         string
+		Request         *openapi3.SchemaRef
+		Response        *openapi3.SchemaRef
+		PathParams      []*openapi3.ParameterRef
+		QueryParams     []*openapi3.ParameterRef
+		Headers         []*openapi3.ParameterRef
+		RequiresAuth    bool
+		RequestExample  map[string]interface{}
+		ResponseExample map[string]interface{}
+		Responses       map[int]any
+		Description     string
 	}
 	// Response interface defines the methods for writing HTTP responses.
 	Response interface {
@@ -277,6 +281,13 @@ func WithAddr(addr string) OptionFunc {
 	}
 }
 
+// WithOpenAPIDisabled disabled OpenAPI Docs
+func WithOpenAPIDisabled() OptionFunc {
+	return func(o *Okapi) {
+		o.openApiEnabled = false
+	}
+}
+
 // ************* Chaining methods *************
 // These methods reuse the OptionFunc implementations
 
@@ -332,31 +343,31 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		config := cfg[0]
 
 		if config.Title != "" {
-			o.openAPi.Title = config.Title
+			o.openAPI.Title = config.Title
 		}
 		if config.PathPrefix != "" {
-			o.openAPi.PathPrefix = config.PathPrefix
+			o.openAPI.PathPrefix = config.PathPrefix
 		}
 		if config.Version != "" {
-			o.openAPi.Version = config.Version
+			o.openAPI.Version = config.Version
 		}
 		if len(config.Servers) > 0 {
-			o.openAPi.Servers = config.Servers
+			o.openAPI.Servers = config.Servers
 		}
 	}
-	if !strings.HasPrefix(o.openAPi.PathPrefix, "/") {
-		o.openAPi.PathPrefix = "/" + o.openAPi.PathPrefix
+	if !strings.HasPrefix(o.openAPI.PathPrefix, "/") {
+		o.openAPI.PathPrefix = "/" + o.openAPI.PathPrefix
 	}
 	o.buildOpenAPISpec()
 
-	specPath := path.Join(o.openAPi.PathPrefix, "/openapi.json")
+	specPath := path.Join(o.openAPI.PathPrefix, "/openapi.json")
 
 	o.router.mux.HandleFunc(specPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(o.openapiSpec)
 	})
 
-	o.router.mux.PathPrefix(o.openAPi.PathPrefix).Handler(httpSwagger.Handler(
+	o.router.mux.PathPrefix(o.openAPI.PathPrefix).Handler(httpSwagger.Handler(
 		httpSwagger.URL(specPath),
 	))
 
@@ -509,10 +520,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	o.router.mux.StrictSlash(o.strictSlash)
 	o.context.okapi = o
 
-	_, err := fmt.Fprintf(DefaultWriter, "Starting HTTP Server on %s\n", server.Addr)
-	if err != nil {
-		return err
-	}
+	_, _ = fmt.Fprintf(DefaultWriter, "Starting HTTP server at %s\n", o.Server.Addr)
 	// Serve with TLS if configured
 	if server.TLSConfig != nil {
 		return server.ListenAndServeTLS("", "")
@@ -521,17 +529,14 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	// Serve with separate TLS server if enabled
 	if o.withTlsServer && o.tlsServerConfig != nil {
 		go func() {
-			if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				o.logger.Error("HTTP server error", slog.String("error", err.Error()))
 				panic(err)
 			}
 		}()
 
 		o.TLSServer.Handler = o
-		_, err := fmt.Fprintf(DefaultWriter, "Starting HTTPS Server on %s\n", o.TLSServer.Addr)
-		if err != nil {
-			return err
-		}
+		_, _ = fmt.Fprintf(DefaultWriter, "Starting HTTP server at %s\n", o.TLSServer.Addr)
 		return o.TLSServer.ListenAndServeTLS("", "")
 	}
 
@@ -541,8 +546,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 
 // Stop gracefully shuts down the Okapi server(s)
 func (o *Okapi) Stop() {
-	o.logger.Info("Stopping HTTP Server...", slog.String("addr", o.Server.Addr))
-
+	_, _ = fmt.Fprintf(DefaultWriter, "Gracefully shutting down HTTP server at %s\n", o.TLSServer.Addr)
 	if err := o.Shutdown(o.Server); err != nil {
 		o.logger.Error("Failed to shutdown HTTP server", slog.String("error", err.Error()))
 		panic(err)
@@ -550,7 +554,7 @@ func (o *Okapi) Stop() {
 	o.Server = nil
 
 	if o.withTlsServer && o.tlsServerConfig != nil && o.TLSServer != nil {
-		o.logger.Info("Stopping HTTPS Server...", slog.String("addr", o.TLSServer.Addr))
+		_, _ = fmt.Fprintf(DefaultWriter, "Gracefully shutting down HTTPS server at %s\n", o.TLSServer.Addr)
 		if err := o.Shutdown(o.TLSServer); err != nil {
 			o.logger.Error("Failed to shutdown HTTPS server", slog.String("error", err.Error()))
 			panic(err)
@@ -952,7 +956,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 		middlewares:       []Middleware{handleAccessLog},
 		optionsRegistered: make(map[string]bool),
 		cors:              Cors{},
-		openAPi: &OpenAPI{
+		openAPI: &OpenAPI{
 			Title:      FrameworkName,
 			Version:    "1.0.0",
 			PathPrefix: OpenApiDocPrefix,

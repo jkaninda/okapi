@@ -32,10 +32,14 @@ import (
 )
 
 type Book struct {
-	ID    int    `json:"id" param:"id" query:"id" form:"id" xml:"id" max:"50" `
-	Name  string `json:"name" form:"name"  max:"50" default:"anonymous"`
-	Price int    `json:"price" form:"price" query:"price" yaml:"price" `
-	Qty   int    `json:"qty" form:"qty" query:"qty" yaml:"qty"`
+	ID     int    `json:"id" param:"id" query:"id" form:"id" xml:"id" max:"50" `
+	Name   string `json:"name" form:"name"  max:"50" default:"anonymous" required:"true" description:"Book name"`
+	Price  int    `json:"price" form:"price" query:"price" yaml:"price" `
+	Qty    int    `json:"qty" form:"qty" query:"qty" yaml:"qty" required:"true"`
+	Author Author `json:"author" form:"author"`
+}
+type Author struct {
+	Name string `json:"name" form:"name"  max:"50" default:"anonymous" required:"true"`
 }
 
 var (
@@ -58,11 +62,11 @@ func main() {
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
 	}, okapi.DocSummary("Home "))
 
-	o.Get("/books/{id}", show,
+	o.Get("/books/{id}", findById,
 		okapi.DocSummary("Get book by ID"),
 		okapi.DocPathParam("id", "int", "Book ID"),
-		okapi.DocQueryParam("country", "string", "Country Name", true),
-		okapi.DocHeader("Key", "1234", "API Key", true),
+		okapi.DocQueryParam("country", "string", "Country Name", false),
+		okapi.DocHeader("Key", "1234", "API Key", false),
 		okapi.DocTag("bookController"),
 		okapi.DocBearerAuth(),
 		okapi.DocRequest(Book{}),
@@ -91,7 +95,7 @@ func main() {
 
 	// Define routes for the v1 group
 	v1.Get("/books", index, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
-	v1.Get("/books/:id", show, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
+	v1.Get("/books/:id", findById, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
 
 	// Start the server
 	err := o.Start()
@@ -136,7 +140,7 @@ func adminUpdate(c okapi.Context) error {
 func index(c okapi.Context) error {
 	return c.JSON(http.StatusOK, books)
 }
-func show(c okapi.Context) error {
+func findById(c okapi.Context) error {
 	var newBook Book
 	// Bind the book ID from the request parameters using `param` tags
 	// You can also use c.Param("id") to get the ID from the URL

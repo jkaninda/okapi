@@ -108,6 +108,7 @@ type (
 		ResponseExample map[string]interface{}
 		Responses       map[int]any
 		Description     string
+		disabled        bool
 	}
 	// Response interface defines the methods for writing HTTP responses.
 	Response interface {
@@ -126,6 +127,28 @@ type (
 // chain is an interface that defines a method for chaining handlers.
 type chain interface {
 	Next(hf HandleFunc) HandleFunc
+}
+
+// Disable marks the Route as disabled, causing it to return 404 Not Found.
+// Returns the Route to allow method chaining.
+func (r *Route) Disable() *Route {
+	r.disabled = true
+	return r
+}
+
+// Enable marks the Route as enabled, allowing it to handle requests normally.
+// Returns the Route to allow method chaining.
+func (r *Route) Enable() *Route {
+	r.disabled = false
+	return r
+}
+
+// SetDisabled sets the disabled state of the Route.
+// When disabled is true, the route returns 404 Not Found.
+// Returns the Route to allow method chaining.
+func (r *Route) SetDisabled(disabled bool) *Route {
+	r.disabled = disabled
+	return r
 }
 
 // Response implementation
@@ -699,6 +722,10 @@ func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...R
 			Response: &response{writer: w},
 			okapi:    o,
 		}
+		if route.disabled {
+			http.Error(w, "404 page not found", http.StatusNotFound)
+			return
+		}
 		if err := handler(ctx); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -821,7 +848,10 @@ func (o *Okapi) Handle(method, path string, h http.Handler, opts ...RouteOption)
 			Response: &response{writer: w},
 			okapi:    o,
 		}
-
+		if route.disabled {
+			http.Error(w, "404 page not found", http.StatusNotFound)
+			return
+		}
 		if err := handler(ctx); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

@@ -333,6 +333,10 @@ func (o *Okapi) buildOpenAPISpec() {
 
 	// Process all registered routes
 	for _, r := range o.routes {
+		// If route is disabled ignore it
+		if r.disabled {
+			continue
+		}
 		// Auto-extract path parameters if none are defined
 		if len(r.PathParams) == 0 {
 			DocAutoPathParams()(r)

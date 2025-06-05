@@ -29,6 +29,8 @@ The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful m
 
 ✔ **First-Class Documentation** – **OpenAPI 3.0 & Swagger UI** integrated out of the box—auto-generate API docs with minimal effort.
 
+✔ Dynamic Route Management – Easily enable or disable individual routes or groups, with automatic Swagger sync and no code commenting.
+
 ✔ **Modern Tooling** –
 - Route grouping & middleware chaining
 - Static file serving
@@ -46,17 +48,21 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 
 ---
 
-### Why Okapi?
+###  Why Choose Okapi?
 
-✅ **Fast to learn** – If you know Go, you’re already halfway there.  
-✅ **Flexible** – Adapts to your needs, not the other way around.  
-✅ **Production-ready** – Robust enough for serious workloads.
+* **Easy to Learn** – Familiar Go syntax and intuitive APIs mean you’re productive in minutes.
+* **Highly Flexible** – Designed to adapt to your architecture and workflow—not the other way around.
+* **Built for Production** – Lightweight, fast, and reliable under real-world load.
 
-Perfect for:
-- **REST & JSON APIs**
-- **Microservices**
-- **Prototyping**
-- **Educational projects**
+
+Ideal for:
+
+*  **High-performance REST APIs**
+*  **Composable microservices**
+*  **Rapid prototyping**
+*  **Learning & teaching Go web development**
+
+Whether you're building your next startup, internal tools, or side projects—**Okapi scales with you.**
 
 
 ---
@@ -375,6 +381,79 @@ The automatically generated Swagger UI provides interactive documentation:
 
 ---
 
+## Enabling and Disabling Routes & Groups
+
+Okapi gives you flexible control over your API by allowing routes and route groups to be **dynamically enabled or disabled**. This is a clean and efficient alternative to commenting out code when you want to temporarily remove endpoints.
+
+### Overview
+
+You can disable:
+
+* **Individual routes** — blocks access to a specific endpoint
+* **Route groups** — disables an entire section of your API, including all nested routes
+
+This behavior is reflected both in runtime responses and API documentation.
+
+| Type               | HTTP Response   | Swagger Docs | Affects Child Routes |
+|--------------------|-----------------|--------------|----------------------|
+| **Disabled Route** | `404 Not Found` | Hidden       | N/A                  |
+| **Disabled Group** | `404 Not Found` | Hidden       | Yes — all nested     |
+
+### Key Features
+
+* Disabled routes/groups return a `404 Not Found`
+* Automatically excluded from Swagger/OpenAPI documentation
+* Disabling a group recursively disables all nested routes and sub-groups
+* No need to comment out code — just call `.Disable()` or `.Enable()`
+
+### Use Cases
+
+* Temporarily removing endpoints during maintenance
+* Controlling access based on feature flags
+* Deprecating old API versions
+* Creating toggleable test or staging routes
+
+### Usage Example
+
+```go
+app := okapi.Default()
+
+// Create the root API group
+api := app.Group("api")
+
+// Define and disable v1 group
+v1 := api.Group("v1").Disable() // All v1 routes return 404 and are hidden from docs
+v1.Get("/", func(c okapi.Context) error {
+    return c.OK(okapi.M{"version": "v1"})
+})
+
+// Define active v2 group
+v2 := api.Group("v2")
+v2.Get("/", func(c okapi.Context) error {
+    return c.OK(okapi.M{"version": "v2"})
+})
+
+// Start the server
+if err := app.Start(); err != nil {
+    panic(err)
+}
+```
+
+### Behavior Details
+
+* **Disabled Route:**
+
+    * Responds with `404 Not Found`
+    * Excluded from Swagger docs
+
+* **Disabled Group:**
+
+    * All nested routes and sub-groups are recursively disabled
+    * All affected routes are hidden from Swagger
+
+To re-enable any route or group, simply call the `.Enable()` method or remove the `.Disable()` call.
+
+---
 ## Templating
 
 ### Using a Custom Renderer
@@ -466,11 +545,6 @@ o.Static("/static", "public/assets")
     if err := o.Start(); err != nil {
     panic(fmt.Sprintf("Server failed to start: %v", err))
     }
-    // Start the server
-    err = o.Start()
-    if err != nil {
-    panic(err)
-    
     }
 ```
 

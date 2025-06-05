@@ -22,37 +22,4 @@
  *  SOFTWARE.
  */
 
-package main
-
-import (
-	"github.com/jkaninda/okapi"
-	"net/http"
-)
-
-type User struct {
-	Name  string
-	Phone string
-}
-
-func main() {
-	// Example usage of the Okapi framework
-	// Create a new Okapi instance
-	o := okapi.Default()
-
-	o.Get("/", func(c okapi.Context) error {
-		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
-	},
-		okapi.Doc().Summary("Welcome page").Build(),
-	)
-	o.Get("/greeting/:name", greetingHandler)
-
-	// Start the server
-	err := o.Start()
-	if err != nil {
-		panic(err)
-	}
-}
-func greetingHandler(c okapi.Context) error {
-	name := c.Param("name")
-	return c.JSON(http.StatusOK, okapi.M{"message": "Hello " + name})
-}
+package okapi

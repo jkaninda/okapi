@@ -29,6 +29,8 @@ The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful m
 
 ✔ **First-Class Documentation** – **OpenAPI 3.0 & Swagger UI** integrated out of the box—auto-generate API docs with minimal effort.
 
+✔ Dynamic Route Management – Easily enable or disable individual routes or groups, with automatic Swagger sync and no code commenting.
+
 ✔ **Modern Tooling** –
 - Route grouping & middleware chaining
 - Static file serving
@@ -46,17 +48,21 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 
 ---
 
-### Why Okapi?
+###  Why Choose Okapi?
 
-✅ **Fast to learn** – If you know Go, you’re already halfway there.  
-✅ **Flexible** – Adapts to your needs, not the other way around.  
-✅ **Production-ready** – Robust enough for serious workloads.
+* **Easy to Learn** – Familiar Go syntax and intuitive APIs mean you’re productive in minutes.
+* **Highly Flexible** – Designed to adapt to your architecture and workflow—not the other way around.
+* **Built for Production** – Lightweight, fast, and reliable under real-world load.
 
-Perfect for:
-- **REST & JSON APIs**
-- **Microservices**
-- **Prototyping**
-- **Educational projects**
+
+Ideal for:
+
+*  **High-performance REST APIs**
+*  **Composable microservices**
+*  **Rapid prototyping**
+*  **Learning & teaching Go web development**
+
+Whether you're building your next startup, internal tools, or side projects—**Okapi scales with you.**
 
 
 ---
@@ -289,7 +295,8 @@ o.Use(logger)
 
 ### OpenAPI/Swagger Integration
 
-Okapi provides automatic OpenAPI (Swagger) documentation generation with built-in UI support. The documentation is dynamically generated from your route definitions.
+Okapi provides automatic OpenAPI (Swagger) documentation generation with built-in UI support.
+The documentation is dynamically generated from your route definitions, keeping your API documentation always in sync with your implementation.
 
 #### Quick Start
 
@@ -304,77 +311,149 @@ o := okapi.Default()  // Docs available at /docs
 Configure OpenAPI settings during initialization:
 
 ```go
-o := okapi.New().WithOpenAPIDocs(
-    okapi.OpenAPI{
-        PathPrefix: "/swagger",  // Documentation path
-        Title:     "My API",    // API title
-        Version:   "1.0",       // API version
-    }
+	o := okapi.New().WithOpenAPIDocs(
+        okapi.OpenAPI{
+        PathPrefix: "/swagger",  // Base path for documentation
+        Title:     "Bookstore API",  // Displayed in UI
+        Version:   "1.0.0",         // API version
+        Contact: okapi.Contact{
+        Name:  "API Support",
+        Email: "support@bookstore.com",
+		},
+		},
 )
 ```
 
 ### Documenting Routes
 
-#### Example: Create Book Endpoint
+Okapi provides two ways to attach OpenAPI documentation to your routes:
+
+#### 1. Composable Functions (Direct Style)
+
+This approach uses individual `okapi.Doc*` functions for each aspect of your route documentation. It’s concise and works well for simple routes.
 
 ```go
-o.Post("/books", createBook,
-    okapi.DocSummary("Create a new book"),
-    okapi.DocTag("bookController"),
-    okapi.DocBearerAuth(),  // Enable Bearer token authentication
-    
-    // RequestBody documentation
-    okapi.RequestBody(BookRequest{}),
-    
-    // Response documentation
-    okapi.DocResponse(BookResponse{}),
-    
-    // Header parameter
-    okapi.DocHeader("Key", "1234", "API Key", true),
+o.Get("/books", getBooksHandler,
+  okapi.DocSummary("List all available books"),
+  okapi.DocTags("Books"),
+  okapi.DocQueryParam("author", "string", "Filter by author name", false),
+  okapi.DocQueryParam("limit", "int", "Maximum results to return (default 20)", false),
+  okapi.DocResponse([]Book{}),
 )
 ```
 
-#### Example: Get Book Endpoint
+#### 2. Fluent Builder Style `(okapi.Doc()` + .`Build()`
+
+For more complex or dynamic documentation setup, Okapi offers a fluent builder API.
+Use `okapi.Doc()` to begin building, chain options, and call `.Build()` or `.AsOption()` to finalize.
 
 ```go
-o.Get("/books/{id}", getBook,
-    okapi.DocSummary("Get book by ID"),
-    okapi.DocTag("bookController"),
-    okapi.DocBearerAuth(),
-    
-    // Path parameter
-    okapi.DocPathParam("id", "int", "Book ID"),
-    
-    // Query parameter
-    okapi.DocQueryParam("country", "string", "Country filter", true),
-    
-    // Response documentation
-    okapi.DocResponse(BookResponse{}),
+o.Post("/books", createBookHandler,
+    okapi.Doc().
+    Summary("Add a new book to inventory").
+    Tags("Books").
+    BearerAuth().
+    RequestBody(BookRequest{}).
+    Response(Book{}).
+    Build(),
 )
 ```
 
 ### Available Documentation Options
 
-| Method             | Description                         |
-|--------------------|-------------------------------------|
-| `DocSummary()`     | Short endpoint description          |
-| `DocTag()`         | Groups related endpoints            |
-| `DocTags()`        | Groups related endpoints            |
-| `DocBearerAuth()`  | Enables Bearer token authentication |
-| `DocRequestBody()` | Documents request body structure    |
-| `DocResponse()`    | Documents response structure        |
-| `DocPathParam()`   | Documents path parameters           |
-| `DocQueryParam()`  | Documents query parameters          |
-| `DocHeader()`      | Documents header parameters         |
+| Method               | Description                         |
+|----------------------|-------------------------------------|
+| `DocSummary()`       | Short endpoint description          |
+| `DocTag()/DocTags()` | Groups related endpoints            |
+| `DocBearerAuth()`    | Enables Bearer token authentication |
+| `DocRequestBody()`   | Documents request body structure    |
+| `DocResponse()`      | Documents response structure        |
+| `DocPathParam()`     | Documents path parameters           |
+| `DocQueryParam()`    | Documents query parameters          |
+| `DocHeader()`        | Documents header parameters         |
 
 ### Swagger UI Preview
 
-The automatically generated Swagger UI provides interactive documentation:
+Okapi automatically generates Swagger UI for all documented routes:
+
 
 ![Okapi Swagger Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
 
 ---
 
+### Enabling and Disabling Routes & Groups
+
+Okapi gives you flexible control over your API by allowing routes and route groups to be **dynamically enabled or disabled**. This is a clean and efficient alternative to commenting out code when you want to temporarily remove endpoints.
+
+#### Overview
+
+You can disable:
+
+* **Individual routes** — blocks access to a specific endpoint
+* **Route groups** — disables an entire section of your API, including all nested routes
+
+This behavior is reflected both in runtime responses and API documentation.
+
+| Type               | HTTP Response   | Swagger Docs | Affects Child Routes |
+|--------------------|-----------------|--------------|----------------------|
+| **Disabled Route** | `404 Not Found` | Hidden       | N/A                  |
+| **Disabled Group** | `404 Not Found` | Hidden       | Yes — all nested     |
+
+#### Key Features
+
+* Disabled routes/groups return a `404 Not Found`
+* Automatically excluded from Swagger/OpenAPI documentation
+* Disabling a group recursively disables all nested routes and sub-groups
+* No need to comment out code — just call `.Disable()` or `.Enable()`
+
+#### Use Cases
+
+* Temporarily removing endpoints during maintenance
+* Controlling access based on feature flags
+* Deprecating old API versions
+* Creating toggleable test or staging routes
+
+#### Usage Example
+
+```go
+app := okapi.Default()
+
+// Create the root API group
+api := app.Group("api")
+
+// Define and disable v1 group
+v1 := api.Group("v1").Disable() // All v1 routes return 404 and are hidden from docs
+v1.Get("/", func(c okapi.Context) error {
+    return c.OK(okapi.M{"version": "v1"})
+})
+
+// Define active v2 group
+v2 := api.Group("v2")
+v2.Get("/", func(c okapi.Context) error {
+    return c.OK(okapi.M{"version": "v2"})
+})
+
+// Start the server
+if err := app.Start(); err != nil {
+    panic(err)
+}
+```
+
+#### Behavior Details
+
+* **Disabled Route:**
+
+    * Responds with `404 Not Found`
+    * Excluded from Swagger docs
+
+* **Disabled Group:**
+
+    * All nested routes and sub-groups are recursively disabled
+    * All affected routes are hidden from Swagger
+
+To re-enable any route or group, simply call the `.Enable()` method or remove the `.Disable()` call.
+
+---
 ## Templating
 
 ### Using a Custom Renderer
@@ -439,7 +518,7 @@ o.Static("/static", "public/assets")
 
 ```go
 // Initialize TLS configuration for secure HTTPS connections
-    tls, err := okapi.LoadTLSConfig("public/cert.pem", "public/key.pem", "", false)
+    tls, err := okapi.LoadTLSConfig("path/to/cert.pem", "path/to/key.pem", "", false)
     if err != nil {
     panic(fmt.Sprintf("Failed to load TLS configuration: %v", err))
     }
@@ -466,11 +545,6 @@ o.Static("/static", "public/assets")
     if err := o.Start(); err != nil {
     panic(fmt.Sprintf("Server failed to start: %v", err))
     }
-    // Start the server
-    err = o.Start()
-    if err != nil {
-    panic(err)
-    
     }
 ```
 

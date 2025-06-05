@@ -26,19 +26,43 @@ package okapi
 
 type Group struct {
 	basePath    string
+	disabled    bool
 	middlewares []Middleware
 	okapi       *Okapi
 }
 
 // newGroup creates a new route group with the specified base path, Okapi reference,
 // and optional middlewares.
-func newGroup(basePath string, okapi *Okapi, middlewares ...Middleware) *Group {
+func newGroup(basePath string, disabled bool, okapi *Okapi, middlewares ...Middleware) *Group {
 	mws := append([]Middleware{}, middlewares...)
 	return &Group{
 		basePath:    basePath,
 		middlewares: mws,
 		okapi:       okapi,
+		disabled:    disabled,
 	}
+}
+
+// Disable marks the Group as disabled, causing all routes within it to return 404 Not Found.
+// Returns the Group to allow method chaining.
+func (g *Group) Disable() *Group {
+	g.disabled = true
+	return g
+}
+
+// Enable marks the Group as enabled, allowing all routes within it to handle requests normally.
+// Returns the Group to allow method chaining.
+func (g *Group) Enable() *Group {
+	g.disabled = false
+	return g
+}
+
+// SetDisabled sets the disabled state of the Group.
+// When disabled is true, all routes in the group return 404 Not Found.
+// Returns the Group to allow method chaining.
+func (g *Group) SetDisabled(disabled bool) *Group {
+	g.disabled = disabled
+	return g
 }
 
 // BasePath returns the group's base path that prefixes all routes in this group.
@@ -75,7 +99,7 @@ func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Rou
 		finalHandler = g.middlewares[i](finalHandler)
 	}
 	// Register the route with the joined base path and route path
-	return g.okapi.addRoute(method, fullPath, g.basePath, finalHandler, opts...)
+	return g.okapi.addRoute(method, fullPath, g.basePath, finalHandler, opts...).SetDisabled(g.disabled)
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
@@ -127,7 +151,8 @@ func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
 // The new group inherits all middlewares from its parent group.
 func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 	return newGroup(
-		joinPaths(g.basePath, path),              // Combine paths
+		joinPaths(g.basePath, path), // Combine paths
+		g.disabled,
 		g.okapi,                                  // Share the same Okapi instance
 		append(g.middlewares, middlewares...)...) // Combine middlewares
 }

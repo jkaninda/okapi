@@ -29,6 +29,11 @@ import (
 	"net/http"
 )
 
+type User struct {
+	Name  string
+	Phone string
+}
+
 func main() {
 	// Example usage of the Okapi framework
 	// Create a new Okapi instance
@@ -37,7 +42,7 @@ func main() {
 	o.Get("/", func(c okapi.Context) error {
 		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
 	},
-		okapi.DocSummary("Welcome page"),
+		okapi.Doc().Summary("Welcome page").Build(),
 	)
 	o.Get("/greeting/:name", greetingHandler)
 

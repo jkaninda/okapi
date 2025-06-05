@@ -161,6 +161,101 @@ type SchemaInfo struct {
 	Package  string              // The package name (optional)
 }
 
+// Doc creates and returns a new DocBuilder instance for chaining documentation options.
+func Doc() *DocBuilder {
+	return &DocBuilder{}
+}
+
+// DocBuilder helps construct a list of RouteOption functions in a fluent, chainable way.
+type DocBuilder struct {
+	options []RouteOption
+}
+
+// RequestBody adds a request body schema to the route documentation using the provided value.
+func (b *DocBuilder) RequestBody(v any) *DocBuilder {
+	b.options = append(b.options, DocRequest(v))
+	return b
+}
+
+// Response adds a response schema to the route documentation using the provided value.
+func (b *DocBuilder) Response(v any) *DocBuilder {
+	b.options = append(b.options, DocResponse(v))
+	return b
+}
+
+// Summary adds a short summary description to the route documentation.
+func (b *DocBuilder) Summary(summary string) *DocBuilder {
+	b.options = append(b.options, DocSummary(summary))
+	return b
+}
+
+// Tags adds one or more tags to the route documentation for categorization.
+func (b *DocBuilder) Tags(tags ...string) *DocBuilder {
+	b.options = append(b.options, DocTags(tags...))
+	return b
+}
+
+// BearerAuth marks the route as requiring Bearer token authentication.
+func (b *DocBuilder) BearerAuth() *DocBuilder {
+	b.options = append(b.options, DocBearerAuth())
+	return b
+}
+
+// PathParam adds a documented path parameter to the route.
+// name: parameter name
+// typ: parameter type (e.g., "string", "int")
+// desc: parameter description
+func (b *DocBuilder) PathParam(name, typ, desc string) *DocBuilder {
+	b.options = append(b.options, DocPathParam(name, typ, desc))
+	return b
+}
+
+// QueryParam adds a documented query parameter to the route.
+// name: parameter name
+// typ: parameter type (e.g., "string", "int")
+// desc: parameter description
+// required: whether the parameter is required
+func (b *DocBuilder) QueryParam(name, typ, desc string, required bool) *DocBuilder {
+	b.options = append(b.options, DocQueryParam(name, typ, desc, required))
+	return b
+}
+
+// Header adds a documented header to the route.
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description
+// required: whether the header is required
+func (b *DocBuilder) Header(name, typ, desc string, required bool) *DocBuilder {
+	b.options = append(b.options, DocHeader(name, typ, desc, required))
+	return b
+}
+
+// Build returns a single RouteOption composed of all accumulated documentation options.
+// This method is intended to be passed directly to route registration functions.
+//
+// Example:
+//
+//	okapi.Get("/books", handler, okapi.Doc().Response(Book{}).Summary("List books").Build())
+func (b *DocBuilder) Build() RouteOption {
+	return b.AsOption()
+}
+
+// AsOption returns a single RouteOption by merging all accumulated documentation options.
+// This is functionally equivalent to Build(), and exists for naming flexibility and readability.
+//
+// You can use either Build() or AsOption(), depending on what best fits your code style.
+//
+// Example:
+//
+//	okapi.Get("/books", handler, okapi.Doc().Response(Book{}).AsOption())
+func (b *DocBuilder) AsOption() RouteOption {
+	return func(r *Route) {
+		for _, opt := range b.options {
+			opt(r)
+		}
+	}
+}
+
 // ptr is a helper function that returns a pointer to any value
 func ptr[T any](v T) *T { return &v }
 

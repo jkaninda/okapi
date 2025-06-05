@@ -548,7 +548,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	server.Handler = o
 	o.router.mux.StrictSlash(o.strictSlash)
 	o.context.okapi = o
-
+	printBanner()
 	_, _ = fmt.Fprintf(DefaultWriter, "Starting HTTP server at %s\n", o.Server.Addr)
 	// Serve with TLS if configured
 	if server.TLSConfig != nil {
@@ -1083,4 +1083,7 @@ func (o *Okapi) addDefaultErrorResponses(op *openapi3.Operation, r *Route) {
 		},
 	})
 
+}
+func printBanner() {
+	fmt.Println(banner)
 }

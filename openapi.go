@@ -526,7 +526,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
 		}
 
-		if r.ErrorResponses != nil && len(r.ErrorResponses) != 0 {
+		if len(r.ErrorResponses) != 0 {
 			for key, resp := range r.ErrorResponses {
 				schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
 				apiResponse := &openapi3.Response{

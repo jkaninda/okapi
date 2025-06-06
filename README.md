@@ -72,6 +72,9 @@ Whether you're building your next startup, internal tools, or side projects—**
 ```bash
 mkdir myapi && cd myapi
 go mod init myapi
+```
+
+```sh
 go get github.com/jkaninda/okapi
 ```
 
@@ -85,35 +88,69 @@ Create a file named `main.go`:
 package main
 
 import (
-	"net/http"
-	"github.com/jkaninda/okapi"
+  "net/http"
+  "github.com/jkaninda/okapi"
+  "time"
 )
 
+type Response struct {
+  Success bool   `json:"success"`
+  Message string `json:"message"`
+  Data    any    `json:"data"`
+}
+type ErrorResponse struct {
+  Success bool        `json:"success"`
+  Status  int         `json:"status"`
+  Message interface{} `json:"message"`
+}
+
 func main() {
-	o := okapi.Default()
+  // Create a new Okapi instance with default config
+  o := okapi.Default()
 
-	o.Get("/", func(c okapi.Context) error {
-		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
-	},
-		okapi.DocSummary("Welcome page"),
-	)
+  o.Get("/", func(c okapi.Context) error {
+    resp := Response{
+      Success: true,
+      Message: "Welcome to Okapi!",
+      Data: okapi.M{
+        "name":    "Okapi Web Framework",
+        "Licence": "MIT",
+        "date":    time.Now(),
+      },
+    }
+    return c.OK(resp)
+  },
+    // OpenAPI Documentation
+    okapi.DocSummary("Welcome page"),
+    okapi.DocResponse(Response{}),                // Success Response body
+    okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
 
-	if err := o.Start(); err != nil {
-		panic(err)
-	}
+  )
+  // Start the server
+  if err := o.Start(); err != nil {
+    panic(err)
+  }
 }
 ```
 
 Run your server:
 
 ```bash
-go run .
+go run main.go
 ```
 
 Visit [`http://localhost:8080`](http://localhost:8080) to see the response:
 
 ```json
-{"message": "Welcome to Okapi!"}
+{
+  "success": true,
+  "message": "Welcome to Okapi!",
+  "data": {
+    "Licence": "MIT",
+    "date": "2025-06-06T16:58:45.44795+02:00",
+    "name": "Okapi Web Framework"
+  }
+}
 ```
 
 Visit [`http://localhost:8080/docs/`](http://localhost:8080/docs/) to see the documentation
@@ -149,6 +186,20 @@ v2.Get("/users", getUsers)
 admin := api.Group("/admin", adminMiddleware)
 admin.Get("/dashboard", getDashboard)
 ```
+
+### Path Syntax Examples
+
+Okapi supports flexible and expressive route path patterns, including named parameters and wildcards:
+
+```go
+o.Get("/books/{id}", getBook)       // Named path parameter using curly braces
+o.Get("/books/:id", getBook)        // Named path parameter using colon prefix
+o.Get("/*", getBook)                // Catch-all wildcard (matches everything)
+o.Get("/*any", getBook)             // Catch-all with named parameter (name is ignored)
+o.Get("/*path", getBook)            // Catch-all with named parameter
+```
+
+Use whichever syntax feels most natural — Okapi normalizes both `{}` and `:` styles for named parameters and supports glob-style wildcards for flexible matching.
 
 ---
 
@@ -555,6 +606,22 @@ o.Static("/static", "public/assets")
     }
     }
 ```
+
+###  Explore Another Project: Goma Gateway
+
+Are you building a microservices architecture?
+Do you need a powerful yet lightweight API Gateway to secure and manage your services effortlessly?
+
+Check out my other project — **[Goma Gateway](https://github.com/jkaninda/goma-gateway)**.
+
+**Goma Gateway** is a high-performance, declarative API Gateway designed for modern microservices. It includes a rich set of built-in middleware for:
+
+* Security: ForwardAuth, Basic Auth, JWT, OAuth
+* Caching and rate limiting
+* Simple configuration, minimal overhead
+
+Whether you're managing internal APIs or exposing public endpoints, Goma Gateway helps you do it cleanly and securely.
+
 
 ---
 

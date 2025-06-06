@@ -69,17 +69,18 @@ func normalizeRoutePath(path string) string {
 	// Remove double slashes
 	path = strings.ReplaceAll(path, "//", "/")
 
-	// Convert path parameters from :param to {param}
-	re := regexp.MustCompile(`:(\w+)`)
-	path = re.ReplaceAllString(path, `{$1}`)
-
-	// Convert wildcard /* or /*any to /{any:.*}
+	// Convert /*any or /* to /{any:.*}
 	if strings.HasSuffix(path, "/*") {
 		path = strings.TrimSuffix(path, "/*") + "/{any:.*}"
-	} else if strings.Contains(path, "/*") {
-		// Handle cases like /files/*path
-		path = strings.Replace(path, "/*", "/{any:.*}", 1)
+	} else if matched, _ := regexp.MatchString(`/\*\w+`, path); matched {
+		// Handle cases like /*any, /*path, etc.
+		re := regexp.MustCompile(`/\*\w+`)
+		path = re.ReplaceAllString(path, "/{any:.*}")
 	}
+
+	// Convert path parameters from :param to {param} AFTER handling wildcards
+	re := regexp.MustCompile(`:(\w+)`)
+	path = re.ReplaceAllString(path, `{$1}`)
 
 	return path
 }

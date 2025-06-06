@@ -56,7 +56,7 @@ func TestStart(t *testing.T) {
 	o := Default()
 
 	o.Get("/", func(c Context) error {
-		return c.JSON(http.StatusOK, M{"message": "Welcome to Okapi!"})
+		return c.OK(M{"message": "Welcome to Okapi!"})
 	})
 
 	basicAuth := BasicAuthMiddleware{
@@ -72,8 +72,19 @@ func TestStart(t *testing.T) {
 
 	v1 := api.Group("/v1")
 	v1.Use(customMiddleware)
-	v1.Get("/books", func(c Context) error { return c.JSON(http.StatusOK, books) })
+	v1.Get("/books", func(c Context) error { return c.OK(books) })
 	v1.Get("/books/:id", show)
+
+	v2 := api.Group("/v2").Disable()
+	v2.Get("/books", func(c Context) error { return c.OK(books) })
+	v2.Get("/books/:id", show)
+
+	v1.Get("/any/*any", func(c Context) error {
+		return c.OK(M{"message": "Tested Any"})
+	})
+	v1.Get("/all/*", func(c Context) error {
+		return c.OK(M{"message": "Tested Any"})
+	})
 
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -87,6 +98,14 @@ func TestStart(t *testing.T) {
 	assertStatus(t, "GET", "http://localhost:8080/", nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/books", nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/books/1", nil, "", http.StatusOK)
+	// Docs
+	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, "", http.StatusOK)
+
+	// API V2
+	assertStatus(t, "GET", "http://localhost:8080/api/v2/books/1", nil, "", http.StatusNotFound)
+	// Any
+	assertStatus(t, "GET", "http://localhost:8080/api/v1/any/request", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/v1/all/request", nil, "", http.StatusOK)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`
@@ -200,6 +219,7 @@ func show(c Context) error {
 
 func customMiddleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
+		start := time.Now()
 		slog.Info("Custom middleware executed", "path", c.Request.URL.Path, "method", c.Request.Method)
 		// Call the next handler in the chain
 		if err := next(c); err != nil {
@@ -207,6 +227,7 @@ func customMiddleware(next HandleFunc) HandleFunc {
 			slog.Error("Error in custom middleware", "error", err)
 			return c.JSON(http.StatusInternalServerError, M{"error": "Internal Server Error"})
 		}
+		slog.Info("Request took", "duration", time.Since(start))
 		return nil
 	}
 }

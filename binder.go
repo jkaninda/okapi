@@ -95,7 +95,7 @@ func (c *Context) Bind(out any) error {
 }
 
 func (c *Context) BindMultipart(out any) error {
-	if err := c.Request.ParseMultipartForm(c.MaxMultipartMemory); err != nil {
+	if err := c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory); err != nil {
 		return fmt.Errorf("invalid multipart form: %w", err)
 	}
 
@@ -257,7 +257,7 @@ func (c *Context) bindFileFieldWithStatus(tag string, valField reflect.Value, fi
 func (c *Context) bindMultipleFilesWithStatus(tag string, valField reflect.Value) (bool, error) {
 	// Get the multipart form
 	if c.Request.MultipartForm == nil {
-		if err := c.Request.ParseMultipartForm(c.MaxMultipartMemory); err != nil {
+		if err := c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory); err != nil {
 			return false, fmt.Errorf("failed to parse multipart form: %w", err)
 		}
 	}

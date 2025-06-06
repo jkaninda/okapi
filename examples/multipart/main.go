@@ -102,15 +102,10 @@ func main() {
 		multipartBody := &MultipartBody{}
 		// Parse the multipart form data
 		if err := c.Bind(multipartBody); err != nil {
-			return c.JSON(400, okapi.M{
+			return c.ErrorBadRequest(okapi.M{
 				"error":   "Failed to parse form data",
 				"details": err.Error(),
 			})
-		}
-
-		err := c.Request.ParseMultipartForm(32 << 20)
-		if err != nil {
-			return c.Error(400, err.Error())
 		}
 		// Access the uploaded file
 		file := *multipartBody.Avatar
@@ -154,7 +149,9 @@ func main() {
 		_, err = f.Write(fileBytes)
 
 		return c.HTMLView(200, successTemplate, okapi.M{})
-	})
+	},
+		okapi.DocRequestBody(MultipartBody{}),
+	)
 
 	// Start the server
 	err := o.Start()

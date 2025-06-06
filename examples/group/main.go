@@ -35,6 +35,12 @@ type User struct {
 	Name     string `json:"name" form:"name"  max:"15"`
 	IsActive bool   `json:"is_active" query:"is_active" yaml:"isActive"`
 }
+type Users []User
+type ErrorResponse struct {
+	Success bool   `json:"success"`
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+}
 
 var (
 	users = []*User{
@@ -47,10 +53,10 @@ var (
 func main() {
 	// Example usage of Group handling in Okapi
 	// Create a new Okapi instance
-	o := okapi.New(okapi.WithDebug())
+	o := okapi.New(okapi.WithDebug()).WithOpenAPIDocs()
 	o.Get("/", func(c okapi.Context) error {
 		// Handler logic for the root route
-		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
+		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
 	})
 	// Create a new group with a base path
 	api := o.Group("/api")
@@ -60,10 +66,15 @@ func main() {
 	// Define a route with a handler
 	v1.Get("/users", func(c okapi.Context) error {
 		// Handler logic for the route
-		return c.JSON(http.StatusOK, users)
-	})
+		return c.OK(users)
+	},
+		okapi.DocResponse(Users{}),
+		okapi.DocErrorResponse(400, ErrorResponse{}),
+	)
 	// Get user
-	v1.Get("/users/:id", show)
+	v1.Get("/users/:id", show,
+		okapi.DocResponse(User{}),
+	)
 	// Update user
 	v1.Put("/users/:id", update)
 	// Create user

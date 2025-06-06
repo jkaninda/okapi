@@ -5,3 +5,4 @@ uploads
 public
 .DS_Store
 /.history
+coverage.txt

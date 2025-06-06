@@ -27,32 +27,57 @@ package main
 import (
 	"github.com/jkaninda/okapi"
 	"net/http"
+	"time"
 )
 
-type User struct {
-	Name  string
-	Phone string
+type Response struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Data    any    `json:"data"`
+}
+type ErrorResponse struct {
+	Success bool        `json:"success"`
+	Status  int         `json:"status"`
+	Message interface{} `json:"message"`
 }
 
 func main() {
-	// Example usage of the Okapi framework
-	// Create a new Okapi instance
+	// Create a new Okapi instance with default config
 	o := okapi.Default()
 
 	o.Get("/", func(c okapi.Context) error {
-		return c.JSON(http.StatusOK, okapi.M{"message": "Welcome to Okapi!"})
+		resp := Response{
+			Success: true,
+			Message: "Welcome to Okapi!",
+			Data: okapi.M{
+				"name":    "Okapi Web Framework",
+				"Licence": "MIT",
+				"date":    time.Now(),
+			},
+		}
+		return c.OK(resp)
 	},
-		okapi.Doc().Summary("Welcome page").Build(),
+		// OpenAPI Documentation
+		okapi.DocSummary("Welcome page"),
+		okapi.DocResponse(Response{}),                                  // Success Response body
+		okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
 	)
 	o.Get("/greeting/:name", greetingHandler)
 
 	// Start the server
-	err := o.Start()
-	if err != nil {
+	if err := o.Start(); err != nil {
 		panic(err)
 	}
 }
 func greetingHandler(c okapi.Context) error {
 	name := c.Param("name")
-	return c.JSON(http.StatusOK, okapi.M{"message": "Hello " + name})
+	if name == "" {
+		errorResponse := ErrorResponse{
+			Success: false,
+			Status:  http.StatusBadRequest,
+			Message: "name is empty",
+		}
+		return c.ErrorBadRequest(errorResponse)
+	}
+	return c.OK(okapi.M{"message": "Hello " + name})
 }

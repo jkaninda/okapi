@@ -231,6 +231,7 @@ o.Post("/books", func(c okapi.Context) error {
 * **JSON body**: `json`
 * **XML body**: `xml`
 * **Headers**: `header`
+* **Description**: `description` - OpenAPI description
 
 ---
 
@@ -311,14 +312,14 @@ o := okapi.Default()  // Docs available at /docs
 Configure OpenAPI settings during initialization:
 
 ```go
-	o := okapi.New().WithOpenAPIDocs(
+o := okapi.New().WithOpenAPIDocs(
         okapi.OpenAPI{
         PathPrefix: "/swagger",  // Base path for documentation
-        Title:     "Bookstore API",  // Displayed in UI
+        Title:     "Example API",  // Displayed in UI
         Version:   "1.0.0",         // API version
         Contact: okapi.Contact{
         Name:  "API Support",
-        Email: "support@bookstore.com",
+        Email: "support@example.com",
 		},
 		},
 )
@@ -342,7 +343,7 @@ o.Get("/books", getBooksHandler,
 )
 ```
 
-#### 2. Fluent Builder Style `(okapi.Doc()` + .`Build()`
+#### 2. Fluent Builder Style `okapi.Doc()` + .`Build()`
 
 For more complex or dynamic documentation setup, Okapi offers a fluent builder API.
 Use `okapi.Doc()` to begin building, chain options, and call `.Build()` or `.AsOption()` to finalize.
@@ -361,16 +362,16 @@ o.Post("/books", createBookHandler,
 
 ### Available Documentation Options
 
-| Method               | Description                         |
-|----------------------|-------------------------------------|
-| `DocSummary()`       | Short endpoint description          |
-| `DocTag()/DocTags()` | Groups related endpoints            |
-| `DocBearerAuth()`    | Enables Bearer token authentication |
-| `DocRequestBody()`   | Documents request body structure    |
-| `DocResponse()`      | Documents response structure        |
-| `DocPathParam()`     | Documents path parameters           |
-| `DocQueryParam()`    | Documents query parameters          |
-| `DocHeader()`        | Documents header parameters         |
+| Method                                   | Description                         |
+|------------------------------------------|-------------------------------------|
+| `DocSummary()`/`Doc().Summary()`         | Short endpoint description          |
+| `DocTag()/DocTags()`/`Doc().Tags()`      | Groups related endpoints            |
+| `DocBearerAuth()`                        | Enables Bearer token authentication |
+| `DocRequestBody()`/`Doc().RequestBody()` | Documents request body structure    |
+| `DocResponse()`/`Doc().Response()`       | Documents response structure        |
+| `DocPathParam()`/`Doc().PathParam()`     | Documents path parameters           |
+| `DocQueryParam()`/`Doc().QueryParam()`   | Documents query parameters          |
+| `DocHeader()`/ `Doc().Header()`          | Documents header parameters         |
 
 ### Swagger UI Preview
 

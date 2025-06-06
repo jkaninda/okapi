@@ -58,30 +58,32 @@ type (
 	// Okapi represents the core application structure of the framework,
 	// holding configuration, routers, middleware, server settings, and documentation components.
 	Okapi struct {
-		context           *Context
-		router            *Router
-		middlewares       []Middleware
-		Server            *http.Server
-		TLSServer         *http.Server
-		tlsConfig         *tls.Config
-		tlsServerConfig   *tls.Config
-		withTlsServer     bool
-		tlsAddr           string
-		routes            []*Route
-		debug             bool
-		accessLog         bool
-		strictSlash       bool
-		logger            *slog.Logger
-		Renderer          Renderer
-		corsEnabled       bool
-		cors              Cors
-		writeTimeout      int
-		readTimeout       int
-		idleTimeout       int
-		optionsRegistered map[string]bool
-		openapiSpec       *openapi3.T
-		openAPI           *OpenAPI
-		openApiEnabled    bool
+		context            *Context
+		router             *Router
+		middlewares        []Middleware
+		Server             *http.Server
+		TLSServer          *http.Server
+		tlsConfig          *tls.Config
+		tlsServerConfig    *tls.Config
+		withTlsServer      bool
+		tlsAddr            string
+		routes             []*Route
+		debug              bool
+		accessLog          bool
+		strictSlash        bool
+		logger             *slog.Logger
+		Renderer           Renderer
+		corsEnabled        bool
+		cors               Cors
+		writeTimeout       int
+		readTimeout        int
+		idleTimeout        int
+		optionsRegistered  map[string]bool
+		openapiSpec        *openapi3.T
+		openAPI            *OpenAPI
+		openApiEnabled     bool
+		maxMultipartMemory int64 // Maximum memory for multipart forms
+
 	}
 
 	Router struct {
@@ -316,6 +318,13 @@ func WithOpenAPIDisabled() OptionFunc {
 	}
 }
 
+// WithMaxMultipartMemory Maximum memory for multipart forms
+func WithMaxMultipartMemory(max int64) OptionFunc {
+	return func(o *Okapi) {
+		o.maxMultipartMemory = max
+	}
+}
+
 // ************* Chaining methods *************
 // These methods reuse the OptionFunc implementations
 
@@ -357,6 +366,9 @@ func (o *Okapi) WithAddr(addr string) *Okapi {
 
 func (o *Okapi) DisableAccessLog() *Okapi {
 	return o.apply(WithAccessLogDisabled())
+}
+func (o *Okapi) WithMaxMultipartMemory(max int64) *Okapi {
+	return o.apply(WithMaxMultipartMemory(max))
 }
 
 // WithOpenAPIDocs registers the OpenAPI JSON and Swagger UI handlers
@@ -987,18 +999,19 @@ func initConfig(options ...OptionFunc) *Okapi {
 
 	o := &Okapi{
 		context: &Context{
-			Request:            new(http.Request),
-			Response:           &response{},
-			MaxMultipartMemory: defaultMaxMemory,
+			Request:  new(http.Request),
+			Response: &response{},
+			CtxData:  make(map[string]interface{}),
 		},
-		router:            newRouter(),
-		Server:            server,
-		TLSServer:         &http.Server{},
-		logger:            slog.Default(),
-		accessLog:         true,
-		middlewares:       []Middleware{handleAccessLog},
-		optionsRegistered: make(map[string]bool),
-		cors:              Cors{},
+		router:             newRouter(),
+		Server:             server,
+		TLSServer:          &http.Server{},
+		logger:             slog.Default(),
+		accessLog:          true,
+		middlewares:        []Middleware{handleAccessLog},
+		optionsRegistered:  make(map[string]bool),
+		maxMultipartMemory: defaultMaxMemory,
+		cors:               Cors{},
 		openAPI: &OpenAPI{
 			Title:      FrameworkName,
 			Version:    "1.0.0",

@@ -55,7 +55,6 @@ var (
 func main() {
 	// Example usage of middlewares handling in Okapi
 	// Create a new Okapi instance
-	// Disable access log for cleaner output in this example
 	o := okapi.New().WithOpenAPIDocs()
 
 	o.Get("/", func(c okapi.Context) error {

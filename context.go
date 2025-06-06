@@ -48,9 +48,8 @@ type (
 		// Response http.ResponseWriter
 		Response Response
 		// CtxData is a key/value store for storing data in the context
-		CtxData            map[string]any
-		MaxMultipartMemory int64 // Maximum memory for multipart forms
-		params             *Params
+		CtxData map[string]any
+		params  *Params
 	}
 )
 
@@ -149,11 +148,10 @@ func (c *Context) GetInt64(key string) int64 {
 // Maintains thread safety during the copy operation.
 func (c *Context) Copy() *Context {
 	newCtx := &Context{
-		Request:            c.Request,                            // Copy request reference
-		Response:           c.Response,                           // Copy response reference
-		CtxData:            make(map[string]any, len(c.CtxData)), // Initialize new data map
-		params:             c.params,                             // Copy params
-		MaxMultipartMemory: c.MaxMultipartMemory,                 // Copy max memory for multipart forms
+		Request:  c.Request,                            // Copy request reference
+		Response: c.Response,                           // Copy response reference
+		CtxData:  make(map[string]any, len(c.CtxData)), // Initialize new data map
+		params:   c.params,                             // Copy params
 	}
 	// Copy all key-value pairs to the new context
 	for k, v := range c.CtxData {
@@ -234,13 +232,14 @@ func (c *Context) Form(key string) string {
 
 // FormValue retrieves a form value, including multipart form data.
 func (c *Context) FormValue(key string) string {
-	_ = c.Request.ParseMultipartForm(defaultMaxMemory) // Parse multipart form
+	_ = c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory) // Parse multipart form
 	return c.Request.FormValue(key)
 }
 
 // FormFile retrieves a file from multipart form data.
 // Returns the file and any error encountered.
 func (c *Context) FormFile(key string) (*multipart.FileHeader, error) {
+	_ = c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory)
 	f, fh, err := c.Request.FormFile(key)
 	if err != nil {
 		return nil, err
@@ -455,6 +454,20 @@ func (c *Context) ServeFileAttachment(path, filename string) {
 func (c *Context) ServeFileInline(path, filename string) {
 	c.SetHeader("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
 	http.ServeFile(c.Response, c.Request, path)
+}
+
+// *********** MultipartMemory **************
+
+// MaxMultipartMemory returns the maximum memory for multipart form
+func (c *Context) MaxMultipartMemory() int64 {
+	return c.okapi.maxMultipartMemory
+}
+
+// SetMaxMultipartMemory sets the maximum memory for multipart form (default: 32 MB)
+func (c *Context) SetMaxMultipartMemory(max int64) {
+	if max > 0 {
+		c.okapi.maxMultipartMemory = max
+	}
 }
 
 // ************ Errors in errors.go *****************

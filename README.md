@@ -339,7 +339,10 @@ o.Get("/books", getBooksHandler,
   okapi.DocTags("Books"),
   okapi.DocQueryParam("author", "string", "Filter by author name", false),
   okapi.DocQueryParam("limit", "int", "Maximum results to return (default 20)", false),
-  okapi.DocResponse([]Book{}),
+  okapi.DocResponse([]Book{}), // Response for OpenAPI docs
+  okapi.DocErrorResponse(400, ErrorResponse{}),// Response error for OpenAPI docs
+  okapi.DocErrorResponse(401, ErrorResponse{}),// Response error for OpenAPI docs
+
 )
 ```
 
@@ -356,22 +359,26 @@ o.Post("/books", createBookHandler,
     BearerAuth().
     RequestBody(BookRequest{}).
     Response(Book{}).
+	ErrorResponse(400,ErrorResponse{}).
+	ErrorResponse(401,ErrorResponse{}).
     Build(),
 )
 ```
 
 ### Available Documentation Options
 
-| Method                                   | Description                         |
-|------------------------------------------|-------------------------------------|
-| `DocSummary()`/`Doc().Summary()`         | Short endpoint description          |
-| `DocTag()/DocTags()`/`Doc().Tags()`      | Groups related endpoints            |
-| `DocBearerAuth()`                        | Enables Bearer token authentication |
-| `DocRequestBody()`/`Doc().RequestBody()` | Documents request body structure    |
-| `DocResponse()`/`Doc().Response()`       | Documents response structure        |
-| `DocPathParam()`/`Doc().PathParam()`     | Documents path parameters           |
-| `DocQueryParam()`/`Doc().QueryParam()`   | Documents query parameters          |
-| `DocHeader()`/ `Doc().Header()`          | Documents header parameters         |
+| Method                                       | Description                         |
+|----------------------------------------------|-------------------------------------|
+| `DocSummary()`/`Doc().Summary()`             | Short endpoint description          |
+| `DocTag()/DocTags()`/`Doc().Tags()`          | Groups related endpoints            |
+| `DocBearerAuth()`                            | Enables Bearer token authentication |
+| `DocRequestBody()`/`Doc().RequestBody()`     | Documents request body structure    |
+| `DocResponse()`/`Doc().Response()`           | Documents response structure        |
+| `DocPathParam()`/`Doc().PathParam()`         | Documents path parameters           |
+| `DocQueryParam()`/`Doc().QueryParam()`       | Documents query parameters          |
+| `DocHeader()`/ `Doc().Header()`              | Documents header parameters         |
+| `DocErrorResponse()`/`Doc().ErrorResponse()` | Documents response error            |
+
 
 ### Swagger UI Preview
 

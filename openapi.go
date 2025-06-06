@@ -28,9 +28,11 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/getkin/kin-openapi/openapi3"
+	"net/http"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -173,13 +175,25 @@ type DocBuilder struct {
 
 // RequestBody adds a request body schema to the route documentation using the provided value.
 func (b *DocBuilder) RequestBody(v any) *DocBuilder {
-	b.options = append(b.options, DocRequest(v))
+	b.options = append(b.options, DocRequestBody(v))
 	return b
 }
 
 // Response adds a response schema to the route documentation using the provided value.
 func (b *DocBuilder) Response(v any) *DocBuilder {
 	b.options = append(b.options, DocResponse(v))
+	return b
+}
+
+// ErrorResponse defines an error response schema for a specific HTTP status code
+// in the route's OpenAPI documentation.
+//
+// Parameters:
+//   - status: the HTTP status code (e.g., 400, 404, 500).
+//   - v: a Go value (e.g., a struct instance) whose type will be used to generate
+//     the OpenAPI schema for the error response.
+func (b *DocBuilder) ErrorResponse(status int, v any) *DocBuilder {
+	b.options = append(b.options, DocErrorResponse(status, v))
 	return b
 }
 
@@ -372,6 +386,26 @@ func DocResponse(v any) RouteOption {
 	}
 }
 
+// DocErrorResponse defines an error response schema for a specific HTTP status code
+// in the route's OpenAPI documentation.
+//
+// Parameters:
+//   - status: the HTTP status code (e.g., 400, 404, 500).
+//   - v: a Go value (e.g., a struct instance) whose type will be used to generate
+//     the OpenAPI schema for the error response.
+//
+// Returns:
+//   - A RouteOption function that adds the error schema to the route's documentation.
+func DocErrorResponse(status int, v any) RouteOption {
+	return func(doc *Route) {
+		if v == nil {
+			return
+		}
+		// Generate a schema from the provided Go value and assign it to the error response
+		doc.ErrorResponses[status] = reflectToSchemaWithInfo(v).Schema
+	}
+}
+
 // DocRequestBody defines the request body schema for the route
 // v: a Go value whose type will be used to generate the request schema
 func DocRequestBody(v any) RouteOption {
@@ -381,12 +415,6 @@ func DocRequestBody(v any) RouteOption {
 		}
 		doc.Request = reflectToSchemaWithInfo(v).Schema
 	}
-}
-
-// DocRequest defines the request schema for the route in the API documentation.
-// This is an alias for RequestBody
-func DocRequest(v any) RouteOption {
-	return DocRequestBody(v)
 }
 
 // DocBearerAuth marks the route as requiring Bearer token authentication
@@ -497,7 +525,22 @@ func (o *Okapi) buildOpenAPISpec() {
 
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
 		}
-		o.addDefaultErrorResponses(op, r)
+
+		if r.ErrorResponses != nil && len(r.ErrorResponses) != 0 {
+			for key, resp := range r.ErrorResponses {
+				schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
+				apiResponse := &openapi3.Response{
+					Description: ptr(http.StatusText(key)),
+					Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
+				}
+				op.Responses.Set(strconv.Itoa(key), &openapi3.ResponseRef{
+					Value: apiResponse,
+				})
+			}
+		} else {
+			// Add default responses
+			o.addDefaultErrorResponses(op, r)
+		}
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {

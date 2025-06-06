@@ -55,32 +55,35 @@ var (
 )
 
 type (
+	// Okapi represents the core application structure of the framework,
+	// holding configuration, routers, middleware, server settings, and documentation components.
 	Okapi struct {
-		context           *Context
-		router            *Router
-		middlewares       []Middleware
-		Server            *http.Server
-		TLSServer         *http.Server
-		tlsConfig         *tls.Config
-		tlsServerConfig   *tls.Config
-		withTlsServer     bool
-		tlsAddr           string
-		routes            []*Route
-		debug             bool
-		accessLog         bool
-		strictSlash       bool
-		logger            *slog.Logger
-		Renderer          Renderer
-		corsEnabled       bool
-		cors              Cors
-		writeTimeout      int
-		readTimeout       int
-		idleTimeout       int
-		optionsRegistered map[string]bool
-		openapiSpec       *openapi3.T
-		openAPI           *OpenAPI
-		openApiEnabled    bool
+		context           *Context        // context manages request-scoped data and utilities.
+		router            *Router         // router handles route registration and HTTP method dispatching.
+		middlewares       []Middleware    // middlewares is the list of global middlewares applied to all routes.
+		Server            *http.Server    // Server is the primary HTTP server instance.
+		TLSServer         *http.Server    // TLSServer is the optional HTTPS server instance (if TLS is enabled).
+		tlsConfig         *tls.Config     // tlsConfig holds the TLS configuration for the main server.
+		tlsServerConfig   *tls.Config     // tlsServerConfig holds the TLS configuration for the optional TLS server.
+		withTlsServer     bool            // withTlsServer indicates whether the optional TLS server is enabled.
+		tlsAddr           string          // tlsAddr specifies the bind address for the TLS server.
+		routes            []*Route        // routes is a list of all registered routes in the application.
+		debug             bool            // debug enables verbose logging and debug features.
+		accessLog         bool            // accessLog enables logging of all incoming HTTP requests.
+		strictSlash       bool            // strictSlash enforces trailing slash consistency on routes.
+		logger            *slog.Logger    // logger is the structured logger used across the framework.
+		Renderer          Renderer        // Renderer defines how response data
+		corsEnabled       bool            // corsEnabled toggles automatic CORS handling.
+		cors              Cors            // cors contains the configuration for CORS handling.
+		writeTimeout      int             // writeTimeout sets the maximum duration before timing out writes (in seconds).
+		readTimeout       int             // readTimeout sets the maximum duration for reading the entire request (in seconds).
+		idleTimeout       int             // idleTimeout sets the maximum idle time before closing a keep-alive connection (in seconds).
+		optionsRegistered map[string]bool // optionsRegistered tracks which routes have automatically registered OPTIONS handlers.
+		openapiSpec       *openapi3.T     // openapiSpec holds the generated OpenAPI spec (v3) for documentation and tooling.
+		openAPI           *OpenAPI        // openAPI manages OpenAPI generation, UI handlers, and route metadata.
+		openApiEnabled    bool            // openApiEnabled toggles OpenAPI generation and exposure (e.g., `/docs`, `/openapi.json`).
 	}
+
 	Router struct {
 		mux *mux.Router
 	}
@@ -89,6 +92,8 @@ type (
 	// M is shortcut of map[string]any
 	M map[string]any
 
+	// Route defines the structure of a registered HTTP route in the framework.
+	// It includes metadata used for routing, OpenAPI documentation, and middleware handling.
 	Route struct {
 		Name            string
 		Path            string
@@ -106,10 +111,11 @@ type (
 		RequiresAuth    bool
 		RequestExample  map[string]interface{}
 		ResponseExample map[string]interface{}
-		Responses       map[int]any
+		ErrorResponses  map[int]*openapi3.SchemaRef
 		Description     string
 		disabled        bool
 	}
+
 	// Response interface defines the methods for writing HTTP responses.
 	Response interface {
 		http.ResponseWriter
@@ -701,12 +707,13 @@ func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...R
 	}
 	path = normalizeRoutePath(path)
 	route := &Route{
-		Name:      handleName(h),
-		Path:      path,
-		Method:    method,
-		GroupPath: groupPath,
-		Handle:    h,
-		chain:     o,
+		Name:           handleName(h),
+		Path:           path,
+		Method:         method,
+		GroupPath:      groupPath,
+		Handle:         h,
+		chain:          o,
+		ErrorResponses: make(map[int]*openapi3.SchemaRef),
 	}
 	for _, opt := range opts {
 		opt(route)
@@ -1063,12 +1070,6 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 
 func (o *Okapi) addDefaultErrorResponses(op *openapi3.Operation, r *Route) {
 	// Add default error responses
-	op.Responses.Set("400", &openapi3.ResponseRef{
-		Value: &openapi3.Response{
-			Description: ptr("Bad Request"),
-		},
-	})
-
 	if r.RequiresAuth {
 		op.Responses.Set("401", &openapi3.ResponseRef{
 			Value: &openapi3.Response{

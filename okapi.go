@@ -575,7 +575,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 
 // Stop gracefully shuts down the Okapi server(s)
 func (o *Okapi) Stop() {
-	_, _ = fmt.Fprintf(DefaultWriter, "Gracefully shutting down HTTP server at %s\n", o.TLSServer.Addr)
+	_, _ = fmt.Fprintf(DefaultWriter, "Gracefully shutting down HTTP server at %s\n", o.Server.Addr)
 	if err := o.Shutdown(o.Server); err != nil {
 		o.logger.Error("Failed to shutdown HTTP server", slog.String("error", err.Error()))
 		panic(err)

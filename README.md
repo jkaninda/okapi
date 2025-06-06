@@ -116,7 +116,7 @@ Visit [`http://localhost:8080`](http://localhost:8080) to see the response:
 {"message": "Welcome to Okapi!"}
 ```
 
-Visit [`http://localhost:8080/docs/`](http://localhost:8080/docs/) to se the documentation
+Visit [`http://localhost:8080/docs/`](http://localhost:8080/docs/) to see the documentation
 
 ---
 

@@ -101,7 +101,7 @@ func main() {
 	o := okapi.Default()
 	
 	o.Get("/", func(c okapi.Context) error {
-		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!","Licence":"MIT"})
+		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!","License":"MIT"})
 	})
 	// Start the server
 	if err := o.Start(); err != nil {
@@ -151,7 +151,7 @@ func main() {
     return c.OK(response)
   },
     // OpenAPI Documentation
-    okapi.DocSummary("Create a new Book"),
+    okapi.DocSummary("Create a new Book"), // Route Summary
     okapi.DocRequestBody(Book{}),                                   //  Request body
     okapi.DocResponse(Response{}),                                  // Success Response body
     okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
@@ -174,7 +174,7 @@ Visit [`http://localhost:8080`](http://localhost:8080) to see the response:
 
 ```json
 {
-  "Licence": "MIT",
+  "License": "MIT",
   "message": "Hello from Okapi Web Framework!"
 }
 ```

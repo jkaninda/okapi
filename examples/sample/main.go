@@ -25,7 +25,7 @@ func main() {
 	o := okapi.Default()
 
 	o.Get("/", func(c okapi.Context) error {
-		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!", "Licence": "MIT"})
+		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!", "License": "MIT"})
 	})
 	o.Post("/books", func(c okapi.Context) error {
 		book := Book{}

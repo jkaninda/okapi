@@ -23,3 +23,8 @@
  */
 
 package okapi
+
+import "testing"
+
+func TestContext_Bind(t *testing.T) {
+}

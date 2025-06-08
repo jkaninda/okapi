@@ -58,7 +58,12 @@ func TestStart(t *testing.T) {
 	o.Get("/", func(c Context) error {
 		return c.OK(M{"message": "Welcome to Okapi!"})
 	})
-
+	o.Get("hello", helloHandler)
+	o.Post("hello", helloHandler)
+	o.Put("hello", helloHandler)
+	o.Patch("hello", helloHandler)
+	o.Delete("hello", helloHandler)
+	o.Options("hello", helloHandler)
 	basicAuth := BasicAuthMiddleware{
 		Username: "admin",
 		Password: "password",
@@ -68,7 +73,12 @@ func TestStart(t *testing.T) {
 	api := o.Group("/api")
 	adminApi := api.Group("/admin", basicAuth.Middleware)
 	adminApi.Put("/books/:id", adminUpdate)
-	adminApi.Post("/books", adminStore)
+	adminApi.Post("/books", adminStore,
+		DocSummary("Book Summary"),
+		DocResponse(Book{}),
+		DocRequestBody(Book{}),
+		DocTags("Book Tag"),
+	)
 
 	v1 := api.Group("/v1")
 	v1.Use(customMiddleware)
@@ -106,6 +116,13 @@ func TestStart(t *testing.T) {
 	// Any
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/any/request", nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/all/request", nil, "", http.StatusOK)
+
+	assertStatus(t, "GET", "http://localhost:8080/hello", nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/hello", nil, "", http.StatusOK)
+	assertStatus(t, "PUT", "http://localhost:8080/hello", nil, "", http.StatusOK)
+	assertStatus(t, "PATCH", "http://localhost:8080/hello", nil, "", http.StatusOK)
+	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, "", http.StatusOK)
+	assertStatus(t, "OPTIONS", "http://localhost:8080/hello", nil, "", http.StatusOK)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`

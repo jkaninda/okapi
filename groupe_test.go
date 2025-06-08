@@ -60,10 +60,12 @@ func TestGroup(t *testing.T) {
 		}
 	})
 	// Okapi Group HandleFun
-	api.Get("hello", func(c Context) error {
-		slog.Info("Calling route", "path", c.Request.URL.Path)
-		return c.OK(M{"Message": "Hello World"})
-	})
+	api.Get("hello", helloHandler)
+	api.Post("hello", helloHandler)
+	api.Put("hello", helloHandler)
+	api.Patch("hello", helloHandler)
+	api.Delete("hello", helloHandler)
+	api.Options("hello", helloHandler)
 
 	api.Get("/group", func(c Context) error {
 		slog.Info("Calling route", "path", c.Request.URL.Path)
@@ -81,5 +83,16 @@ func TestGroup(t *testing.T) {
 
 	assertStatus(t, "GET", "http://localhost:8080/api/group", nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/standard", nil, "", http.StatusOK)
+
 	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+	assertStatus(t, "PUT", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+	assertStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+	assertStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+	assertStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+}
+func helloHandler(c Context) error {
+	slog.Info("Calling route", "path", c.Request.URL.Path, "method", c.Request.Method)
+	return c.OK(M{"message": "Hello from Okapi!"})
+
 }

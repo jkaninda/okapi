@@ -53,7 +53,9 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 * **Easy to Learn** – Familiar Go syntax and intuitive APIs mean you’re productive in minutes.
 * **Highly Flexible** – Designed to adapt to your architecture and workflow—not the other way around.
 * **Built for Production** – Lightweight, fast, and reliable under real-world load.
-
+* **Standard Library Compatibility** - Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
+* **Automatic OpenAPI Documentation** - Generate comprehensive, first-class OpenAPI specs for every route—effortlessly keep your docs in sync with your code
+* **Dynamic Route Management** - Instantly enable or disable routes and route groups at runtime, offering a clean, efficient alternative to commenting out code when managing your API endpoints.
 
 Ideal for:
 
@@ -75,7 +77,7 @@ go mod init myapi
 ```
 
 ```sh
-go get github.com/jkaninda/okapi
+go get github.com/jkaninda/okapi@latest
 ```
 
 ---
@@ -84,45 +86,74 @@ go get github.com/jkaninda/okapi
 
 Create a file named `main.go`:
 
+### Example
+
+#### Hello
+
 ```go
 package main
 
 import (
-  "net/http"
   "github.com/jkaninda/okapi"
-  "time"
+)
+func main() {
+
+	o := okapi.Default()
+	
+	o.Get("/", func(c okapi.Context) error {
+		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!","Licence":"MIT"})
+	})
+	// Start the server
+	if err := o.Start(); err != nil {
+		panic(err)
+	}
+}
+```
+####  Simple HTTP POST
+```go
+package main
+
+import (
+  "github.com/jkaninda/okapi"
+  "net/http"
 )
 
 type Response struct {
   Success bool   `json:"success"`
   Message string `json:"message"`
-  Data    any    `json:"data"`
+  Data    Book   `json:"data"`
+}
+type Book struct {
+  Name  string `json:"name" form:"name"  max:"50" required:"true" description:"Book name"`
+  Price int    `json:"price" form:"price" query:"price" yaml:"price" required:"true" description:"Book price"`
 }
 type ErrorResponse struct {
   Success bool        `json:"success"`
   Status  int         `json:"status"`
-  Message interface{} `json:"message"`
+  Details any `json:"details"`
 }
 
 func main() {
   // Create a new Okapi instance with default config
   o := okapi.Default()
 
-  o.Get("/", func(c okapi.Context) error {
-    resp := Response{
-      Success: true,
-      Message: "Welcome to Okapi!",
-      Data: okapi.M{
-        "name":    "Okapi Web Framework",
-        "Licence": "MIT",
-        "date":    time.Now(),
-      },
+  o.Post("/books", func(c okapi.Context) error {
+    book := Book{}
+    err := c.Bind(&book)
+    if err != nil {
+      return c.ErrorBadRequest(ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
     }
-    return c.OK(resp)
+    response := Response{
+      Success: true,
+      Message: "This is a simple HTTP POST",
+      Data:    book,
+    }
+    return c.OK(response)
   },
     // OpenAPI Documentation
-    okapi.DocSummary("Welcome page"),
-    okapi.DocResponse(Response{}),                // Success Response body
+    okapi.DocSummary("Create a new Book"),
+    okapi.DocRequestBody(Book{}),                                   //  Request body
+    okapi.DocResponse(Response{}),                                  // Success Response body
     okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
 
   )
@@ -434,7 +465,7 @@ o.Post("/books", createBookHandler,
 
 ### Swagger UI Preview
 
-Okapi automatically generates Swagger UI for all documented routes:
+Okapi automatically generates Swagger UI for all routes:
 
 
 ![Okapi Swagger Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)

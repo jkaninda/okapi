@@ -336,6 +336,11 @@ func (c *Context) OK(v any) error {
 	return c.JSON(http.StatusOK, v)
 }
 
+// Created writes a JSON response with 201 status code.
+func (c *Context) Created(v any) error {
+	return c.JSON(http.StatusCreated, v)
+}
+
 // XML writes an XML response with the given status code.
 func (c *Context) XML(code int, v any) error {
 	return c.writeResponse(code, XML, func() error {

@@ -215,6 +215,12 @@ func (b *DocBuilder) BearerAuth() *DocBuilder {
 	return b
 }
 
+// Deprecated marks the route as deprecated
+func (b *DocBuilder) Deprecated() *DocBuilder {
+	b.options = append(b.options, DocDeprecated())
+	return b
+}
+
 // PathParam adds a documented path parameter to the route.
 // name: parameter name
 // typ: parameter type (e.g., "string", "int")
@@ -424,6 +430,13 @@ func DocBearerAuth() RouteOption {
 	}
 }
 
+// DocDeprecated marks the route as deprecated
+func DocDeprecated() RouteOption {
+	return func(doc *Route) {
+		doc.deprecated = true
+	}
+}
+
 // buildOpenAPISpec constructs the complete OpenAPI specification document
 // by aggregating all the route documentation into a single OpenAPI 3.0 spec
 func (o *Okapi) buildOpenAPISpec() {
@@ -482,6 +495,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			Tags:        tags,
 			Parameters:  append(append(r.PathParams, r.QueryParams...), r.Headers...),
 			Responses:   &openapi3.Responses{},
+			Deprecated:  r.deprecated,
 		}
 
 		if r.RequiresAuth {

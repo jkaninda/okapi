@@ -54,7 +54,7 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 * **Highly Flexible** – Designed to adapt to your architecture and workflow—not the other way around.
 * **Built for Production** – Lightweight, fast, and reliable under real-world load.
 * **Standard Library Compatibility** - Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
-* **Automatic OpenAPI Documentation** - Generate comprehensive, first-class OpenAPI specs for every route—effortlessly keep your docs in sync with your code
+* **Automatic OpenAPI Documentation** - Generate comprehensive, first-class OpenAPI specs for every route—effortlessly keep your docs in sync with your code.
 * **Dynamic Route Management** - Instantly enable or disable routes and route groups at runtime, offering a clean, efficient alternative to commenting out code when managing your API endpoints.
 
 Ideal for:

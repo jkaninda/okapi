@@ -24,6 +24,8 @@
 
 package okapi
 
+import "net/http"
+
 type Group struct {
 	basePath    string
 	disabled    bool
@@ -151,8 +153,71 @@ func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
 // The new group inherits all middlewares from its parent group.
 func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 	return newGroup(
-		joinPaths(g.basePath, path), // Combine paths
+		// Combine paths
+		joinPaths(g.basePath, path),
 		g.disabled,
-		g.okapi,                                  // Share the same Okapi instance
-		append(g.middlewares, middlewares...)...) // Combine middlewares
+		// Share the same Okapi instance
+		g.okapi,
+		// Combine middlewares
+		append(g.middlewares, middlewares...)...)
+}
+
+// HandleStd registers a standard http.HandlerFunc and wraps it with the group's middleware chain.
+func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http.Request), opts ...RouteOption) {
+	// Convert standard handler to HandleFunc
+	converted := func(c Context) error {
+		h(c.Response, c.Request)
+		return nil
+	}
+	// Apply group middleware
+	for i := len(g.middlewares) - 1; i >= 0; i-- {
+		converted = g.middlewares[i](converted)
+	}
+	// Register route
+	g.okapi.addRoute(method, joinPaths(g.basePath, path), g.basePath, converted, opts...).SetDisabled(g.disabled)
+}
+
+// HandleHTTP registers a standard http.Handler and wraps it with the group's middleware chain.
+func (g *Group) HandleHTTP(method, path string, h http.HandlerFunc, opts ...RouteOption) {
+	// Convert standard handler to HandleFunc
+	converted := func(c Context) error {
+		h.ServeHTTP(c.Response, c.Request)
+		return nil
+	}
+	// Apply group middleware
+	for i := len(g.middlewares) - 1; i >= 0; i-- {
+		converted = g.middlewares[i](converted)
+	}
+	// Register route
+	g.okapi.addRoute(method, joinPaths(g.basePath, path), g.basePath, converted, opts...).SetDisabled(g.disabled)
+}
+
+// UseMiddleware registers a standard HTTP middleware function and integrates
+// it into Okapi's middleware chain.
+//
+// This enables compatibility with existing middleware libraries that use the
+// func(http.Handler) http.Handler pattern.
+func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
+	g.Use(func(next HandleFunc) HandleFunc {
+		// Convert HandleFunc to http.Handler
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := Context{
+				Request:  r,
+				Response: &response{writer: w},
+				okapi:    g.okapi,
+			}
+			if err := next(ctx); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+
+		// Apply standard middleware
+		wrapped := mw(h)
+
+		// Convert back to HandleFunc
+		return func(ctx Context) error {
+			wrapped.ServeHTTP(ctx.Response, ctx.Request)
+			return nil
+		}
+	})
 }

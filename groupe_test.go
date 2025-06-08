@@ -23,3 +23,63 @@
  */
 
 package okapi
+
+import (
+	"errors"
+	"log/slog"
+	"net/http"
+	"testing"
+)
+
+func TestGroup(t *testing.T) {
+	o := Default()
+	// create api group
+	api := o.Group("/api")
+	// Okapi's Group Middleware
+	api.Use(func(next HandleFunc) HandleFunc {
+		return func(c Context) (err error) {
+			slog.Info("Okapi's Group middleware")
+			return next(c)
+		}
+	})
+	// Go's standard HTTP middleware function
+	api.UseMiddleware(func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slog.Info("Hello Go standard HTTP middleware function")
+			handler.ServeHTTP(w, r)
+		})
+
+	})
+	// Go's standard http.HandlerFunc
+	api.HandleStd("GET", "/standard", func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Calling route", "path", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("standard standard http.HandlerFunc response"))
+		if err != nil {
+			return
+		}
+	})
+	// Okapi Group HandleFun
+	api.Get("hello", func(c Context) error {
+		slog.Info("Calling route", "path", c.Request.URL.Path)
+		return c.OK(M{"Message": "Hello World"})
+	})
+
+	api.Get("/group", func(c Context) error {
+		slog.Info("Calling route", "path", c.Request.URL.Path)
+		return c.OK(M{"message": "Welcome to Okapi!"})
+	})
+
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer o.Stop()
+
+	waitForServer()
+
+	assertStatus(t, "GET", "http://localhost:8080/api/group", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/standard", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+}

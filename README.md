@@ -174,13 +174,8 @@ Visit [`http://localhost:8080`](http://localhost:8080) to see the response:
 
 ```json
 {
-  "success": true,
-  "message": "Welcome to Okapi!",
-  "data": {
-    "Licence": "MIT",
-    "date": "2025-06-06T16:58:45.44795+02:00",
-    "name": "Okapi Web Framework"
-  }
+  "Licence": "MIT",
+  "message": "Hello from Okapi Web Framework!"
 }
 ```
 

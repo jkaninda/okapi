@@ -53,7 +53,9 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 * **Easy to Learn** – Familiar Go syntax and intuitive APIs mean you’re productive in minutes.
 * **Highly Flexible** – Designed to adapt to your architecture and workflow—not the other way around.
 * **Built for Production** – Lightweight, fast, and reliable under real-world load.
-
+* **Standard Library Compatibility** - Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
+* **Automatic OpenAPI Documentation** - Generate comprehensive, first-class OpenAPI specs for every route—effortlessly keep your docs in sync with your code.
+* **Dynamic Route Management** - Instantly enable or disable routes and route groups at runtime, offering a clean, efficient alternative to commenting out code when managing your API endpoints.
 
 Ideal for:
 
@@ -75,7 +77,7 @@ go mod init myapi
 ```
 
 ```sh
-go get github.com/jkaninda/okapi
+go get github.com/jkaninda/okapi@latest
 ```
 
 ---
@@ -84,45 +86,74 @@ go get github.com/jkaninda/okapi
 
 Create a file named `main.go`:
 
+### Example
+
+#### Hello
+
 ```go
 package main
 
 import (
-  "net/http"
   "github.com/jkaninda/okapi"
-  "time"
+)
+func main() {
+
+	o := okapi.Default()
+	
+	o.Get("/", func(c okapi.Context) error {
+		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!","Licence":"MIT"})
+	})
+	// Start the server
+	if err := o.Start(); err != nil {
+		panic(err)
+	}
+}
+```
+####  Simple HTTP POST
+```go
+package main
+
+import (
+  "github.com/jkaninda/okapi"
+  "net/http"
 )
 
 type Response struct {
   Success bool   `json:"success"`
   Message string `json:"message"`
-  Data    any    `json:"data"`
+  Data    Book   `json:"data"`
+}
+type Book struct {
+  Name  string `json:"name" form:"name"  max:"50" required:"true" description:"Book name"`
+  Price int    `json:"price" form:"price" query:"price" yaml:"price" required:"true" description:"Book price"`
 }
 type ErrorResponse struct {
   Success bool        `json:"success"`
   Status  int         `json:"status"`
-  Message interface{} `json:"message"`
+  Details any `json:"details"`
 }
 
 func main() {
   // Create a new Okapi instance with default config
   o := okapi.Default()
 
-  o.Get("/", func(c okapi.Context) error {
-    resp := Response{
-      Success: true,
-      Message: "Welcome to Okapi!",
-      Data: okapi.M{
-        "name":    "Okapi Web Framework",
-        "Licence": "MIT",
-        "date":    time.Now(),
-      },
+  o.Post("/books", func(c okapi.Context) error {
+    book := Book{}
+    err := c.Bind(&book)
+    if err != nil {
+      return c.ErrorBadRequest(ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
     }
-    return c.OK(resp)
+    response := Response{
+      Success: true,
+      Message: "This is a simple HTTP POST",
+      Data:    book,
+    }
+    return c.OK(response)
   },
     // OpenAPI Documentation
-    okapi.DocSummary("Welcome page"),
-    okapi.DocResponse(Response{}),                // Success Response body
+    okapi.DocSummary("Create a new Book"),
+    okapi.DocRequestBody(Book{}),                                   //  Request body
+    okapi.DocResponse(Response{}),                                  // Success Response body
     okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
 
   )
@@ -331,7 +362,7 @@ o := okapi.New(okapi.WithCors(cors))
 ### Custom Middleware
 
 ```go
-func logger(next okapi.HandlerFunc) okapi.HandlerFunc {
+func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
 	return func(c okapi.Context) error {
 		start := time.Now()
 		err := next(c)
@@ -340,7 +371,7 @@ func logger(next okapi.HandlerFunc) okapi.HandlerFunc {
 	}
 }
 
-o.Use(logger)
+o.Use(customMiddleware)
 ```
 
 ---
@@ -429,11 +460,12 @@ o.Post("/books", createBookHandler,
 | `DocQueryParam()`/`Doc().QueryParam()`       | Documents query parameters          |
 | `DocHeader()`/ `Doc().Header()`              | Documents header parameters         |
 | `DocErrorResponse()`/`Doc().ErrorResponse()` | Documents response error            |
+| `DocDeprecated()`/`Doc().Deprecated()`       | Mark route deprecated               |
 
 
 ### Swagger UI Preview
 
-Okapi automatically generates Swagger UI for all documented routes:
+Okapi automatically generates Swagger UI for all routes:
 
 
 ![Okapi Swagger Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
@@ -606,6 +638,93 @@ o.Static("/static", "public/assets")
     }
     }
 ```
+---
+
+##  Standard Library Compatibility
+
+**Okapi** integrates seamlessly with Go’s `net/http` standard library, enabling you to:
+
+1. Use existing `http.Handler` middleware
+2. Register standard `http.HandlerFunc` handlers
+3. Combine Okapi-style routes with standard library handlers
+
+This makes Okapi ideal for gradual adoption or hybrid use in existing Go projects.
+
+
+### Middleware Compatibility
+
+Okapi’s `UseMiddleware` bridges standard `http.Handler` middleware into Okapi’s middleware system. This lets you reuse the wide ecosystem of community-built middleware—such as logging, metrics, tracing, compression, and more.
+
+#### Signature
+
+```go
+func (o *Okapi) UseMiddleware(middleware func(http.Handler) http.Handler)
+```
+
+#### Example: Injecting a Custom Header
+
+```go
+o := okapi.Default()
+
+// Add a custom version header to all responses
+o.UseMiddleware(func(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("X-Version", "v1.2.0")
+        next.ServeHTTP(w, r)
+    })
+})
+```
+
+### Handler Compatibility
+
+You can register any `http.HandlerFunc` using `HandleStd`, or use full `http.Handler` instances via `HandleHTTP`. These retain Okapi’s routing and middleware features while supporting familiar handler signatures.
+
+#### HandleStd Signature
+
+```go
+func (o *Okapi) HandleStd(method, path string, handler http.HandlerFunc, opts ...RouteOption)
+```
+
+#### Example: Basic Standard Library Handler
+
+```go
+o := okapi.Default()
+
+o.HandleStd("GET", "/greeting", func(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("Hello from Okapi!"))
+})
+```
+
+---
+
+### Migration Tips
+
+Migrating an existing `net/http` application? Okapi makes it painless.
+
+#### Mixed Routing Support
+
+You can mix Okapi and standard handlers in the same application:
+
+```go
+// Okapi-style route
+o.Handle("GET", "/okapi", func(c okapi.Context) error {
+    return c.OK(okapi.M{"status": "ok"})
+})
+
+// Standard library handler
+o.HandleStd("GET", "/standard", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("standard response"))
+})
+```
+
+
+#### Error Handling Differences
+* `http.HandlerFunc`: must manually call `w.WriteHeader(...)`
+* `okapi.Handle`: can return an error or use helpers like `c.JSON`, `c.Text`, `c.OK`, `c.ErrorNotFound()` or `c.AbortBadRequest()`
+
+
+---
 
 ###  Explore Another Project: Goma Gateway
 

@@ -111,6 +111,7 @@ type (
 		QueryParams     []*openapi3.ParameterRef
 		Headers         []*openapi3.ParameterRef
 		RequiresAuth    bool
+		deprecated      bool
 		RequestExample  map[string]interface{}
 		ResponseExample map[string]interface{}
 		ErrorResponses  map[int]*openapi3.SchemaRef
@@ -553,6 +554,47 @@ func (o *Okapi) Use(middlewares ...Middleware) {
 	o.middlewares = append(o.middlewares, middlewares...)
 }
 
+// UseMiddleware registers a standard HTTP middleware function and integrates
+// it into Okapi's middleware chain.
+//
+// This enables compatibility with existing middleware libraries that use the
+// func(http.Handler) http.Handler pattern.
+//
+// Example:
+//
+//	okapi.UseMiddleware(func(next http.Handler) http.Handler {
+//	    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+//	        w.Header().Set("X-Powered-By", "Okapi")
+//	        next.ServeHTTP(w, r)
+//	    })
+//	})
+//
+// Internally, Okapi converts between http.Handler and HandleFunc to allow smooth interop.
+func (o *Okapi) UseMiddleware(mw func(http.Handler) http.Handler) {
+	o.Use(func(next HandleFunc) HandleFunc {
+		// Convert HandleFunc to http.Handler
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := Context{
+				Request:  r,
+				Response: &response{writer: w},
+				okapi:    o,
+			}
+			if err := next(ctx); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+
+		// Apply standard middleware
+		wrapped := mw(h)
+
+		// Convert back to HandleFunc
+		return func(ctx Context) error {
+			wrapped.ServeHTTP(ctx.Response, ctx.Request)
+			return nil
+		}
+	})
+}
+
 // StartServer starts the Okapi server with the specified HTTP server
 func (o *Okapi) StartServer(server *http.Server) error {
 	if !ValidateAddr(server.Addr) {
@@ -754,36 +796,39 @@ func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...R
 	return route
 }
 
-// HandleFunc registers a new route with the specified HTTP method, path, and handler function.
-// It performs the following operations:
+// Handle registers a new route with the given HTTP method, path, and Okapi-style handler function.
+//
+// It performs the following steps:
 //  1. Normalizes the route path
-//  2. Creates a new Route instance
-//  3. Applies all registered middlewares to the handler
-//  4. Registers the route with the underlying router
-//  5. Sets up error handling for the handler
+//  2. Creates and configures a new Route instance
+//  3. Applies all registered middleware to the handler
+//  4. Registers the route with the underlying router (with method filtering)
+//  5. Adds centralized error handling for the route
 //
 // Parameters:
-//   - method: HTTP method (GET, POST, PUT, etc.)
-//   - path: URL path pattern (supports path parameters)
-//   - h: Handler function that processes the request
+//   - method: HTTP method (e.g., "GET", "POST", "PUT")
+//   - path:   URL path pattern (supports path parameters, e.g., /users/:id)
+//   - h:      A handler function using Okapi's Context abstraction
+//   - opts:   Optional route metadata (e.g., OpenAPI summary, description, tags)
 //
-// Middleware Processing:
+// Middleware:
 //
-//	All middlewares registered via Use() will be applied in order before the handler.
-//	The middleware chain is built using the Next() method.
+//	All middleware registered via Use() or UseMiddleware() will be applied in order,
+//	wrapping around the handler.
 //
 // Error Handling:
 //
-//	Any error returned by the handler will be converted to a 500 Internal Server Error.
+//	Any non-nil error returned by the handler will automatically result in a
+//	500 Internal Server Error response.
 //
 // Example:
 //
-//	okapi.HandleFunc("GET", "/users/:id", func(c Context) error {
+//	okapi.Handle("GET", "/users/:id", func(c Context) error {
 //	    id := c.Param("id")
-//	    // ... handler logic
+//	    // process request...
 //	    return nil
 //	})
-func (o *Okapi) HandleFunc(method, path string, h HandleFunc, opts ...RouteOption) {
+func (o *Okapi) Handle(method, path string, h HandleFunc, opts ...RouteOption) {
 	path = normalizeRoutePath(path)
 
 	route := &Route{
@@ -816,28 +861,26 @@ func (o *Okapi) HandleFunc(method, path string, h HandleFunc, opts ...RouteOptio
 
 }
 
-// Handle registers a new route with the specified HTTP method, path, and http.Handler.
-// It wraps the standard http.Handler into a HandleFunc signature and processes it similarly to HandleFunc.
+// HandleHTTP registers a new route using a standard http.Handler.
+//
+// It wraps the provided http.Handler into Okapi's internal HandleFunc signature
+// and processes it as if it were registered via Handle.
 //
 // Parameters:
-//   - method: HTTP method (GET, POST, PUT, etc.)
-//   - path: URL path pattern (supports path parameters)
-//   - h: Standard http.Handler that processes the request
+//   - method: HTTP method (e.g., "GET", "POST", "DELETE")
+//   - path:   URL path pattern (supports dynamic segments)
+//   - h:      A standard http.Handler (or http.HandlerFunc)
+//   - opts:   Optional route metadata (e.g., OpenAPI summary, description, tags)
 //
-// Middleware Processing:
-//
-//	All middlewares registered via Use() will be applied in order before the handler.
-//	The middleware chain is built using the Next() method.
-//
-// Differences from HandleFunc:
-//   - Accepts standard http.Handler instead of HandleFunc
-//   - Handler errors must be handled by the http.Handler itself
-//   - Returns nil error by default since http.Handler doesn't return errors
+// Differences from Handle:
+//   - Uses the standard http.Handler interface
+//   - Middleware is still applied
+//   - Errors must be handled inside the handler itself (Okapi will not capture them)
 //
 // Example:
 //
-//	okapi.Handle("GET", "/static", http.FileServer(http.Dir("./public")))
-func (o *Okapi) Handle(method, path string, h http.Handler, opts ...RouteOption) {
+//	okapi.HandleHTTP("GET", "/static", http.FileServer(http.Dir("./public")))
+func (o *Okapi) HandleHTTP(method, path string, h http.Handler, opts ...RouteOption) {
 	path = normalizeRoutePath(path)
 
 	// Wrap http.Handler into HandleFunc signature
@@ -878,6 +921,24 @@ func (o *Okapi) Handle(method, path string, h http.Handler, opts ...RouteOption)
 
 	// Register OPTIONS handler for CORS
 	o.registerOptionsHandler(path)
+}
+
+// HandleStd is a convenience method for registering handlers using the standard
+// http.HandlerFunc signature (func(http.ResponseWriter, *http.Request)).
+//
+// Internally, it wraps the handler into http.Handler and delegates to HandleHTTP.
+//
+// Example:
+//
+//	okapi.HandleStd("GET", "/greet", func(w http.ResponseWriter, r *http.Request) {
+//	    w.Write([]byte("Hello from Okapi!"))
+//	})
+//
+// This handler will still benefit from:
+//   - All registered middleware
+//   - Automatic route and CORS registration
+func (o *Okapi) HandleStd(method, path string, h func(http.ResponseWriter, *http.Request), opts ...RouteOption) {
+	o.HandleHTTP(method, path, http.HandlerFunc(h), opts...)
 }
 
 // registerOptionsHandler registers OPTIONS handler

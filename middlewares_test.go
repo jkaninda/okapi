@@ -84,7 +84,7 @@ func TestJwtMiddleware(t *testing.T) {
 func TestBasicAuth(t *testing.T) {
 	username := "user"
 	password := "password"
-	auth := BasicAuthMiddleware{Username: username, Password: password, ContextKey: "username"}
+	auth := BasicAuth{Username: username, Password: password, ContextKey: "username"}
 
 	app := Default()
 	app.Use(auth.Middleware)

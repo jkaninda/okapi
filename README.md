@@ -25,6 +25,8 @@ The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful m
 
 ✔ **Built-in Auth & Security** – Native support for **JWT, OAuth2, Basic Auth**, and custom middleware.
 
+✔ **Standard Library Compatibility** - Integrates seamlessly with Go’s net/http standard library.
+
 ✔ **Blazing Fast Routing** – Optimized HTTP router with low overhead for high-performance applications.
 
 ✔ **First-Class Documentation** – **OpenAPI 3.0 & Swagger UI** integrated out of the box—auto-generate API docs with minimal effort.
@@ -334,7 +336,7 @@ Okapi supports simple, declarative validation using struct tags.
 ### Built-in Example (Basic Auth)
 
 ```go
-auth := okapi.BasicAuthMiddleware{
+auth := okapi.BasicAuth{
 	Username: "admin",
 	Password: "password",
 	Realm:    "Restricted",
@@ -367,6 +369,18 @@ func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
 }
 
 o.Use(customMiddleware)
+```
+
+### Std Middleware
+
+```go
+o.UseMiddleware(func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slog.Info("Hello Go standard HTTP middleware function")
+			handler.ServeHTTP(w, r)
+		})
+
+	})
 ```
 
 ---

@@ -42,9 +42,11 @@ import (
 type (
 	// BasicAuthMiddleware provides basic authentication for routes.
 	BasicAuthMiddleware struct {
-		Username string
-		Password string
-		Realm    string
+		Username   string
+		Password   string
+		Realm      string
+		ContextKey string // where to store the username e.g. "user", default(username)
+
 	}
 	// Logger is a middleware that logs request details such as method, URL,
 	// client IP, status, duration, referer, and user agent.
@@ -101,8 +103,11 @@ func (b *BasicAuthMiddleware) Middleware(next HandleFunc) HandleFunc {
 			c.Response.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
 			return c.String(http.StatusUnauthorized, "Unauthorized")
 		}
-
-		c.Set("username", username)
+		contextKey := b.ContextKey
+		if contextKey == "" {
+			contextKey = "username"
+		}
+		c.Set(contextKey, username)
 		return next(c)
 	}
 }

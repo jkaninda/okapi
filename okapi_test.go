@@ -105,29 +105,29 @@ func TestStart(t *testing.T) {
 
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/", nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/books", nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/books/1", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/v1/books", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/v1/books/1", nil, nil, "", http.StatusOK)
 	// Docs
-	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 
 	// API V2
-	assertStatus(t, "GET", "http://localhost:8080/api/v2/books/1", nil, "", http.StatusNotFound)
+	assertStatus(t, "GET", "http://localhost:8080/api/v2/books/1", nil, nil, "", http.StatusNotFound)
 	// Any
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/any/request", nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/all/request", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/v1/any/request", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/v1/all/request", nil, nil, "", http.StatusOK)
 
-	assertStatus(t, "GET", "http://localhost:8080/hello", nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/hello", nil, "", http.StatusOK)
-	assertStatus(t, "PUT", "http://localhost:8080/hello", nil, "", http.StatusOK)
-	assertStatus(t, "PATCH", "http://localhost:8080/hello", nil, "", http.StatusOK)
-	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, "", http.StatusOK)
-	assertStatus(t, "OPTIONS", "http://localhost:8080/hello", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "PUT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "PATCH", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "OPTIONS", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`
 	assertStatus(t, "POST",
-		"http://localhost:8080/api/admin/books",
+		"http://localhost:8080/api/admin/books", nil,
 		strings.NewReader(body), "application/json",
 		http.StatusUnauthorized)
 
@@ -155,7 +155,11 @@ func TestStart(t *testing.T) {
 		t.Errorf("Expected status 201, got %d", resp.StatusCode)
 	}
 }
-func assertStatus(t *testing.T, method, url string, body io.Reader, contentType string, expected int) {
+func assertStatus(t *testing.T, method, url string,
+	headers map[string]string,
+	body io.Reader,
+	contentType string,
+	expected int) {
 	t.Helper()
 
 	req, err := http.NewRequest(method, url, body)
@@ -164,6 +168,9 @@ func assertStatus(t *testing.T, method, url string, body io.Reader, contentType 
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

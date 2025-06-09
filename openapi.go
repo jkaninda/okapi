@@ -282,7 +282,7 @@ func ptr[T any](v T) *T { return &v }
 // DocSummary sets a short summary description for the route
 func DocSummary(summary string) RouteOption {
 	return func(doc *Route) {
-		doc.Summary = summary
+		doc.summary = summary
 	}
 }
 
@@ -293,7 +293,7 @@ func DocSummary(summary string) RouteOption {
 func DocPathParam(name, typ, desc string) RouteOption {
 	return func(doc *Route) {
 		schema := getSchemaForType(typ)
-		doc.PathParams = append(doc.PathParams, &openapi3.ParameterRef{
+		doc.pathParams = append(doc.pathParams, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
 				In:          "path",
@@ -314,14 +314,14 @@ func DocAutoPathParams() RouteOption {
 		for _, param := range pathParams {
 			// Check if parameter already exists to avoid duplicates
 			exists := false
-			for _, existing := range doc.PathParams {
+			for _, existing := range doc.pathParams {
 				if existing.Value.Name == param.Value.Name {
 					exists = true
 					break
 				}
 			}
 			if !exists {
-				doc.PathParams = append(doc.PathParams, param)
+				doc.pathParams = append(doc.pathParams, param)
 			}
 		}
 	}
@@ -335,7 +335,7 @@ func DocAutoPathParams() RouteOption {
 func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 	return func(doc *Route) {
 		schema := getSchemaForType(typ)
-		doc.QueryParams = append(doc.QueryParams, &openapi3.ParameterRef{
+		doc.queryParams = append(doc.queryParams, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
 				In:          "query",
@@ -355,7 +355,7 @@ func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 func DocHeader(name, typ, desc string, required bool) RouteOption {
 	return func(doc *Route) {
 		schema := getSchemaForType(typ)
-		doc.Headers = append(doc.Headers, &openapi3.ParameterRef{
+		doc.headers = append(doc.headers, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
 				In:          "header",
@@ -370,14 +370,14 @@ func DocHeader(name, typ, desc string, required bool) RouteOption {
 // DocTag adds a single tag to categorize the route
 func DocTag(tag string) RouteOption {
 	return func(doc *Route) {
-		doc.Tags = append(doc.Tags, tag)
+		doc.tags = append(doc.tags, tag)
 	}
 }
 
 // DocTags adds multiple tags to categorize the route
 func DocTags(tags ...string) RouteOption {
 	return func(doc *Route) {
-		doc.Tags = append(doc.Tags, tags...)
+		doc.tags = append(doc.tags, tags...)
 	}
 }
 
@@ -388,7 +388,7 @@ func DocResponse(v any) RouteOption {
 		if v == nil {
 			return
 		}
-		doc.Response = reflectToSchemaWithInfo(v).Schema
+		doc.response = reflectToSchemaWithInfo(v).Schema
 	}
 }
 
@@ -408,7 +408,7 @@ func DocErrorResponse(status int, v any) RouteOption {
 			return
 		}
 		// Generate a schema from the provided Go value and assign it to the error response
-		doc.ErrorResponses[status] = reflectToSchemaWithInfo(v).Schema
+		doc.errorResponses[status] = reflectToSchemaWithInfo(v).Schema
 	}
 }
 
@@ -419,14 +419,14 @@ func DocRequestBody(v any) RouteOption {
 		if v == nil {
 			return
 		}
-		doc.Request = reflectToSchemaWithInfo(v).Schema
+		doc.request = reflectToSchemaWithInfo(v).Schema
 	}
 }
 
 // DocBearerAuth marks the route as requiring Bearer token authentication
 func DocBearerAuth() RouteOption {
 	return func(doc *Route) {
-		doc.RequiresAuth = true
+		doc.requiresAuth = true
 	}
 }
 
@@ -474,13 +474,13 @@ func (o *Okapi) buildOpenAPISpec() {
 			continue
 		}
 		// Auto-extract path parameters if none are defined
-		if len(r.PathParams) == 0 {
+		if len(r.pathParams) == 0 {
 			DocAutoPathParams()(r)
 		}
 
-		tags := r.Tags
+		tags := r.tags
 		if tags == nil {
-			tags = append(tags, r.GroupPath)
+			tags = append(tags, r.groupPath)
 		}
 
 		item := spec.Paths.Value(r.Path)
@@ -490,15 +490,15 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 
 		op := &openapi3.Operation{
-			Summary:     r.Summary,
-			Description: r.Description,
+			Summary:     r.summary,
+			Description: r.description,
 			Tags:        tags,
-			Parameters:  append(append(r.PathParams, r.QueryParams...), r.Headers...),
+			Parameters:  append(append(r.pathParams, r.queryParams...), r.headers...),
 			Responses:   &openapi3.Responses{},
 			Deprecated:  r.deprecated,
 		}
 
-		if r.RequiresAuth {
+		if r.requiresAuth {
 			op.Security = &openapi3.SecurityRequirements{
 				openapi3.SecurityRequirement{
 					"BearerAuth": {},
@@ -507,9 +507,9 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 
 		// Handle request body
-		if r.Request != nil {
+		if r.request != nil {
 			// Generate reusable schema component if it's a complex type
-			schemaRef := o.getOrCreateSchemaComponent(r.Request, schemaRegistry, spec.Components.Schemas)
+			schemaRef := o.getOrCreateSchemaComponent(r.request, schemaRegistry, spec.Components.Schemas)
 
 			requestBody := &openapi3.RequestBody{
 				Content:  openapi3.NewContentWithJSONSchemaRef(schemaRef),
@@ -517,31 +517,31 @@ func (o *Okapi) buildOpenAPISpec() {
 			}
 
 			// Add example if available
-			if r.RequestExample != nil {
-				requestBody.Content["application/json"].Example = r.RequestExample
+			if r.requestExample != nil {
+				requestBody.Content["application/json"].Example = r.requestExample
 			}
 
 			op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
 		}
 
 		// Handle responses
-		if r.Response != nil {
-			schemaRef := o.getOrCreateSchemaComponent(r.Response, schemaRegistry, spec.Components.Schemas)
+		if r.response != nil {
+			schemaRef := o.getOrCreateSchemaComponent(r.response, schemaRegistry, spec.Components.Schemas)
 			apiResponse := &openapi3.Response{
 				Description: ptr("OK"),
 				Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
 			}
 
 			// Add example if available
-			if r.ResponseExample != nil {
-				apiResponse.Content["application/json"].Example = r.ResponseExample
+			if r.responseExample != nil {
+				apiResponse.Content["application/json"].Example = r.responseExample
 			}
 
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
 		}
 
-		if len(r.ErrorResponses) != 0 {
-			for key, resp := range r.ErrorResponses {
+		if len(r.errorResponses) != 0 {
+			for key, resp := range r.errorResponses {
 				schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
 				apiResponse := &openapi3.Response{
 					Description: ptr(http.StatusText(key)),

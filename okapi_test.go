@@ -53,6 +53,11 @@ var (
 )
 
 func TestStart(t *testing.T) {
+	basicAuth := BasicAuth{
+		Username: "admin",
+		Password: "password",
+		Realm:    "Restricted Area",
+	}
 	o := Default()
 
 	o.Get("/", func(c Context) error {
@@ -64,12 +69,18 @@ func TestStart(t *testing.T) {
 	o.Patch("hello", helloHandler)
 	o.Delete("hello", helloHandler)
 	o.Options("hello", helloHandler)
-	basicAuth := BasicAuthMiddleware{
-		Username: "admin",
-		Password: "password",
-		Realm:    "Restricted Area",
-	}
+	o.Head("hello", helloHandler)
 
+	// Go's standard http.HandlerFunc
+	o.HandleStd("GET", "/standard", func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Calling route", "path", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("standard standard http.HandlerFunc response"))
+		if err != nil {
+			return
+		}
+	})
+	o.HandleHTTP("GET", "/standard-http", http.FileServer(http.Dir("./static/")))
 	api := o.Group("/api")
 	adminApi := api.Group("/admin", basicAuth.Middleware)
 	adminApi.Put("/books/:id", adminUpdate)
@@ -96,6 +107,8 @@ func TestStart(t *testing.T) {
 		return c.OK(M{"message": "Tested Any"})
 	})
 
+	o.StaticFile("/favicon.ico", "./favicon.ico")
+
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)
@@ -116,13 +129,15 @@ func TestStart(t *testing.T) {
 	// Any
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/any/request", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/all/request", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/favicon.ico", nil, nil, "", http.StatusNotFound)
 
 	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "PUT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "PATCH", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "OPTIONS", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "HEAD", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`

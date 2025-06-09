@@ -63,3 +63,19 @@ func TestAllowOrigin(t *testing.T) {
 	result = allowedOrigin(origins, origin)
 	assert.Equal(t, true, result)
 }
+
+func TestValidateAddr(t *testing.T) {
+	addr := "0.0.0.0:8080"
+	if !ValidateAddr(addr) {
+		t.Errorf("Invalid addr: %s", addr)
+	}
+
+}
+
+func TestLoadJWKSFromFile(t *testing.T) {
+	_, err := LoadJWKSFromFile("testdata/jwks.json")
+	if err == nil {
+		t.Errorf("LoadJWKSFromFile should have returned an error")
+	}
+
+}

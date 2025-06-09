@@ -59,6 +59,7 @@ func TestGroup(t *testing.T) {
 			return
 		}
 	})
+	api.HandleHTTP("GET", "/standard-http", http.FileServer(http.Dir("static")))
 	// Okapi Group HandleFun
 	api.Get("hello", helloHandler)
 	api.Post("hello", helloHandler)
@@ -66,6 +67,7 @@ func TestGroup(t *testing.T) {
 	api.Patch("hello", helloHandler)
 	api.Delete("hello", helloHandler)
 	api.Options("hello", helloHandler)
+	api.Head("hello", helloHandler)
 
 	api.Get("/group", func(c Context) error {
 		slog.Info("Calling route", "path", c.Request.URL.Path)
@@ -90,6 +92,8 @@ func TestGroup(t *testing.T) {
 	assertStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "HEAD", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 }
 func helloHandler(c Context) error {
 	slog.Info("Calling route", "path", c.Request.URL.Path, "method", c.Request.Method)

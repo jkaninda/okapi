@@ -137,7 +137,7 @@ func TestStart(t *testing.T) {
 	assertStatus(t, "PATCH", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "HEAD", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`

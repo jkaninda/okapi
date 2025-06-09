@@ -100,22 +100,22 @@ type (
 		Name            string
 		Path            string
 		Method          string
-		Handle          HandleFunc
+		handle          HandleFunc
 		chain           chain
-		GroupPath       string
-		Tags            []string
-		Summary         string
-		Request         *openapi3.SchemaRef
-		Response        *openapi3.SchemaRef
-		PathParams      []*openapi3.ParameterRef
-		QueryParams     []*openapi3.ParameterRef
-		Headers         []*openapi3.ParameterRef
-		RequiresAuth    bool
+		groupPath       string
+		tags            []string
+		summary         string
+		request         *openapi3.SchemaRef
+		response        *openapi3.SchemaRef
+		pathParams      []*openapi3.ParameterRef
+		queryParams     []*openapi3.ParameterRef
+		headers         []*openapi3.ParameterRef
+		requiresAuth    bool
 		deprecated      bool
-		RequestExample  map[string]interface{}
-		ResponseExample map[string]interface{}
-		ErrorResponses  map[int]*openapi3.SchemaRef
-		Description     string
+		requestExample  map[string]interface{}
+		responseExample map[string]interface{}
+		errorResponses  map[int]*openapi3.SchemaRef
+		description     string
 		disabled        bool
 	}
 
@@ -764,10 +764,10 @@ func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...R
 		Name:           handleName(h),
 		Path:           path,
 		Method:         method,
-		GroupPath:      groupPath,
-		Handle:         h,
+		groupPath:      groupPath,
+		handle:         h,
 		chain:          o,
-		ErrorResponses: make(map[int]*openapi3.SchemaRef),
+		errorResponses: make(map[int]*openapi3.SchemaRef),
 	}
 	for _, opt := range opts {
 		opt(route)
@@ -835,7 +835,7 @@ func (o *Okapi) Handle(method, path string, h HandleFunc, opts ...RouteOption) {
 		Name:   handleName(h),
 		Path:   path,
 		Method: method,
-		Handle: h,
+		handle: h,
 		chain:  o,
 	}
 	for _, opt := range opts {
@@ -894,7 +894,7 @@ func (o *Okapi) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 		Name:   handleName(handleFunc),
 		Path:   path,
 		Method: method,
-		Handle: handleFunc,
+		handle: handleFunc,
 		chain:  o,
 	}
 	for _, opt := range opts {
@@ -1144,7 +1144,7 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 
 func (o *Okapi) addDefaultErrorResponses(op *openapi3.Operation, r *Route) {
 	// Add default error responses
-	if r.RequiresAuth {
+	if r.requiresAuth {
 		op.Responses.Set("401", &openapi3.ResponseRef{
 			Value: &openapi3.Response{
 				Description: ptr("Unauthorized"),

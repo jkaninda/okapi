@@ -81,15 +81,15 @@ func TestGroup(t *testing.T) {
 
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/api/group", nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/standard", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/group", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/standard", nil, nil, "", http.StatusOK)
 
-	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
-	assertStatus(t, "PUT", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
-	assertStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
-	assertStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
-	assertStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "PUT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 }
 func helloHandler(c Context) error {
 	slog.Info("Calling route", "path", c.Request.URL.Path, "method", c.Request.Method)

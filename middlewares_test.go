@@ -25,9 +25,11 @@
 package okapi
 
 import (
+	"encoding/base64"
 	"errors"
 	"github.com/golang-jwt/jwt/v5"
 	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -50,8 +52,9 @@ func TestJwtMiddleware(t *testing.T) {
 	o.Get("/protected", func(c Context) error {
 		user, exists := c.Get(auth.ContextKey)
 		if !exists {
-			return c.JSON(http.StatusUnauthorized, M{"error": "Unauthorized"})
+			return c.ErrorForbidden(M{"error": "Unauthorized"})
 		}
+		slog.Info("Current user", "username", user)
 		return c.JSON(http.StatusOK, M{"user": user})
 	})
 
@@ -77,6 +80,41 @@ func TestJwtMiddleware(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status 200 OK, got %d", resp.StatusCode)
 	}
+}
+func TestBasicAuth(t *testing.T) {
+	username := "user"
+	password := "password"
+	auth := BasicAuthMiddleware{Username: username, Password: password, ContextKey: "username"}
+
+	app := Default()
+	app.Use(auth.Middleware)
+
+	app.Get("/protected", func(c Context) error {
+		user, exists := c.Get(auth.ContextKey)
+		if !exists {
+			return c.ErrorForbidden(M{"error": "Unauthorized"})
+		}
+		return c.OK(user)
+	})
+
+	// Start server in background
+	go func() {
+		if err := app.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+			return
+		}
+	}()
+	defer app.Stop()
+
+	waitForServer()
+
+	credentials := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	headers := map[string]string{
+		"Authorization": "Basic " + credentials,
+	}
+
+	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
+	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
 }
 
 func mustGenerateToken(t *testing.T, secret []byte) string {

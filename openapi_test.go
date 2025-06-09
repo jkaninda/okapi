@@ -119,8 +119,8 @@ func TestOpenAPI(t *testing.T) {
 
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/docs", nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 
 }
 func anyHandler(c Context) error {

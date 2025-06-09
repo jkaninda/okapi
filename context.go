@@ -36,6 +36,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,9 +48,13 @@ type (
 		Request *http.Request
 		// Response http.ResponseWriter
 		Response Response
-		// CtxData is a key/value store for storing data in the context
-		CtxData map[string]any
-		params  *Params
+		// store is a key/value store for storing data in the context
+		store  *Store
+		params *Params
+	}
+	Store struct {
+		mu   sync.RWMutex
+		data map[string]any
 	}
 )
 
@@ -73,17 +78,33 @@ const (
 
 // ************** Accessors *************
 
+// NewStoreData creates a new instance of Store
+func NewStoreData() *Store {
+	return &Store{
+		data: make(map[string]any),
+	}
+}
+func getAs[T any](c *Context, key string) (v T, ok bool) {
+	raw, exists := c.Get(key)
+	if !exists {
+		return
+	}
+	v, ok = raw.(T)
+	return
+}
+
 // Get retrieves a value from the context's data store with thread-safe access.
 // Returns the value and a boolean indicating if the key exists.
 func (c *Context) Get(key string) (any, bool) {
-
-	val, ok := c.CtxData[key]
+	c.store.mu.RLock()
+	defer c.store.mu.RUnlock()
+	val, ok := c.store.data[key]
 	return val, ok
 }
 
 // GetTime retrieves a time.Time value from the context's data store.
 func (c *Context) GetTime(key string) (time.Time, bool) {
-	if val, ok := c.CtxData[key]; ok {
+	if val, ok := c.store.data[key]; ok {
 		if t, ok := val.(time.Time); ok {
 			return t, true
 		}
@@ -94,68 +115,61 @@ func (c *Context) GetTime(key string) (time.Time, bool) {
 // Set stores a value in the context's data store with thread-safe access.
 // Initializes the data map if it doesn't exist.
 func (c *Context) Set(key string, value any) {
-	if c.CtxData == nil {
-		c.CtxData = make(map[string]any) // Initialize map if empty
+	if c.store == nil {
+		c.store = NewStoreData()
 	}
-	c.CtxData[key] = value
+	c.store.mu.Lock()
+	c.store.data[key] = value
+	c.store.mu.Unlock()
 }
 
 // GetString retrieves a string value from the context.
 // Returns empty string if key doesn't exist or value isn't a string.
 func (c *Context) GetString(key string) string {
-	if val, ok := c.Get(key); ok {
-		if s, ok := val.(string); ok { // Type assertion to string
-			return s
-		}
+	if val, ok := getAs[string](c, key); ok {
+		return val
 	}
-	return "" // Default value if not found or wrong type
+	return ""
 }
 
 // GetBool retrieves a boolean value from the context.
 // Returns false if key doesn't exist or value isn't a bool.
 func (c *Context) GetBool(key string) bool {
-	if val, ok := c.Get(key); ok {
-		if b, ok := val.(bool); ok { // Type assertion to bool
-			return b
-		}
+	if val, ok := getAs[bool](c, key); ok {
+		return val
 	}
-	return false // Default value if not found or wrong type
+	return false
 }
 
 // GetInt retrieves an integer value from the context.
 // Returns 0 if key doesn't exist or value isn't an int.
 func (c *Context) GetInt(key string) int {
-	if val, ok := c.Get(key); ok {
-		if i, ok := val.(int); ok { // Type assertion to int
-			return i
-		}
+	if val, ok := getAs[int](c, key); ok {
+		return val
 	}
-	return 0 // Default value if not found or wrong type
+	return 0
 }
 
 // GetInt64 retrieves an int64 value from the context.
 // Returns 0 if key doesn't exist or value isn't an int64.
 func (c *Context) GetInt64(key string) int64 {
-	if val, ok := c.Get(key); ok {
-		if i, ok := val.(int64); ok { // Type assertion to int64
-			return i
-		}
+	if val, ok := getAs[int64](c, key); ok {
+		return val
 	}
 	return 0 // Default value if not found or wrong type
 }
 
 // Copy creates a shallow copy of the context with a new data map.
-// Maintains thread safety during the copy operation.
 func (c *Context) Copy() *Context {
 	newCtx := &Context{
-		Request:  c.Request,                            // Copy request reference
-		Response: c.Response,                           // Copy response reference
-		CtxData:  make(map[string]any, len(c.CtxData)), // Initialize new data map
-		params:   c.params,                             // Copy params
+		Request:  c.Request,      // Copy request reference
+		Response: c.Response,     // Copy response reference
+		store:    NewStoreData(), // Initialize new data map
+		params:   c.params,       // Copy params
 	}
 	// Copy all key-value pairs to the new context
-	for k, v := range c.CtxData {
-		newCtx.CtxData[k] = v
+	for k, v := range c.store.data {
+		newCtx.store.data[k] = v
 	}
 	return newCtx
 }
@@ -164,7 +178,7 @@ func (c *Context) Copy() *Context {
 
 // RealIP returns the client's real IP address, handling proxies.
 func (c *Context) RealIP() string {
-	return RealIP(c.Request) // Delegate to package-level RealIP function
+	return realIP(c.Request)
 }
 
 // Referer retrieves the Referer header value from the request.

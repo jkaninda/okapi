@@ -25,9 +25,13 @@
 package okapi
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -36,8 +40,8 @@ import (
 	"strings"
 )
 
-// RealIP extracts the real IP address of the client from the HTTP Request.
-func RealIP(r *http.Request) string {
+// realIP extracts the real IP address of the client from the HTTP Request.
+func realIP(r *http.Request) string {
 	// Check the X-Forwarded-For header for the client IP.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		// Take the first IP in the comma-separated list.
@@ -183,4 +187,51 @@ func LoadTLSConfig(certFile, keyFile, caFile string, clientAuth bool) (*tls.Conf
 	}
 
 	return config, nil
+}
+
+// LoadJWKSFromFile loads a JWKS (JSON Web Key Set) from a file path or a base64-encoded string.
+//
+// If the input is a base64-encoded string, it decodes it.
+// Otherwise, it treats the input as a file path and attempts to open and read it.
+// The function returns a parsed *Jwks struct or an error if any step fails.
+func LoadJWKSFromFile(jwksInput string) (*Jwks, error) {
+	// Trim surrounding whitespace from the input string
+	trimmed := strings.TrimSpace(jwksInput)
+
+	var reader io.Reader
+
+	if isBase64(trimmed) {
+		// If the input looks like base64, attempt to decode it
+		decoded, err := base64.StdEncoding.DecodeString(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode base64 JWKS content: %w", err)
+		}
+		reader = bytes.NewReader(decoded)
+	} else {
+		file, err := os.Open(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open JWKS file: %w", err)
+		}
+
+		defer func() {
+			if cerr := file.Close(); cerr != nil {
+				_, _ = fmt.Fprint(DefaultErrorWriter, "Error closing JWKS file", "error", cerr)
+			}
+		}()
+
+		reader = file
+	}
+
+	// Decode the JSON content into a Jwks struct
+	var keySet Jwks
+	if err := json.NewDecoder(reader).Decode(&keySet); err != nil {
+		return nil, fmt.Errorf("failed to decode JWKS content: %w", err)
+	}
+	return &keySet, nil
+}
+
+// isBase64 checks if the input is valid Base64-encoded content.
+func isBase64(input string) bool {
+	_, err := base64.StdEncoding.DecodeString(input)
+	return err == nil
 }

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"github.com/golang-jwt/jwt/v5"
 	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -50,8 +51,9 @@ func TestJwtMiddleware(t *testing.T) {
 	o.Get("/protected", func(c Context) error {
 		user, exists := c.Get(auth.ContextKey)
 		if !exists {
-			return c.JSON(http.StatusUnauthorized, M{"error": "Unauthorized"})
+			return c.ErrorForbidden(M{"error": "Unauthorized"})
 		}
+		slog.Info("Current user", "username", user)
 		return c.JSON(http.StatusOK, M{"user": user})
 	})
 

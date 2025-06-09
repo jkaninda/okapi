@@ -83,7 +83,7 @@ func main() {
 	adminApi := api.Group("/admin", basicAuth.Middleware) // This group will require basic authentication
 	adminApi.Put("/books/:id", adminUpdate)
 	adminApi.Post("/books", adminStore,
-		okapi.DocSummary("Store books"),
+		okapi.DocSummary("store books"),
 		okapi.DocResponse(Book{}),
 		okapi.DocRequestBody(Book{}))
 

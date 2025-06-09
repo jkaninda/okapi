@@ -346,19 +346,6 @@ o.Use(auth.Middleware)
 o.Get("/admin", adminHandler)
 ```
 
-### Std Middleware
-
-```go
-o.UseMiddleware(func(handler http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Hello Go standard HTTP middleware function")
-			handler.ServeHTTP(w, r)
-		})
-
-	})
-```
-
-
 ### CORS middleware
 
 ```go
@@ -382,6 +369,18 @@ func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
 }
 
 o.Use(customMiddleware)
+```
+
+### Std Middleware
+
+```go
+o.UseMiddleware(func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slog.Info("Hello Go standard HTTP middleware function")
+			handler.ServeHTTP(w, r)
+		})
+
+	})
 ```
 
 ---

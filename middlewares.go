@@ -40,14 +40,18 @@ import (
 // BasicAuthMiddleware is a middleware that adds basic authentication to the Request context.
 
 type (
-	// BasicAuthMiddleware provides basic authentication for routes.
-	BasicAuthMiddleware struct {
+	// BasicAuth provides basic authentication for routes.
+	BasicAuth struct {
 		Username   string
 		Password   string
 		Realm      string
 		ContextKey string // where to store the username e.g. "user", default(username)
 
 	}
+	// BasicAuthMiddleware provides basic authentication for routes
+	//
+	// deprecated, use BasicAuth
+	BasicAuthMiddleware BasicAuth
 	// Logger is a middleware that logs request details such as method, URL,
 	// client IP, status, duration, referer, and user agent.
 	Logger struct {
@@ -88,8 +92,9 @@ func LoggerMiddleware(next HandleFunc) HandleFunc {
 	}
 }
 
-// Middleware is a basic authentication middleware that checks the request's Basic Auth credentials.
-func (b *BasicAuthMiddleware) Middleware(next HandleFunc) HandleFunc {
+// Middleware is a basic authentication middleware that checks Basic Auth credentials.
+// It returns 401 Unauthorized and sets the WWW-Authenticate header on failure.
+func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
 		username, password, ok := c.Request.BasicAuth()
 		if !ok ||
@@ -110,6 +115,14 @@ func (b *BasicAuthMiddleware) Middleware(next HandleFunc) HandleFunc {
 		c.Set(contextKey, username)
 		return next(c)
 	}
+}
+
+// Middleware
+//
+// deprecate, use BasicAuth
+func (b *BasicAuthMiddleware) Middleware(next HandleFunc) HandleFunc {
+	auth := BasicAuth{Username: b.Username, Password: b.Password, ContextKey: b.ContextKey}
+	return auth.Middleware(next)
 }
 
 // Middleware is a middleware that limits the size of the request body to prevent excessive memory usage.
@@ -183,6 +196,8 @@ func (j JWTAuth) ValidateToken(c Context) (jwt.MapClaims, error) {
 	}
 	return nil, errors.New("invalid claims type")
 }
+
+// ********** Helpers **********************
 
 // extractToken pulls the token from header, query or cookie
 func (j JWTAuth) extractToken(c Context) (string, error) {

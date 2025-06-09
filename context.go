@@ -160,7 +160,6 @@ func (c *Context) GetInt64(key string) int64 {
 }
 
 // Copy creates a shallow copy of the context with a new data map.
-// Maintains thread safety during the copy operation.
 func (c *Context) Copy() *Context {
 	newCtx := &Context{
 		Request:  c.Request,      // Copy request reference
@@ -179,7 +178,7 @@ func (c *Context) Copy() *Context {
 
 // RealIP returns the client's real IP address, handling proxies.
 func (c *Context) RealIP() string {
-	return RealIP(c.Request) // Delegate to package-level RealIP function
+	return realIP(c.Request)
 }
 
 // Referer retrieves the Referer header value from the request.
@@ -383,7 +382,7 @@ func (c *Context) String(code int, data any) error {
 	return c.Text(code, data)
 }
 
-// Store writes a raw byte response with the given content type and status code.
+// Data writes a raw byte response with the given content type and status code.
 func (c *Context) Data(code int, contentType string, data []byte) error {
 	return c.writeResponse(code, contentType, func() error {
 		_, err := c.Response.Write(data)

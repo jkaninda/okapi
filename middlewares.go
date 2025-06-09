@@ -26,6 +26,7 @@ package okapi
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -60,11 +61,33 @@ type (
 	BodyLimit struct {
 		MaxBytes int64
 	}
-	// JWTAuth holds the config for JWT verification middleware.
+	// JWTAuth is a configuration struct for JWT-based authentication middleware.
+	//
+	// You must configure at least one token verification mechanism:
+	// - SecretKey: for HMAC algorithms
+	// - RsaKey: for RSA algorithms (e.g. RS256)
+	// - JwksUrl: to fetch public keys dynamically from a JWKS endpoint
+	// - JwksFile: to load static JWKS from a file or base64 string, use okapi.LoadJWKSFromFile()
+	//
+	// Fields:
 	JWTAuth struct {
-		SecretKey   []byte
-		TokenLookup string // e.g., "header:Authorization", "query:token", "cookie:jwt"
-		ContextKey  string // where to store claims in context, e.g. "user"
+		SecretKey []byte
+		// Static JWKS (JSON Web Key Set) loaded from file or base64. Optional.
+		JwksFile *Jwks
+		// URL to a remote JWKS endpoint for public key discovery. Optional.
+		JwksUrl string
+		// Expected audience ("aud") claim in the token. Optional.
+		Audience string
+		// Issuer Expected issuer ("iss") claim in the token. Optional.
+		Issuer string
+		// RsaKey Public RSA key for verifying RS256 tokens. Optional.
+		RsaKey *rsa.PublicKey
+		// Algo Expected signing algorithm (e.g., "RS256", "HS256"). Optional.
+		Algo string
+		// TokenLookup Where to extract the token from (e.g., "header:Authorization", "query:token", "cookie:jwt").
+		TokenLookup string
+		// ContextKey where validated token claims will be stored (e.g., "user").
+		ContextKey string
 	}
 )
 
@@ -119,7 +142,7 @@ func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
 
 // Middleware
 //
-// deprecate, use BasicAuth
+// deprecate, use BasicAuth.Middleware
 func (b *BasicAuthMiddleware) Middleware(next HandleFunc) HandleFunc {
 	auth := BasicAuth{Username: b.Username, Password: b.Password, ContextKey: b.ContextKey}
 	return auth.Middleware(next)
@@ -147,61 +170,41 @@ func (b BodyLimit) Middleware(next HandleFunc) HandleFunc {
 }
 
 // Middleware validates JWT tokens from the configured source
-func (j JWTAuth) Middleware(next HandleFunc) HandleFunc {
+func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
-		tokenStr, err := j.extractToken(c)
+		tokenStr, err := jwtAuth.extractToken(c)
 		if err != nil {
-			return c.String(http.StatusUnauthorized, "Missing or invalid token")
+			return c.AbortUnauthorized("Missing or invalid token")
 		}
 
-		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
-			}
-			return j.SecretKey, nil
-		})
+		keyFunc, err := jwtAuth.resolveKeyFunc()
+		if err != nil {
+			return c.AbortInternalServerError("Failed to resolve key function", "error", err.Error())
 
+		}
+		if jwtAuth.Algo != "" {
+			jwtAlgo = []string{jwtAuth.Algo}
+		}
+		token, err := jwt.Parse(tokenStr, keyFunc,
+			jwt.WithValidMethods(jwtAlgo),
+			jwt.WithAudience(jwtAuth.Audience),
+			jwt.WithIssuer(jwtAuth.Issuer))
 		if err != nil || !token.Valid {
-			return c.String(http.StatusUnauthorized, "Invalid or expired token")
+			return c.AbortUnauthorized("Invalid or expired token", "error", err.Error())
 		}
 
-		if j.ContextKey != "" && token.Claims != nil {
-			c.Set(j.ContextKey, token.Claims)
+		if jwtAuth.ContextKey != "" && token.Claims != nil {
+			c.Set(jwtAuth.ContextKey, token.Claims)
 		}
-
 		return next(c)
 	}
-}
-
-// ValidateToken checks the JWT token and returns the claims if valid
-func (j JWTAuth) ValidateToken(c Context) (jwt.MapClaims, error) {
-	tokenStr, err := j.extractToken(c)
-	if err != nil {
-		return nil, err
-	}
-
-	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return j.SecretKey, nil
-	})
-
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid or expired token")
-	}
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		return claims, nil
-	}
-	return nil, errors.New("invalid claims type")
 }
 
 // ********** Helpers **********************
 
 // extractToken pulls the token from header, query or cookie
-func (j JWTAuth) extractToken(c Context) (string, error) {
-	parts := strings.Split(j.TokenLookup, ":")
+func (jwtAuth JWTAuth) extractToken(c Context) (string, error) {
+	parts := strings.Split(jwtAuth.TokenLookup, ":")
 	if len(parts) != 2 {
 		return "", errors.New("invalid token lookup config")
 	}
@@ -234,4 +237,65 @@ func GenerateJwtToken(secret []byte, claims jwt.MapClaims, ttl time.Duration) (s
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(secret)
+}
+
+// ValidateToken checks the JWT token and returns the claims if valid
+func (jwtAuth JWTAuth) ValidateToken(c Context) (jwt.MapClaims, error) {
+	tokenStr, err := jwtAuth.extractToken(c)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return jwtAuth.SecretKey, nil
+	})
+
+	if err != nil || !token.Valid {
+		return nil, errors.New("invalid or expired token")
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		return claims, nil
+	}
+	return nil, errors.New("invalid claims type")
+}
+func (jwtAuth JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
+	if jwtAuth.JwksUrl != "" {
+		return func(token *jwt.Token) (interface{}, error) {
+			kid, ok := token.Header["kid"].(string)
+			if !ok {
+				return nil, fmt.Errorf("missing 'kid' in JWT header")
+			}
+			jwks, err := fetchJWKS(jwtAuth.JwksUrl)
+			if err != nil {
+				return nil, err
+			}
+			return jwks.getKey(kid)
+		}, nil
+	}
+
+	if jwtAuth.SecretKey != nil {
+		return func(token *jwt.Token) (interface{}, error) {
+			return jwtAuth.SecretKey, nil
+		}, nil
+	}
+	if len(jwtAuth.JwksFile.Keys) != 0 {
+		return func(token *jwt.Token) (interface{}, error) {
+			kid, ok := token.Header["kid"].(string)
+			if !ok {
+				return nil, fmt.Errorf("missing 'kid' in JWT header")
+			}
+			return jwtAuth.JwksFile.getKey(kid)
+		}, nil
+	}
+	if jwtAuth.RsaKey != nil {
+		return func(token *jwt.Token) (interface{}, error) {
+			return jwtAuth.RsaKey, nil
+		}, nil
+	}
+
+	return nil, fmt.Errorf("no JWT secret, RSA key, or JWKS URL configured")
 }

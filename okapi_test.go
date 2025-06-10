@@ -35,6 +35,8 @@ import (
 	"time"
 )
 
+var testBaseURL = "http://localhost:8080"
+
 type Book struct {
 	ID    int    `json:"id" param:"id" query:"id" form:"id"  xml:"id" max:"50" `
 	Name  string `json:"name" form:"name"  maxLength:"50"`
@@ -138,6 +140,7 @@ func TestStart(t *testing.T) {
 	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "HEAD", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
+	assertStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`

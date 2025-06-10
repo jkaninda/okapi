@@ -312,6 +312,15 @@ func WithAddr(addr string) OptionFunc {
 	}
 }
 
+// WithRenderer sets the server Renderer
+func WithRenderer(renderer Renderer) OptionFunc {
+	return func(o *Okapi) {
+		if renderer != nil {
+			o.Renderer = renderer
+		}
+	}
+}
+
 // WithOpenAPIDisabled disabled OpenAPI Docs
 func WithOpenAPIDisabled() OptionFunc {
 	return func(o *Okapi) {
@@ -355,6 +364,11 @@ func (o *Okapi) WithStrictSlash(strict bool) *Okapi {
 
 func (o *Okapi) WithDebug() *Okapi {
 	return o.apply(WithDebug())
+}
+
+// WithRenderer sets the server Renderer
+func (o *Okapi) WithRenderer(renderer Renderer) *Okapi {
+	return o.apply(WithRenderer(renderer))
 }
 
 func (o *Okapi) WithPort(port int) *Okapi {
@@ -1062,7 +1076,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 		context: &Context{
 			Request:  new(http.Request),
 			Response: &response{},
-			store:    NewStoreData(),
+			store:    newStoreData(),
 		},
 		router:             newRouter(),
 		server:             server,

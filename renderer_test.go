@@ -22,49 +22,78 @@
  *  SOFTWARE.
  */
 
-package main
+package okapi
 
 import (
-	"github.com/jkaninda/okapi"
+	"errors"
+	"fmt"
+	goutils "github.com/jkaninda/go-utils"
 	"html/template"
 	"io"
 	"net/http"
+	"os"
+	"testing"
 )
+
+var content = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hello</title>
+</head>
+<body>
+{{define "hello"}}
+<h1>{{.title}}</h1>
+<p>{{.message}}</p>
+{{end}}
+</body>
+</html>
+`
 
 type Template struct {
 	templates *template.Template
 }
 
-func (t *Template) Render(w io.Writer, name string, data interface{}, c okapi.Context) error {
+func (t *Template) Render(w io.Writer, name string, data interface{}, c Context) error {
 	return t.templates.ExecuteTemplate(w, name, data)
 }
-func main() {
-	// Example usage of the Okapi framework
-	// Create a new Okapi instance and set renderer
-	o := okapi.New().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
-	// or you can use a custom renderer function
-	/*
-		o.Renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
-			// Render the template with the provided data
-			tmpl, err := template.ParseFiles("public/views/" + name + ".html")
-			if err != nil {
-				return err
-			}
-			return tmpl.ExecuteTemplate(w, name, data)
-		})
-	*/
-	o.Get("/", func(c okapi.Context) error {
+func TestWithRenderer(t *testing.T) {
+	createTemplate(t)
+	temp := &Template{
+		templates: template.Must(template.ParseGlob("public/*.html")),
+	}
+	o := New().WithRenderer(temp)
+	o.Get("/", func(c Context) error {
 
 		title := "Greeting Page"
 		message := "Hello, World!"
-		return c.Render(http.StatusOK, "hello", okapi.M{
+		return c.Render(http.StatusOK, "hello", M{
 			"title":   title,
 			"message": message})
 	})
 
-	// Start the server
-	err := o.Start()
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer o.Stop()
+
+	waitForServer()
+
+	assertStatus(t, "GET", fmt.Sprintf("%s/", testBaseURL), nil, nil, "", http.StatusOK)
+
+}
+
+func createTemplate(t *testing.T) {
+	err := os.MkdirAll("public", 0777)
 	if err != nil {
-		return
+		t.Errorf("Failed to create public directory: %v", err)
 	}
+	err = goutils.WriteToFile("public/hello.html", content)
+	if err != nil {
+		t.Errorf("Failed to create file: %v", err)
+	}
+
 }

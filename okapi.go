@@ -312,7 +312,34 @@ func WithAddr(addr string) OptionFunc {
 	}
 }
 
-// WithRenderer sets the server Renderer
+// WithRenderer sets a custom Renderer for the server.
+//
+// This allows you to define how templates or views are rendered in response handlers.
+// You can implement the Renderer interface on your own type, or use the built-in
+// RendererFunc adapter to provide an inline function.
+//
+// Example using a custom Renderer type:
+//
+//	type Template struct {
+//		templates *template.Template
+//	}
+//
+//	func (t *Template) Render(w io.Writer, name string, data interface{}, c okapi.Context) error {
+//		return t.templates.ExecuteTemplate(w, name, data)
+//	}
+//
+// o := okapi.New().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
+//
+// Example using RendererFunc:
+//
+//	o := okapi.New().WithRenderer(okapi.RendererFunc(func(w io.Writer,
+//	name string, data interface{}, c *okapi.Context) error {
+//		tmpl, err := template.ParseFiles("public/views/" + name + ".html")
+//		if err != nil {
+//			return err
+//		}
+//		return tmpl.ExecuteTemplate(w, name, data)
+//	}))
 func WithRenderer(renderer Renderer) OptionFunc {
 	return func(o *Okapi) {
 		if renderer != nil {
@@ -366,7 +393,34 @@ func (o *Okapi) WithDebug() *Okapi {
 	return o.apply(WithDebug())
 }
 
-// WithRenderer sets the server Renderer
+// WithRenderer sets a custom Renderer for the server.
+//
+// This allows you to define how templates or views are rendered in response handlers.
+// You can implement the Renderer interface on your own type, or use the built-in
+// RendererFunc adapter to provide an inline function.
+//
+// Example using a custom Renderer type:
+//
+//	type Template struct {
+//		templates *template.Template
+//	}
+//
+//	func (t *Template) Render(w io.Writer, name string, data interface{}, c okapi.Context) error {
+//		return t.templates.ExecuteTemplate(w, name, data)
+//	}
+//
+// o := okapi.New().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
+//
+// Example using RendererFunc:
+//
+//	o := okapi.New().WithRenderer(okapi.RendererFunc(func(w io.Writer,
+//	name string, data interface{}, c *okapi.Context) error {
+//		tmpl, err := template.ParseFiles("public/views/" + name + ".html")
+//		if err != nil {
+//			return err
+//		}
+//		return tmpl.ExecuteTemplate(w, name, data)
+//	}))
 func (o *Okapi) WithRenderer(renderer Renderer) *Okapi {
 	return o.apply(WithRenderer(renderer))
 }

@@ -31,6 +31,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 )
 
@@ -86,8 +87,11 @@ func TestWithRenderer(t *testing.T) {
 }
 
 func createTemplate(t *testing.T) {
-
-	err := goutils.WriteToFile("public/hello.html", content)
+	err := os.MkdirAll("public", 0777)
+	if err != nil {
+		t.Errorf("Failed to create public directory: %v", err)
+	}
+	err = goutils.WriteToFile("public/hello.html", content)
 	if err != nil {
 		t.Errorf("Failed to create file: %v", err)
 	}

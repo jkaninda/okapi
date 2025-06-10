@@ -52,12 +52,13 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 
 ###  Why Choose Okapi?
 
-* **Easy to Learn** – Familiar Go syntax and intuitive APIs mean you’re productive in minutes.
+* **Easy to Learn** – With familiar Go syntax and intuitive APIs, you can be productive in minutes—even on your first project.
+* **Lightweight and Unopinionated** – Okapi is built from the ground up and doesn’t wrap or build on top of another framework. It gives you full control without unnecessary abstraction or bloat.
 * **Highly Flexible** – Designed to adapt to your architecture and workflow—not the other way around.
-* **Built for Production** – Lightweight, fast, and reliable under real-world load.
+* **Built for Production** – Fast, reliable, and efficient under real-world load. Okapi is optimized for performance without sacrificing developer experience.
 * **Standard Library Compatibility** - Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
-* **Automatic OpenAPI Documentation** - Generate comprehensive, first-class OpenAPI specs for every route—effortlessly keep your docs in sync with your code.
-* **Dynamic Route Management** - Instantly enable or disable routes and route groups at runtime, offering a clean, efficient alternative to commenting out code when managing your API endpoints.
+* **Automatic OpenAPI Documentation** - Generate comprehensive OpenAPI specs automatically for every route, keeping your API documentation always up to date with your code.
+* **Dynamic Route Management** - Enable or disable routes and route groups at runtime. No need to comment out code—just toggle behavior cleanly and efficiently.
 
 Ideal for:
 

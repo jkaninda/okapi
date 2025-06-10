@@ -332,7 +332,8 @@ func WithAddr(addr string) OptionFunc {
 //
 // Example using RendererFunc:
 //
-//	o := okapi.New().WithRenderer(okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
+//	o := okapi.New().WithRenderer(okapi.RendererFunc(func(w io.Writer,
+//	name string, data interface{}, c *okapi.Context) error {
 //		tmpl, err := template.ParseFiles("public/views/" + name + ".html")
 //		if err != nil {
 //			return err
@@ -412,7 +413,8 @@ func (o *Okapi) WithDebug() *Okapi {
 //
 // Example using RendererFunc:
 //
-//	o := okapi.New().WithRenderer(okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
+//	o := okapi.New().WithRenderer(okapi.RendererFunc(func(w io.Writer,
+//	name string, data interface{}, c *okapi.Context) error {
 //		tmpl, err := template.ParseFiles("public/views/" + name + ".html")
 //		if err != nil {
 //			return err

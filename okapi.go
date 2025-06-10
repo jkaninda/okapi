@@ -1076,7 +1076,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 		context: &Context{
 			Request:  new(http.Request),
 			Response: &response{},
-			store:    NewStoreData(),
+			store:    newStoreData(),
 		},
 		router:             newRouter(),
 		server:             server,

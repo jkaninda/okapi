@@ -42,7 +42,6 @@ import (
 
 type (
 	Context struct {
-		http.Handler
 		okapi *Okapi
 		// Request is the http.Request object
 		Request *http.Request
@@ -78,8 +77,8 @@ const (
 
 // ************** Accessors *************
 
-// NewStoreData creates a new instance of Store
-func NewStoreData() *Store {
+// newStoreData creates a new instance of Store
+func newStoreData() *Store {
 	return &Store{
 		data: make(map[string]any),
 	}
@@ -116,7 +115,7 @@ func (c *Context) GetTime(key string) (time.Time, bool) {
 // Initializes the data map if it doesn't exist.
 func (c *Context) Set(key string, value any) {
 	if c.store == nil {
-		c.store = NewStoreData()
+		c.store = newStoreData()
 	}
 	c.store.mu.Lock()
 	c.store.data[key] = value
@@ -164,7 +163,7 @@ func (c *Context) Copy() *Context {
 	newCtx := &Context{
 		Request:  c.Request,      // Copy request reference
 		Response: c.Response,     // Copy response reference
-		store:    NewStoreData(), // Initialize new data map
+		store:    newStoreData(), // Initialize new data map
 		params:   c.params,       // Copy params
 	}
 	// Copy all key-value pairs to the new context

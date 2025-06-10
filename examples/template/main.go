@@ -39,15 +39,9 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c okapi.Co
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 func main() {
-	t := &Template{
-		templates: template.Must(template.ParseGlob("public/views/*.html")),
-	}
 	// Example usage of the Okapi framework
-	// Create a new Okapi instance
-	o := okapi.Default()
-
-	// Set the renderer
-	o.Renderer = t
+	// Create a new Okapi instance and set renderer
+	o := okapi.New().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
 	// or you can use a custom renderer function
 	/*
 		o.Renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {

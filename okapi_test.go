@@ -203,7 +203,7 @@ func TestWithServer(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(DefaultWriter, opts))
 	cors := Cors{AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}, AllowedOrigins: []string{"*"}}
 	o := New()
-	o.With(WithPort(81), WithIdleTimeout(15),
+	o.With(WithPort(8081), WithIdleTimeout(15),
 		WithWriteTimeout(10), WithReadTimeout(15),
 		WithMaxMultipartMemory(20>>10), WithCors(cors),
 		WithLogger(logger))
@@ -227,13 +227,13 @@ func TestWithServer(t *testing.T) {
 	}()
 	defer o.Stop()
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:81", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
 
 }
 func TestWithAddr(t *testing.T) {
 
 	o := New()
-	o.With(WithAddr(":81"), WithStrictSlash(true)).DisableAccessLog()
+	o.With(WithAddr(":8081"), WithStrictSlash(true)).DisableAccessLog()
 
 	o.Get("/", func(c Context) error { return c.OK(Book{}) })
 	go func() {
@@ -243,13 +243,13 @@ func TestWithAddr(t *testing.T) {
 	}()
 	defer o.Stop()
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:81", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
 
 }
 func TestCustomConfig(t *testing.T) {
 	router := mux.NewRouter()
 	o := New()
-	o.With(WithAddr(":81"),
+	o.With(WithAddr(":8081"),
 		WithStrictSlash(true),
 		WithOpenAPIDisabled(),
 		WithMuxRouter(router),
@@ -264,8 +264,8 @@ func TestCustomConfig(t *testing.T) {
 	}()
 	defer o.Stop()
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:81", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:81/openapi.json", nil, nil, "", http.StatusNotFound)
+	assertStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8081/openapi.json", nil, nil, "", http.StatusNotFound)
 
 }
 func assertStatus(t *testing.T, method, url string,

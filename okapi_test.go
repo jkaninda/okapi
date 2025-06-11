@@ -153,6 +153,7 @@ func TestStart(t *testing.T) {
 	assertStatus(t, "CONNECT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 
 	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
+	assertStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)
 
 	// NoRoute and NotMethod
 	assertStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)

@@ -27,6 +27,7 @@ package okapi
 import (
 	"errors"
 	"fmt"
+	"github.com/gorilla/mux"
 	"io"
 	"log/slog"
 	"net/http"
@@ -80,6 +81,8 @@ func TestStart(t *testing.T) {
 	o.Delete("hello", helloHandler)
 	o.Options("hello", helloHandler)
 	o.Head("hello", helloHandler)
+	o.Trace("hello", helloHandler)
+	o.Connect("hello", helloHandler)
 
 	// Go's standard http.HandlerFunc
 	o.HandleStd("GET", "/standard", func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +149,9 @@ func TestStart(t *testing.T) {
 	assertStatus(t, "PATCH", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "HEAD", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "TRACE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "CONNECT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+
 	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 
 	// NoRoute and NotMethod
@@ -185,6 +191,81 @@ func TestStart(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("Expected status 201, got %d", resp.StatusCode)
 	}
+}
+func TestWithServer(t *testing.T) {
+	opts := &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}
+
+	// Initialize the appropriate handler based on format preference
+
+	logger := slog.New(slog.NewJSONHandler(DefaultWriter, opts))
+	cors := Cors{AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}, AllowedOrigins: []string{"*"}}
+	o := New()
+	o.With(WithPort(81), WithIdleTimeout(15),
+		WithWriteTimeout(10), WithReadTimeout(15),
+		WithMaxMultipartMemory(20>>10), WithCors(cors),
+		WithLogger(logger))
+
+	o.UseMiddleware(func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slog.Info("Hello Go standard HTTP middleware function")
+			handler.ServeHTTP(w, r)
+		})
+
+	})
+	o.Get("/", func(c Context) error {
+		c.Response.BodyBytesSent()
+
+		return c.OK(Book{})
+	})
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer o.Stop()
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:81", nil, nil, "", http.StatusOK)
+
+}
+func TestWithAddr(t *testing.T) {
+
+	o := New()
+	o.With(WithAddr(":81"), WithStrictSlash(true)).DisableAccessLog()
+
+	o.Get("/", func(c Context) error { return c.OK(Book{}) })
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer o.Stop()
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:81", nil, nil, "", http.StatusOK)
+
+}
+func TestCustomConfig(t *testing.T) {
+	router := mux.NewRouter()
+	o := New()
+	o.With(WithAddr(":81"),
+		WithStrictSlash(true),
+		WithOpenAPIDisabled(),
+		WithMuxRouter(router),
+		WithMux(router)).WithDebug().
+		WithOpenAPIDisabled()
+
+	o.Get("/", func(c Context) error { return c.OK(Book{}) })
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer o.Stop()
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:81", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:81/openapi.json", nil, nil, "", http.StatusNotFound)
+
 }
 func assertStatus(t *testing.T, method, url string,
 	headers map[string]string,

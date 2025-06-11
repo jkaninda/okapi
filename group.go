@@ -149,6 +149,11 @@ func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return g.handle(TRACE, path, h, opts...)
 }
 
+// Connect registers a CONNECT route within the group with the given path and handler.
+func (g *Group) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(CONNECT, path, h, opts...)
+}
+
 // Group creates a nested subgroup with an additional path segment and optional middlewares.
 // The new group inherits all middlewares from its parent group.
 func (g *Group) Group(path string, middlewares ...Middleware) *Group {

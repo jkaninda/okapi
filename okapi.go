@@ -187,6 +187,15 @@ func WithMux(mux *mux.Router) OptionFunc {
 	}
 }
 
+// WithMuxRouter sets the router for the Okapi instance
+func WithMuxRouter(router *mux.Router) OptionFunc {
+	return func(o *Okapi) {
+		if router != nil {
+			o.router.mux = router
+		}
+	}
+}
+
 // WithServer sets the HTTP server for the Okapi instance
 func WithServer(server *http.Server) OptionFunc {
 	return func(o *Okapi) {
@@ -392,6 +401,12 @@ func (o *Okapi) WithStrictSlash(strict bool) *Okapi {
 
 func (o *Okapi) WithDebug() *Okapi {
 	return o.apply(WithDebug())
+}
+
+// WithOpenAPIDisabled disabled OpenAPI Docs
+func (o *Okapi) WithOpenAPIDisabled() *Okapi {
+	return o.apply(WithOpenAPIDisabled())
+
 }
 
 // WithRenderer sets a custom Renderer for the server.

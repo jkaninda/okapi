@@ -116,7 +116,58 @@ func TestBasicAuth(t *testing.T) {
 	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
 	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
 }
+func TestStdMiddleware(t *testing.T) {
+	o := Default()
+	o.UseMiddleware(func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slog.Info("Hello Go standard HTTP middleware function")
+			handler.ServeHTTP(w, r)
+		})
 
+	})
+	o.Get("/", func(c Context) error {
+		return c.JSON(http.StatusOK, M{"hello": "world"})
+	})
+	api := o.Group("/api")
+	api.UseMiddleware(func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			slog.Info("Hello Go standard HTTP Group middleware function")
+
+			handler.ServeHTTP(w, r)
+		})
+	})
+	api.Get("/", func(c Context) error {
+		return c.JSON(http.StatusOK, M{"hello": "world"})
+	})
+	o.Handle("GET", "hello", func(c Context) error {
+		return c.JSON(http.StatusOK, M{"hello": "world"})
+	})
+	o.HandleStd("POST", "hello", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, err := w.Write([]byte("hello world"))
+		if err != nil {
+			return
+		}
+	})
+
+	slog.Info("Route count", "count", len(o.Routes()))
+	slog.Info("Middleware count", "count", len(o.Middlewares()))
+	// Start server in background
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+			return
+		}
+	}()
+	defer o.Stop()
+
+	waitForServer()
+
+	assertStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusCreated)
+}
 func mustGenerateToken(t *testing.T, secret []byte) string {
 	t.Helper()
 	claims := jwt.MapClaims{

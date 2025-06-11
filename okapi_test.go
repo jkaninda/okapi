@@ -52,6 +52,8 @@ var (
 		{ID: 4, Name: "Go Web Programming", Price: 35, Qty: 60},
 		{ID: 5, Name: "Go Design Patterns", Price: 45, Qty: 80},
 	}
+	pageNotFound     = "Page non trouvée"
+	methodNotAllowed = "Cette Methode n'est pas autorisée"
 )
 
 func TestStart(t *testing.T) {
@@ -61,6 +63,12 @@ func TestStart(t *testing.T) {
 		Realm:    "Restricted Area",
 	}
 	o := Default()
+	o.NoRoute(func(c Context) error {
+		return c.String(http.StatusNotFound, pageNotFound)
+	})
+	o.NoMethod(func(c Context) error {
+		return c.String(http.StatusMethodNotAllowed, methodNotAllowed)
+	})
 
 	o.Get("/", func(c Context) error {
 		return c.OK(M{"message": "Welcome to Okapi!"})
@@ -119,7 +127,6 @@ func TestStart(t *testing.T) {
 	defer o.Stop()
 
 	waitForServer()
-
 	assertStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/books", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/v1/books/1", nil, nil, "", http.StatusOK)
@@ -140,7 +147,13 @@ func TestStart(t *testing.T) {
 	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "HEAD", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
+
+	// NoRoute and NotMethod
 	assertStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)
+	assertResponse(t, "GET", fmt.Sprintf("%s/custom", testBaseURL), nil, nil, "", http.StatusNotFound, pageNotFound)
+	assertResponse(t, "POST", fmt.Sprintf("%s/standard", testBaseURL),
+		nil, nil, "",
+		http.StatusMethodNotAllowed, methodNotAllowed)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`
@@ -203,6 +216,50 @@ func assertStatus(t *testing.T, method, url string,
 
 	if resp.StatusCode != expected {
 		t.Errorf("Expected status %d for %s %s, got %d", expected, method, url, resp.StatusCode)
+	}
+}
+func assertResponse(t *testing.T, method, url string,
+	headers map[string]string,
+	body io.Reader,
+	contentType string,
+	expectedStatus int,
+	expectedBody string,
+) {
+	t.Helper()
+
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		t.Fatalf("Failed to create %s request to %s: %v", method, url, err)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to make %s request to %s: %v", method, url, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("Failed to close response body: %v", err)
+		}
+	}()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+	actualBody := string(bodyBytes)
+
+	if resp.StatusCode != expectedStatus {
+		t.Errorf("Expected status %d for %s %s, got %d", expectedStatus, method, url, resp.StatusCode)
+	}
+
+	if expectedBody != "" && actualBody != expectedBody {
+		t.Errorf("Expected body:\n%s\nGot:\n%s", expectedBody, actualBody)
 	}
 }
 

@@ -122,7 +122,7 @@ type (
 	// Response interface defines the methods for writing HTTP responses.
 	Response interface {
 		http.ResponseWriter
-		BodyBytesSent() int
+		BodyBytesSent() int64
 		Status() int
 		Close()
 		Hijack() (net.Conn, *bufio.ReadWriter, error)
@@ -518,7 +518,7 @@ func (r *response) WriteHeader(statusCode int) {
 }
 
 // BodyBytesSent returns the number of bytes sent in the response body.
-func (r *response) BodyBytesSent() int {
+func (r *response) BodyBytesSent() int64 {
 	if rw, ok := r.writer.(Response); ok {
 		return rw.BodyBytesSent()
 	}

@@ -36,7 +36,6 @@ type ErrorResponse struct {
 	Message   string    `json:"message"`
 	Details   string    `json:"details,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
-	Path      string    `json:"path,omitempty"`
 }
 
 // ValidationError represents validation error details
@@ -78,7 +77,6 @@ func (c *Context) AbortWithError(code int, msg string, err error) error {
 		Message:   msg,
 		Details:   details,
 		Timestamp: time.Now(),
-		Path:      c.Request.URL.Path,
 	})
 }
 
@@ -94,7 +92,6 @@ func (c *Context) AbortWithStatus(code int, message string) error {
 		Message:   http.StatusText(code),
 		Details:   message,
 		Timestamp: time.Now(),
-		Path:      c.Request.URL.Path,
 	})
 }
 
@@ -333,7 +330,6 @@ func (c *Context) AbortValidationErrors(errors []ValidationError, msg ...string)
 			Code:      http.StatusUnprocessableEntity,
 			Message:   message,
 			Timestamp: time.Now(),
-			Path:      c.Request.URL.Path,
 		},
 		Errors: errors,
 	})

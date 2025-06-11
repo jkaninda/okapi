@@ -24,7 +24,50 @@
 
 package okapi
 
-import "testing"
+import (
+	"errors"
+	"net/http"
+	"testing"
+)
+
+type User struct {
+	Name string `json:"name" required:"true"`
+}
 
 func TestContext_Bind(t *testing.T) {
+	o := Default()
+
+	o.Get("/", func(c Context) error {
+		return c.XML(http.StatusOK, books)
+	})
+	o.Get("/hello", func(c Context) error {
+		return c.Text(http.StatusOK, "Hello World!")
+	})
+	o.Post("/hello", func(c Context) error {
+		user := User{}
+		if err := c.Bind(&user); err != nil {
+			return c.AbortBadRequest("Bad requests")
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Put("/hello", func(c Context) error {
+		user := User{}
+		if err := c.B(&user); err != nil {
+			return c.AbortBadRequest("Bad requests")
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Get("/hello", func(c Context) error {
+		return c.JSON(http.StatusOK, books)
+	})
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer o.Stop()
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusBadRequest)
+
 }

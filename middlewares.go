@@ -85,6 +85,7 @@ type (
 		// Algo Expected signing algorithm (e.g., "RS256", "HS256"). Optional.
 		Algo string
 		// TokenLookup Where to extract the token from (e.g., "header:Authorization", "query:token", "cookie:jwt").
+		// default: (header:Authorization)
 		TokenLookup string
 		// ContextKey where validated token claims will be stored (e.g., "user").
 		ContextKey string
@@ -204,7 +205,11 @@ func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
 
 // extractToken pulls the token from header, query or cookie
 func (jwtAuth JWTAuth) extractToken(c Context) (string, error) {
-	parts := strings.Split(jwtAuth.TokenLookup, ":")
+	tokenLookup := jwtAuth.TokenLookup
+	if tokenLookup == "" {
+		tokenLookup = "header:Authorization"
+	}
+	parts := strings.Split(tokenLookup, ":")
 	if len(parts) != 2 {
 		return "", errors.New("invalid token lookup config")
 	}

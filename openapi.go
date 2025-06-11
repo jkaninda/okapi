@@ -408,7 +408,7 @@ func DocErrorResponse(status int, v any) RouteOption {
 			return
 		}
 		// Generate a schema from the provided Go value and assign it to the error response
-		doc.errorResponses[status] = reflectToSchemaWithInfo(v).Schema
+		doc.responses[status] = reflectToSchemaWithInfo(v).Schema
 	}
 }
 
@@ -540,8 +540,8 @@ func (o *Okapi) buildOpenAPISpec() {
 			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
 		}
 
-		if len(r.errorResponses) != 0 {
-			for key, resp := range r.errorResponses {
+		if len(r.responses) != 0 {
+			for key, resp := range r.responses {
 				schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
 				apiResponse := &openapi3.Response{
 					Description: ptr(http.StatusText(key)),

@@ -149,6 +149,11 @@ func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return g.handle(TRACE, path, h, opts...)
 }
 
+// Connect registers a CONNECT route within the group with the given path and handler.
+func (g *Group) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
+	return g.handle(CONNECT, path, h, opts...)
+}
+
 // Group creates a nested subgroup with an additional path segment and optional middlewares.
 // The new group inherits all middlewares from its parent group.
 func (g *Group) Group(path string, middlewares ...Middleware) *Group {
@@ -180,10 +185,7 @@ func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http
 // HandleHTTP registers a standard http.Handler and wraps it with the group's middleware chain.
 func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOption) {
 	// Convert standard handler to HandleFunc
-	converted := func(c Context) error {
-		h.ServeHTTP(c.Response, c.Request)
-		return nil
-	}
+	converted := g.okapi.wrapHTTPHandler(h)
 	// Apply group middleware
 	for i := len(g.middlewares) - 1; i >= 0; i-- {
 		converted = g.middlewares[i](converted)

@@ -68,6 +68,8 @@ func TestGroup(t *testing.T) {
 	api.Delete("hello", helloHandler)
 	api.Options("hello", helloHandler)
 	api.Head("hello", helloHandler)
+	api.Trace("hello", helloHandler)
+	api.Connect("hello", helloHandler)
 
 	api.Get("/group", func(c Context) error {
 		slog.Info("Calling route", "path", c.Request.URL.Path)
@@ -92,6 +94,8 @@ func TestGroup(t *testing.T) {
 	assertStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "TRACE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	assertStatus(t, "CONNECT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "HEAD", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 }

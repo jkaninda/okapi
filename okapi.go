@@ -83,7 +83,8 @@ type (
 		openAPI            *OpenAPI
 		openApiEnabled     bool
 		maxMultipartMemory int64 // Maximum memory for multipart forms
-
+		noRoute            HandleFunc
+		noMethod           HandleFunc
 	}
 
 	Router struct {
@@ -114,7 +115,7 @@ type (
 		deprecated      bool
 		requestExample  map[string]interface{}
 		responseExample map[string]interface{}
-		errorResponses  map[int]*openapi3.SchemaRef
+		responses       map[int]*openapi3.SchemaRef
 		description     string
 		disabled        bool
 	}
@@ -122,7 +123,7 @@ type (
 	// Response interface defines the methods for writing HTTP responses.
 	Response interface {
 		http.ResponseWriter
-		BodyBytesSent() int
+		BodyBytesSent() int64
 		Status() int
 		Close()
 		Hijack() (net.Conn, *bufio.ReadWriter, error)
@@ -182,6 +183,15 @@ func WithMux(mux *mux.Router) OptionFunc {
 	return func(o *Okapi) {
 		if mux != nil {
 			o.router.mux = mux
+		}
+	}
+}
+
+// WithMuxRouter sets the router for the Okapi instance
+func WithMuxRouter(router *mux.Router) OptionFunc {
+	return func(o *Okapi) {
+		if router != nil {
+			o.router.mux = router
 		}
 	}
 }
@@ -393,6 +403,12 @@ func (o *Okapi) WithDebug() *Okapi {
 	return o.apply(WithDebug())
 }
 
+// WithOpenAPIDisabled disabled OpenAPI Docs
+func (o *Okapi) WithOpenAPIDisabled() *Okapi {
+	return o.apply(WithOpenAPIDisabled())
+
+}
+
 // WithRenderer sets a custom Renderer for the server.
 //
 // This allows you to define how templates or views are rendered in response handlers.
@@ -518,7 +534,7 @@ func (r *response) WriteHeader(statusCode int) {
 }
 
 // BodyBytesSent returns the number of bytes sent in the response body.
-func (r *response) BodyBytesSent() int {
+func (r *response) BodyBytesSent() int64 {
 	if rw, ok := r.writer.(Response); ok {
 		return rw.BodyBytesSent()
 	}
@@ -672,11 +688,12 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	if o.openApiEnabled {
 		o.WithOpenAPIDocs()
 	}
+	printBanner()
 	o.server = server
 	server.Handler = o
 	o.router.mux.StrictSlash(o.strictSlash)
 	o.context.okapi = o
-	printBanner()
+	o.applyCommon()
 	_, _ = fmt.Fprintf(DefaultWriter, "Starting HTTP server at %s\n", o.server.Addr)
 	// Serve with TLS if configured
 	if server.TLSConfig != nil {
@@ -829,13 +846,13 @@ func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...R
 	}
 	path = normalizeRoutePath(path)
 	route := &Route{
-		Name:           handleName(h),
-		Path:           path,
-		Method:         method,
-		groupPath:      groupPath,
-		handle:         h,
-		chain:          o,
-		errorResponses: make(map[int]*openapi3.SchemaRef),
+		Name:      handleName(h),
+		Path:      path,
+		Method:    method,
+		groupPath: groupPath,
+		handle:    h,
+		chain:     o,
+		responses: make(map[int]*openapi3.SchemaRef),
 	}
 	for _, opt := range opts {
 		opt(route)
@@ -897,36 +914,7 @@ func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...R
 //	    return nil
 //	})
 func (o *Okapi) Handle(method, path string, h HandleFunc, opts ...RouteOption) {
-	path = normalizeRoutePath(path)
-
-	route := &Route{
-		Name:   handleName(h),
-		Path:   path,
-		Method: method,
-		handle: h,
-		chain:  o,
-	}
-	for _, opt := range opts {
-		opt(route)
-	}
-	o.routes = append(o.routes, route)
-
-	handler := o.Next(h)
-
-	// Register main method handler
-	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		ctx := Context{
-			Request:  r,
-			Response: &response{writer: w},
-			okapi:    o,
-		}
-		if err := handler(ctx); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}).Methods(method)
-	// Register OPTIONS handler only once per path if CORS is enabled
-	o.registerOptionsHandler(path)
-
+	o.addRoute(method, path, "", h, opts...)
 }
 
 // HandleHTTP registers a new route using a standard http.Handler.
@@ -949,46 +937,7 @@ func (o *Okapi) Handle(method, path string, h HandleFunc, opts ...RouteOption) {
 //
 //	okapi.HandleHTTP("GET", "/static", http.FileServer(http.Dir("./public")))
 func (o *Okapi) HandleHTTP(method, path string, h http.Handler, opts ...RouteOption) {
-	path = normalizeRoutePath(path)
-
-	// Wrap http.Handler into HandleFunc signature
-	handleFunc := func(ctx Context) error {
-		h.ServeHTTP(ctx.Response, ctx.Request)
-		return nil
-	}
-
-	// Register like in HandleFunc
-	route := &Route{
-		Name:   handleName(handleFunc),
-		Path:   path,
-		Method: method,
-		handle: handleFunc,
-		chain:  o,
-	}
-	for _, opt := range opts {
-		opt(route)
-	}
-	o.routes = append(o.routes, route)
-
-	handler := o.Next(handleFunc)
-
-	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		ctx := Context{
-			Request:  r,
-			Response: &response{writer: w},
-			okapi:    o,
-		}
-		if route.disabled {
-			http.Error(w, "404 page not found", http.StatusNotFound)
-			return
-		}
-		if err := handler(ctx); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}).Methods(method)
-
-	// Register OPTIONS handler for CORS
-	o.registerOptionsHandler(path)
+	o.addRoute(method, path, "", o.wrapHTTPHandler(h), opts...)
 }
 
 // HandleStd is a convenience method for registering handlers using the standard
@@ -1166,6 +1115,42 @@ func (o *Okapi) apply(options ...OptionFunc) *Okapi {
 	}
 	return o
 }
+func (o *Okapi) applyCommon() {
+	if o.noRoute != nil {
+		o.router.mux.NotFoundHandler = o.wrapHandleFunc(o.noRoute)
+	}
+	if o.noMethod != nil {
+		o.router.mux.MethodNotAllowedHandler = o.wrapHandleFunc(o.noMethod)
+	}
+}
+
+// NoRoute sets a custom handler to be executed when no matching route is found.
+//
+// This function allows you to define a fallback handler for unmatched routes (404).
+// It is useful for returning custom error pages or JSON responses when a route doesn't exist.
+//
+// Example:
+//
+//	o.NoRoute(func(c okapi.Context) error {
+//		return c.AbortNotFound("Custom 404 - Not found")
+//	})
+func (o *Okapi) NoRoute(h HandleFunc) {
+	o.noRoute = h
+}
+
+// NoMethod sets a custom handler to be executed when the HTTP method is not allowed.
+//
+// This function is triggered when the request path exists but the method (e.g., POST, GET) is not allowed.
+// It enables you to define a consistent response for unsupported HTTP methods (405).
+//
+// Example:
+//
+//	o.NoMethod(func(c okapi.Context) error {
+//	 return c.AbortMethodNotAllowed("Custom 405 - Method Not Allowed")
+//	})
+func (o *Okapi) NoMethod(h HandleFunc) {
+	o.noMethod = h
+}
 
 // handleName returns the name of the handler function.
 func handleName(h HandleFunc) string {
@@ -1229,4 +1214,24 @@ func (o *Okapi) addDefaultErrorResponses(op *openapi3.Operation, r *Route) {
 }
 func printBanner() {
 	fmt.Println(banner)
+}
+func (o *Okapi) wrapHandleFunc(h HandleFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := Context{
+			Request:  r,
+			Response: &response{writer: w},
+			okapi:    o,
+		}
+		if err := h(ctx); err != nil {
+			o.logger.Error("handler error", slog.String("error", err.Error()))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+
+		}
+	})
+}
+func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
+	return func(ctx Context) error {
+		h.ServeHTTP(ctx.Response, ctx.Request)
+		return nil
+	}
 }

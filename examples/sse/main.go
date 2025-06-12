@@ -65,7 +65,6 @@ func main() {
 	o.Get("/events", func(c okapi.Context) error {
 		// Simulate sending events (you can replace this with real data)
 		for i := 0; i < 10; i++ {
-			
 			data := okapi.M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
 			event := "message"
 

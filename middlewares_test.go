@@ -86,8 +86,6 @@ func TestJwtMiddleware(t *testing.T) {
 	defer o.Stop()
 
 	waitForServer()
-	// Wait briefly for the server to start
-	//time.Sleep(100 * time.Millisecond)
 	headers := map[string]string{
 		"Authorization": "Bearer " + token,
 	}
@@ -95,19 +93,6 @@ func TestJwtMiddleware(t *testing.T) {
 
 	headers["Authorization"] = "Bearer " + adminToken
 	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
-
-	// Make request
-	//resp := mustDoRequest(t, "http://localhost:8080/protected", adminToken)
-	//defer func(Body io.ReadCloser) {
-	//	err := Body.Close()
-	//	if err != nil {
-	//		t.Error("Failed to close response body")
-	//	}
-	//}(resp.Body)
-	//
-	//if resp.StatusCode != http.StatusOK {
-	//	t.Fatalf("Expected status 200 OK, got %d", resp.StatusCode)
-	//}
 }
 func TestBasicAuth(t *testing.T) {
 	username := "user"
@@ -206,19 +191,4 @@ func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string
 		t.Fatal("Generated token is empty")
 	}
 	return token
-}
-
-func mustDoRequest(t *testing.T, url, token string) *http.Response {
-	t.Helper()
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("Failed to make request: %v", err)
-	}
-	return resp
 }

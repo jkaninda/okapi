@@ -131,7 +131,10 @@ func main() {
 
 	// Create a new group with a base path for admin routes and apply jwt auth middleware
 	adminApiV2 := v2.Group("/admin", jwtAuth.Middleware).WithBearerAuth() // This group will require jwt authentication
-	adminApiV2.Put("/books/:id", adminUpdate, okapi.DocResponse(Book{}), okapi.DocRequestBody(Book{}), okapi.DocBearerAuth())
+	adminApiV2.Put("/books/:id", adminUpdate,
+		okapi.DocResponse(Book{}),
+		okapi.DocRequestBody(Book{}),
+		okapi.DocBearerAuth())
 	adminApiV2.Post("/books", adminCreateBook,
 		okapi.DocSummary("create a book"),
 		okapi.DocResponse(Book{}),

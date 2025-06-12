@@ -101,11 +101,11 @@ type (
 		//	mapClaims, ok := claims.(jwt.MapClaims)
 		//	if !ok {
 		//	return errors.New("invalid claims type")
-		//}
+		// }
 		//	role, ok := mapClaims["role"].(string)
 		//	if !ok || role != "admin" {
 		//	return errors.New("unauthorized role")
-		//}
+		// }
 		//	return nil
 		// },
 		// }

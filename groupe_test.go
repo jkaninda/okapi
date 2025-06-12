@@ -42,6 +42,10 @@ func TestGroup(t *testing.T) {
 			return next(c)
 		}
 	})
+	test := o.Group("/test").Enable()
+	test.BasePath()
+	_okapi := test.okapi
+	_okapi.With(WithDebug())
 	// Go's standard HTTP middleware function
 	api.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
-	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -276,7 +275,6 @@ func TestCustomConfig(t *testing.T) {
 		WithMuxRouter(router),
 		WithMux(router)).WithDebug().
 		WithOpenAPIDisabled()
-	o.With().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/*.html"))})
 
 	o.Get("/", func(c Context) error { return c.OK(Book{}) })
 	go func() {

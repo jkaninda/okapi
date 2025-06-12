@@ -89,6 +89,27 @@ type (
 		TokenLookup string
 		// ContextKey where validated token claims will be stored (e.g., "user").
 		ContextKey string
+		// ValidateRole Optional role validation function
+		//
+		// Example:
+		//
+		//	auth := JWTAuth{
+		//	SecretKey:   []byte("supersecret"),
+		//	TokenLookup: "header:Authorization",
+		//	ContextKey:  "user",
+		//	ValidateRole: func(claims jwt.Claims) error {
+		//	mapClaims, ok := claims.(jwt.MapClaims)
+		//	if !ok {
+		//	return errors.New("invalid claims type")
+		//}
+		//	role, ok := mapClaims["role"].(string)
+		//	if !ok || role != "admin" {
+		//	return errors.New("unauthorized role")
+		//}
+		//	return nil
+		// },
+		// }
+		ValidateRole func(claims jwt.Claims) error
 	}
 )
 
@@ -175,7 +196,7 @@ func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
 		tokenStr, err := jwtAuth.extractToken(c)
 		if err != nil {
-			return c.AbortUnauthorized("Missing or invalid token")
+			return c.AbortForbidden("Missing or invalid token")
 		}
 
 		keyFunc, err := jwtAuth.resolveKeyFunc()
@@ -193,7 +214,11 @@ func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		if err != nil || !token.Valid {
 			return c.AbortUnauthorized("Invalid or expired token", "error", err.Error())
 		}
-
+		if jwtAuth.ValidateRole != nil {
+			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
+				return c.AbortUnauthorized("Insufficient role", "error", err.Error())
+			}
+		}
 		if jwtAuth.ContextKey != "" && token.Claims != nil {
 			c.Set(jwtAuth.ContextKey, token.Claims)
 		}

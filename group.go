@@ -29,6 +29,7 @@ import "net/http"
 type Group struct {
 	basePath    string
 	disabled    bool
+	bearerAuth  bool
 	middlewares []Middleware
 	okapi       *Okapi
 }
@@ -49,6 +50,13 @@ func newGroup(basePath string, disabled bool, okapi *Okapi, middlewares ...Middl
 // Returns the Group to allow method chaining.
 func (g *Group) Disable() *Group {
 	g.disabled = true
+	return g
+}
+
+// WithBearerAuth marks the Group as requiring Bearer authentication for its routes.
+// Returns the Group to allow method chaining.
+func (g *Group) WithBearerAuth() *Group {
+	g.bearerAuth = true
 	return g
 }
 
@@ -106,6 +114,9 @@ func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Rou
 
 // handle is a helper method that delegates to add with the given HTTP method.
 func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *Route {
+	if g.bearerAuth {
+		opts = append(opts, DocBearerAuth())
+	}
 	return g.add(method, path, h, opts...)
 }
 

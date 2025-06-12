@@ -376,6 +376,19 @@ func (c *Context) Text(code int, v any) error {
 	})
 }
 
+// SSEvent writes SSE response.
+func (c *Context) SSEvent(name string, message any) error {
+	msg := Message{
+		Event: name,
+		Data:  message,
+	}
+	_, err := msg.Send(c.Response)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // String is an alias for Text for convenience.
 func (c *Context) String(code int, data any) error {
 	return c.Text(code, data)

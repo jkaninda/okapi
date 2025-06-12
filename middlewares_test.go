@@ -28,7 +28,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"github.com/golang-jwt/jwt/v5"
-	"io"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -41,10 +40,31 @@ func TestJwtMiddleware(t *testing.T) {
 		SecretKey:   []byte("supersecret"),
 		TokenLookup: "header:Authorization",
 		ContextKey:  "user",
+		ValidateRole: func(claims jwt.Claims) error {
+			mapClaims, ok := claims.(jwt.MapClaims)
+			if !ok {
+				return errors.New("invalid claims type")
+			}
+			role, ok := mapClaims["role"].(string)
+			if !ok || role != "admin" {
+				return errors.New("unauthorized role")
+			}
+			return nil
+		},
 	}
-
+	adminClaims := jwt.MapClaims{
+		"sub":  "12345",
+		"role": "admin",
+		"exp":  time.Now().Add(2 * time.Hour).Unix(),
+	}
+	Claims := jwt.MapClaims{
+		"sub":  "12345",
+		"role": "user",
+		"exp":  time.Now().Add(2 * time.Hour).Unix(),
+	}
 	// Generate token
-	token := mustGenerateToken(t, auth.SecretKey)
+	adminToken := mustGenerateToken(t, auth.SecretKey, adminClaims)
+	token := mustGenerateToken(t, auth.SecretKey, Claims)
 
 	// Setup server
 	o := Default()
@@ -65,21 +85,29 @@ func TestJwtMiddleware(t *testing.T) {
 	}()
 	defer o.Stop()
 
+	waitForServer()
 	// Wait briefly for the server to start
-	time.Sleep(100 * time.Millisecond)
+	//time.Sleep(100 * time.Millisecond)
+	headers := map[string]string{
+		"Authorization": "Bearer " + token,
+	}
+	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusUnauthorized)
+
+	headers["Authorization"] = "Bearer " + adminToken
+	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
 
 	// Make request
-	resp := mustDoRequest(t, "http://localhost:8080/protected", token)
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			t.Error("Failed to close response body")
-		}
-	}(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status 200 OK, got %d", resp.StatusCode)
-	}
+	//resp := mustDoRequest(t, "http://localhost:8080/protected", adminToken)
+	//defer func(Body io.ReadCloser) {
+	//	err := Body.Close()
+	//	if err != nil {
+	//		t.Error("Failed to close response body")
+	//	}
+	//}(resp.Body)
+	//
+	//if resp.StatusCode != http.StatusOK {
+	//	t.Fatalf("Expected status 200 OK, got %d", resp.StatusCode)
+	//}
 }
 func TestBasicAuth(t *testing.T) {
 	username := "user"
@@ -168,13 +196,8 @@ func TestStdMiddleware(t *testing.T) {
 	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusCreated)
 }
-func mustGenerateToken(t *testing.T, secret []byte) string {
+func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string {
 	t.Helper()
-	claims := jwt.MapClaims{
-		"sub":  "12345",
-		"role": "admin",
-		"exp":  time.Now().Add(2 * time.Hour).Unix(),
-	}
 	token, err := GenerateJwtToken(secret, claims, 2*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to generate JWT token: %v", err)

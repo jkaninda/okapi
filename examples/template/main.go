@@ -50,7 +50,7 @@ func main() {
 	// or you can use a custom renderer function
 
 	/*
-		o.Renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
+		o.renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
 			// Render the template with the provided data
 			tmpl, err := template.ParseFiles("public/views/" + name + ".html")
 			if err != nil {

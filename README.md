@@ -588,7 +588,6 @@ o.With().WithRenderer(&Template{templates: template.Must(template.ParseGlob("pub
 // or
 // o.With().WithRenderer(tmpl)
 
-// o.Renderer = tmpl
 ```
 
 ### Rendering a View

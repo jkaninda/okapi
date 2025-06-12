@@ -72,7 +72,7 @@ type (
 		accessLog          bool
 		strictSlash        bool
 		logger             *slog.Logger
-		Renderer           Renderer
+		renderer           Renderer
 		corsEnabled        bool
 		cors               Cors
 		writeTimeout       int
@@ -353,7 +353,7 @@ func WithAddr(addr string) OptionFunc {
 func WithRenderer(renderer Renderer) OptionFunc {
 	return func(o *Okapi) {
 		if renderer != nil {
-			o.Renderer = renderer
+			o.renderer = renderer
 		}
 	}
 }

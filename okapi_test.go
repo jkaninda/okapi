@@ -32,6 +32,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -263,6 +264,10 @@ func TestWithAddr(t *testing.T) {
 
 }
 func TestCustomConfig(t *testing.T) {
+	err := os.MkdirAll("public", 0777)
+	if err != nil {
+		return
+	}
 	router := mux.NewRouter()
 	o := New()
 	o.With(WithAddr(":8081"),
@@ -271,7 +276,7 @@ func TestCustomConfig(t *testing.T) {
 		WithMuxRouter(router),
 		WithMux(router)).WithDebug().
 		WithOpenAPIDisabled()
-	o.With().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
+	o.With().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/*.html"))})
 
 	o.Get("/", func(c Context) error { return c.OK(Book{}) })
 	go func() {

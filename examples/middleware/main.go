@@ -143,7 +143,7 @@ func main() {
 	adminApiV2.Delete("/books/:id", func(c okapi.Context) error {
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
-			return c.AbortBadRequest("invalid request", err.Error())
+			return c.AbortBadRequest("invalid request", err)
 		}
 		for i, book := range books {
 			if book.ID == id {
@@ -158,19 +158,19 @@ func main() {
 	v2.Post("/login", func(c okapi.Context) error {
 		loginRequest := &LoginRequest{}
 		if err := c.Bind(loginRequest); err != nil {
-			return c.AbortBadRequest("invalid request", "error", err.Error())
+			return c.AbortBadRequest("invalid request", err)
 		}
 		fmt.Println(loginRequest.Username, loginRequest.Password)
 		if loginRequest.Username != "admin" && loginRequest.Password != "password" || loginRequest.Username != "user" && loginRequest.Password != "password" {
 
-			return c.AbortUnauthorized("invalid request", "error", "username or password is wrong")
+			return c.AbortUnauthorized("username or password is wrong")
 
 		}
 		adminClaims["role"] = loginRequest.Username
 		expireAt := 2 * time.Hour
 		token, err := okapi.GenerateJwtToken(jwtAuth.SecretKey, adminClaims, expireAt)
 		if err != nil {
-			return c.AbortInternalServerError("Internal server error", "error", err.Error())
+			return c.AbortInternalServerError("Internal server error", err)
 		}
 		return c.OK(LoginResponse{token, time.Now().Add(expireAt).Unix()})
 

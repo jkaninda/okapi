@@ -208,12 +208,12 @@ func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
 		tokenStr, err := jwtAuth.extractToken(c)
 		if err != nil || tokenStr == "" {
-			return c.AbortForbidden("Missing or invalid token")
+			return c.AbortForbidden("Missing or invalid token", err)
 		}
 
 		keyFunc, err := jwtAuth.resolveKeyFunc()
 		if err != nil {
-			return c.AbortInternalServerError("Failed to resolve key function", "error", err.Error())
+			return c.AbortInternalServerError("Failed to resolve key function", err)
 
 		}
 		if jwtAuth.Algo != "" {
@@ -224,11 +224,11 @@ func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
 			jwt.WithAudience(jwtAuth.Audience),
 			jwt.WithIssuer(jwtAuth.Issuer))
 		if err != nil || !token.Valid {
-			return c.AbortUnauthorized("Invalid or expired token", "error", err.Error())
+			return c.AbortUnauthorized("Invalid or expired token", err)
 		}
 		if jwtAuth.ValidateRole != nil {
 			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
-				return c.AbortUnauthorized("Insufficient role", "error", err.Error())
+				return c.AbortUnauthorized("Insufficient role", err)
 			}
 		}
 		if jwtAuth.ContextKey != "" && token.Claims != nil {

@@ -211,7 +211,7 @@ func adminCreateBook(c okapi.Context) error {
 func adminUpdate(c okapi.Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
-		return c.AbortWithError(400, "Bad request", err)
+		return c.AbortBadRequest("Bad request", err)
 	}
 	for _, book := range books {
 		if book.ID == newBook.ID {

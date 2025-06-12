@@ -131,7 +131,7 @@ func TestStart(t *testing.T) {
 
 			err := c.SSEvent(event, data)
 			if err != nil {
-				return err
+				return c.AbortWithError(http.StatusInternalServerError, err)
 			}
 			time.Sleep(2 * time.Second)
 		}

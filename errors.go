@@ -67,7 +67,22 @@ func (c *Context) Error(code int, message string) error {
 }
 
 // AbortWithError writes a standardized error response and stops execution.
-func (c *Context) AbortWithError(code int, msg string, err error) error {
+func (c *Context) AbortWithError(code int, err error) error {
+	details := ""
+	if err != nil {
+		details = err.Error()
+	}
+
+	return c.JSON(code, ErrorResponse{
+		Code:      code,
+		Message:   http.StatusText(code),
+		Details:   details,
+		Timestamp: time.Now(),
+	})
+}
+
+// abortWithError writes a standardized error response and stops execution.
+func (c *Context) abortWithError(code int, msg string, err error) error {
 	details := ""
 	if err != nil {
 		details = err.Error()
@@ -111,7 +126,7 @@ func (c *Context) abortWithStatus(code int, defaultMsg string, msg string, err .
 	} else {
 		internalErr = errors.New(message)
 	}
-	return c.AbortWithError(code, message, internalErr)
+	return c.abortWithError(code, message, internalErr)
 }
 
 // ********** 4xx Client Error Methods *************
@@ -432,7 +447,7 @@ func (c *Context) ErrorInternalServerError(message any) error {
 
 // Abort writes a standardized 500 Internal Server Error response.
 func (c *Context) Abort(err error) error {
-	return c.AbortWithError(http.StatusInternalServerError, "Internal Server Error", err)
+	return c.abortWithError(http.StatusInternalServerError, "Internal Server Error", err)
 }
 
 // AbortInternalServerError writes a standardized 500 Internal Server Error response.

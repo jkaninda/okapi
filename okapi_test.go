@@ -122,6 +122,21 @@ func TestStart(t *testing.T) {
 
 	o.StaticFile("/favicon.ico", "./favicon.ico")
 
+	o.Get("/events", func(c Context) error {
+		// Simulate sending events (you can replace this with real data)
+		for i := 0; i < 10; i++ {
+			data := M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
+			event := "message"
+
+			err := c.SSEvent(event, data)
+			if err != nil {
+				return err
+			}
+			time.Sleep(2 * time.Second)
+		}
+		return nil
+	})
+
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)

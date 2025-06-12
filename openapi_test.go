@@ -34,7 +34,7 @@ import (
 func TestOpenAPI(t *testing.T) {
 	o := Default()
 	// create api group
-	api := o.Group("api")
+	api := o.Group("api").WithBearerAuth()
 	v1 := api.Group("v1")
 	v2 := api.Group("v2")
 	v1.Post("/books", anyHandler,

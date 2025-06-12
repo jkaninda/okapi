@@ -34,7 +34,7 @@ import (
 func TestGroup(t *testing.T) {
 	o := Default()
 	// create api group
-	api := o.Group("/api")
+	api := o.Group("/api").SetDisabled(false)
 	// Okapi's Group Middleware
 	api.Use(func(next HandleFunc) HandleFunc {
 		return func(c Context) (err error) {

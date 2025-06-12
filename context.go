@@ -95,6 +95,9 @@ func getAs[T any](c *Context, key string) (v T, ok bool) {
 // Get retrieves a value from the context's data store with thread-safe access.
 // Returns the value and a boolean indicating if the key exists.
 func (c *Context) Get(key string) (any, bool) {
+	if c.store == nil {
+		return nil, false
+	}
 	c.store.mu.RLock()
 	defer c.store.mu.RUnlock()
 	val, ok := c.store.data[key]
@@ -103,10 +106,8 @@ func (c *Context) Get(key string) (any, bool) {
 
 // GetTime retrieves a time.Time value from the context's data store.
 func (c *Context) GetTime(key string) (time.Time, bool) {
-	if val, ok := c.store.data[key]; ok {
-		if t, ok := val.(time.Time); ok {
-			return t, true
-		}
+	if val, ok := getAs[time.Time](c, key); ok {
+		return val, true
 	}
 	return time.Time{}, false
 }

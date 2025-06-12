@@ -140,25 +140,39 @@ func main() {
 		okapi.DocResponse(Book{}),
 		okapi.DocRequestBody(Book{}))
 
+	adminApiV2.Delete("/books/:id", func(c okapi.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return c.AbortBadRequest("invalid request", err.Error())
+		}
+		for i, book := range books {
+			if book.ID == id {
+				books = append(books[:i], books[i+1:]...)
+			}
+		}
+		return c.OK(okapi.M{"message": "Book deleted"})
+	})
+
 	// ******* Public API Routes ********
-	// Define routes for the v1 group
+	// Define routes for the v2 group
 	v2.Post("/login", func(c okapi.Context) error {
 		loginRequest := &LoginRequest{}
 		if err := c.Bind(loginRequest); err != nil {
 			return c.AbortBadRequest("invalid request", "error", err.Error())
 		}
 		fmt.Println(loginRequest.Username, loginRequest.Password)
-		if loginRequest.Username != "admin" && loginRequest.Password != "password" {
+		if loginRequest.Username != "admin" && loginRequest.Password != "password" || loginRequest.Username != "user" && loginRequest.Password != "password" {
 
 			return c.AbortUnauthorized("invalid request", "error", "username or password is wrong")
 
 		}
-		expireAt := time.Now().Add(2 * time.Hour).Unix()
-		token, err := okapi.GenerateJwtToken(jwtAuth.SecretKey, adminClaims, time.Duration(expireAt))
+		adminClaims["role"] = loginRequest.Username
+		expireAt := 2 * time.Hour
+		token, err := okapi.GenerateJwtToken(jwtAuth.SecretKey, adminClaims, expireAt)
 		if err != nil {
 			return c.AbortInternalServerError("Internal server error", "error", err.Error())
 		}
-		return c.OK(LoginResponse{token, expireAt})
+		return c.OK(LoginResponse{token, time.Now().Add(expireAt).Unix()})
 
 	},
 		okapi.Doc().
@@ -169,18 +183,6 @@ func main() {
 	)
 	v2.Get("/books", getBooks, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
 	v2.Get("/books/:id", findById, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
-	v2.Delete("/books/:id", func(c okapi.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return c.AbortBadRequest("invalid request", "error", err.Error())
-		}
-		for i, book := range books {
-			if book.ID == id {
-				books = append(books[:i], books[i+1:]...)
-			}
-		}
-		return c.OK(okapi.M{"message": "Book deleted"})
-	})
 	v2.Put("/books/:id", adminUpdate)
 	// Start the server
 	err := o.Start()

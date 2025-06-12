@@ -74,7 +74,7 @@ func TestJwtMiddleware(t *testing.T) {
 		if !exists {
 			return c.ErrorForbidden(M{"error": "Unauthorized"})
 		}
-		slog.Info("Current user", "username", user)
+		slog.Info("Current user", "user", user)
 		return c.JSON(http.StatusOK, M{"user": user})
 	})
 

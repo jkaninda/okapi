@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -98,12 +99,19 @@ func (c *Context) AbortWithStatus(code int, message string) error {
 // ********** Helper Method *************
 
 // abortWithStatus is a helper for consistent status-based error responses
-func (c *Context) abortWithStatus(code int, defaultMsg string, msg ...string) error {
+func (c *Context) abortWithStatus(code int, defaultMsg string, msg string, err ...error) error {
+	var internalErr error
 	message := defaultMsg
-	if len(msg) > 0 && msg[0] != "" {
-		message = msg[0]
+	if len(msg) > 0 {
+		message = msg
 	}
-	return c.AbortWithError(code, message, nil)
+	// TODO
+	if len(err) > 0 && err[0] != nil {
+		internalErr = err[0]
+	} else {
+		internalErr = errors.New(message)
+	}
+	return c.AbortWithError(code, message, internalErr)
 }
 
 // ********** 4xx Client Error Methods *************
@@ -114,8 +122,8 @@ func (c *Context) ErrorBadRequest(message any) error {
 }
 
 // AbortBadRequest writes a standardized 400 Bad Request response.
-func (c *Context) AbortBadRequest(msg ...string) error {
-	return c.abortWithStatus(http.StatusBadRequest, "Bad Request", msg...)
+func (c *Context) AbortBadRequest(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusBadRequest, "Bad Request", msg, err...)
 }
 
 // ErrorUnauthorized writes a 401 Unauthorized response.
@@ -124,8 +132,8 @@ func (c *Context) ErrorUnauthorized(message any) error {
 }
 
 // AbortUnauthorized writes a standardized 401 Unauthorized response.
-func (c *Context) AbortUnauthorized(msg ...string) error {
-	return c.abortWithStatus(http.StatusUnauthorized, "Unauthorized", msg...)
+func (c *Context) AbortUnauthorized(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusUnauthorized, "Unauthorized", msg, err...)
 }
 
 // ErrorPaymentRequired writes a 402 Payment Required response.
@@ -134,8 +142,8 @@ func (c *Context) ErrorPaymentRequired(message any) error {
 }
 
 // AbortPaymentRequired writes a standardized 402 Payment Required response.
-func (c *Context) AbortPaymentRequired(msg ...string) error {
-	return c.abortWithStatus(http.StatusPaymentRequired, "Payment Required", msg...)
+func (c *Context) AbortPaymentRequired(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusPaymentRequired, "Payment Required", msg, err...)
 }
 
 // ErrorForbidden writes a 403 Forbidden response.
@@ -144,8 +152,8 @@ func (c *Context) ErrorForbidden(message any) error {
 }
 
 // AbortForbidden writes a standardized 403 Forbidden response.
-func (c *Context) AbortForbidden(msg ...string) error {
-	return c.abortWithStatus(http.StatusForbidden, "Forbidden", msg...)
+func (c *Context) AbortForbidden(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusForbidden, "Forbidden", msg, err...)
 }
 
 // ErrorNotFound writes a 404 Not Found response.
@@ -154,8 +162,8 @@ func (c *Context) ErrorNotFound(message any) error {
 }
 
 // AbortNotFound writes a standardized 404 Not Found response.
-func (c *Context) AbortNotFound(msg ...string) error {
-	return c.abortWithStatus(http.StatusNotFound, "Not Found", msg...)
+func (c *Context) AbortNotFound(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusNotFound, "Not Found", msg, err...)
 }
 
 // ErrorMethodNotAllowed writes a 405 Method Not Allowed response.
@@ -164,8 +172,8 @@ func (c *Context) ErrorMethodNotAllowed(message any) error {
 }
 
 // AbortMethodNotAllowed writes a standardized 405 Method Not Allowed response.
-func (c *Context) AbortMethodNotAllowed(msg ...string) error {
-	return c.abortWithStatus(http.StatusMethodNotAllowed, "Method Not Allowed", msg...)
+func (c *Context) AbortMethodNotAllowed(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusMethodNotAllowed, "Method Not Allowed", msg, err...)
 }
 
 // ErrorNotAcceptable writes a 406 Not Acceptable response.
@@ -174,8 +182,8 @@ func (c *Context) ErrorNotAcceptable(message any) error {
 }
 
 // AbortNotAcceptable writes a standardized 406 Not Acceptable response.
-func (c *Context) AbortNotAcceptable(msg ...string) error {
-	return c.abortWithStatus(http.StatusNotAcceptable, "Not Acceptable", msg...)
+func (c *Context) AbortNotAcceptable(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusNotAcceptable, "Not Acceptable", msg, err...)
 }
 
 // ErrorProxyAuthRequired writes a 407 Proxy Authentication Required response.
@@ -184,8 +192,8 @@ func (c *Context) ErrorProxyAuthRequired(message any) error {
 }
 
 // AbortProxyAuthRequired writes a standardized 407 Proxy Authentication Required response.
-func (c *Context) AbortProxyAuthRequired(msg ...string) error {
-	return c.abortWithStatus(http.StatusProxyAuthRequired, "Proxy Authentication Required", msg...)
+func (c *Context) AbortProxyAuthRequired(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusProxyAuthRequired, "Proxy Authentication Required", msg, err...)
 }
 
 // ErrorRequestTimeout writes a 408 Request Timeout response.
@@ -194,8 +202,8 @@ func (c *Context) ErrorRequestTimeout(message any) error {
 }
 
 // AbortRequestTimeout writes a standardized 408 Request Timeout response.
-func (c *Context) AbortRequestTimeout(msg ...string) error {
-	return c.abortWithStatus(http.StatusRequestTimeout, "Request Timeout", msg...)
+func (c *Context) AbortRequestTimeout(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusRequestTimeout, "Request Timeout", msg, err...)
 }
 
 // ErrorConflict writes a 409 Conflict response.
@@ -204,8 +212,8 @@ func (c *Context) ErrorConflict(message any) error {
 }
 
 // AbortConflict writes a standardized 409 Conflict response.
-func (c *Context) AbortConflict(msg ...string) error {
-	return c.abortWithStatus(http.StatusConflict, "Conflict", msg...)
+func (c *Context) AbortConflict(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusConflict, "Conflict", msg, err...)
 }
 
 // ErrorGone writes a 410 Gone response.
@@ -214,8 +222,8 @@ func (c *Context) ErrorGone(message any) error {
 }
 
 // AbortGone writes a standardized 410 Gone response.
-func (c *Context) AbortGone(msg ...string) error {
-	return c.abortWithStatus(http.StatusGone, "Gone", msg...)
+func (c *Context) AbortGone(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusGone, "Gone", msg, err...)
 }
 
 // ErrorLengthRequired writes a 411 Length Required response.
@@ -224,8 +232,8 @@ func (c *Context) ErrorLengthRequired(message any) error {
 }
 
 // AbortLengthRequired writes a standardized 411 Length Required response.
-func (c *Context) AbortLengthRequired(msg ...string) error {
-	return c.abortWithStatus(http.StatusLengthRequired, "Length Required", msg...)
+func (c *Context) AbortLengthRequired(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusLengthRequired, "Length Required", msg, err...)
 }
 
 // ErrorPreconditionFailed writes a 412 Precondition Failed response.
@@ -234,8 +242,8 @@ func (c *Context) ErrorPreconditionFailed(message any) error {
 }
 
 // AbortPreconditionFailed writes a standardized 412 Precondition Failed response.
-func (c *Context) AbortPreconditionFailed(msg ...string) error {
-	return c.abortWithStatus(http.StatusPreconditionFailed, "Precondition Failed", msg...)
+func (c *Context) AbortPreconditionFailed(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusPreconditionFailed, "Precondition Failed", msg, err...)
 }
 
 // ErrorRequestEntityTooLarge writes a 413 Request Entity Too Large response.
@@ -244,8 +252,8 @@ func (c *Context) ErrorRequestEntityTooLarge(message any) error {
 }
 
 // AbortRequestEntityTooLarge writes a standardized 413 Request Entity Too Large response.
-func (c *Context) AbortRequestEntityTooLarge(msg ...string) error {
-	return c.abortWithStatus(http.StatusRequestEntityTooLarge, "Request Entity Too Large", msg...)
+func (c *Context) AbortRequestEntityTooLarge(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusRequestEntityTooLarge, "Request Entity Too Large", msg, err...)
 }
 
 // ErrorRequestURITooLong writes a 414 Request-URI Too Long response.
@@ -254,8 +262,8 @@ func (c *Context) ErrorRequestURITooLong(message any) error {
 }
 
 // AbortRequestURITooLong writes a standardized 414 Request-URI Too Long response.
-func (c *Context) AbortRequestURITooLong(msg ...string) error {
-	return c.abortWithStatus(http.StatusRequestURITooLong, "Request-URI Too Long", msg...)
+func (c *Context) AbortRequestURITooLong(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusRequestURITooLong, "Request-URI Too Long", msg, err...)
 }
 
 // ErrorUnsupportedMediaType writes a 415 Unsupported Media Type response.
@@ -264,8 +272,8 @@ func (c *Context) ErrorUnsupportedMediaType(message any) error {
 }
 
 // AbortUnsupportedMediaType writes a standardized 415 Unsupported Media Type response.
-func (c *Context) AbortUnsupportedMediaType(msg ...string) error {
-	return c.abortWithStatus(http.StatusUnsupportedMediaType, "Unsupported Media Type", msg...)
+func (c *Context) AbortUnsupportedMediaType(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusUnsupportedMediaType, "Unsupported Media Type", msg, err...)
 }
 
 // ErrorRequestedRangeNotSatisfiable writes a 416 Requested Range Not Satisfiable response.
@@ -274,8 +282,8 @@ func (c *Context) ErrorRequestedRangeNotSatisfiable(message any) error {
 }
 
 // AbortRequestedRangeNotSatisfiable writes a standardized 416 Requested Range Not Satisfiable response.
-func (c *Context) AbortRequestedRangeNotSatisfiable(msg ...string) error {
-	return c.abortWithStatus(http.StatusRequestedRangeNotSatisfiable, "Requested Range Not Satisfiable", msg...)
+func (c *Context) AbortRequestedRangeNotSatisfiable(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusRequestedRangeNotSatisfiable, "Requested Range Not Satisfiable", msg, err...)
 }
 
 // ErrorExpectationFailed writes a 417 Expectation Failed response.
@@ -284,8 +292,8 @@ func (c *Context) ErrorExpectationFailed(message any) error {
 }
 
 // AbortExpectationFailed writes a standardized 417 Expectation Failed response.
-func (c *Context) AbortExpectationFailed(msg ...string) error {
-	return c.abortWithStatus(http.StatusExpectationFailed, "Expectation Failed", msg...)
+func (c *Context) AbortExpectationFailed(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusExpectationFailed, "Expectation Failed", msg, err...)
 }
 
 // ErrorTeapot writes a 418 I'm a teapot response (RFC 2324).
@@ -294,8 +302,8 @@ func (c *Context) ErrorTeapot(message any) error {
 }
 
 // AbortTeapot writes a standardized 418 I'm a teapot response.
-func (c *Context) AbortTeapot(msg ...string) error {
-	return c.abortWithStatus(http.StatusTeapot, "I'm a teapot", msg...)
+func (c *Context) AbortTeapot(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusTeapot, "I'm a teapot", msg, err...)
 }
 
 // ErrorMisdirectedRequest writes a 421 Misdirected Request response.
@@ -304,8 +312,8 @@ func (c *Context) ErrorMisdirectedRequest(message any) error {
 }
 
 // AbortMisdirectedRequest writes a standardized 421 Misdirected Request response.
-func (c *Context) AbortMisdirectedRequest(msg ...string) error {
-	return c.abortWithStatus(http.StatusMisdirectedRequest, "Misdirected Request", msg...)
+func (c *Context) AbortMisdirectedRequest(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusMisdirectedRequest, "Misdirected Request", msg, err...)
 }
 
 // ErrorUnprocessableEntity writes a 422 Unprocessable Entity response.
@@ -314,8 +322,8 @@ func (c *Context) ErrorUnprocessableEntity(message any) error {
 }
 
 // AbortValidationError writes a standardized 422 Unprocessable Entity response.
-func (c *Context) AbortValidationError(msg ...string) error {
-	return c.abortWithStatus(http.StatusUnprocessableEntity, "Unprocessable Entity", msg...)
+func (c *Context) AbortValidationError(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusUnprocessableEntity, "Unprocessable Entity", msg, err...)
 }
 
 // AbortValidationErrors writes a detailed validation error response.
@@ -341,8 +349,8 @@ func (c *Context) ErrorLocked(message any) error {
 }
 
 // AbortLocked writes a standardized 423 Locked response.
-func (c *Context) AbortLocked(msg ...string) error {
-	return c.abortWithStatus(http.StatusLocked, "Locked", msg...)
+func (c *Context) AbortLocked(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusLocked, "Locked", msg, err...)
 }
 
 // ErrorFailedDependency writes a 424 Failed Dependency response.
@@ -351,8 +359,8 @@ func (c *Context) ErrorFailedDependency(message any) error {
 }
 
 // AbortFailedDependency writes a standardized 424 Failed Dependency response.
-func (c *Context) AbortFailedDependency(msg ...string) error {
-	return c.abortWithStatus(http.StatusFailedDependency, "Failed Dependency", msg...)
+func (c *Context) AbortFailedDependency(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusFailedDependency, "Failed Dependency", msg, err...)
 }
 
 // ErrorTooEarly writes a 425 Too Early response.
@@ -361,8 +369,8 @@ func (c *Context) ErrorTooEarly(message any) error {
 }
 
 // AbortTooEarly writes a standardized 425 Too Early response.
-func (c *Context) AbortTooEarly(msg ...string) error {
-	return c.abortWithStatus(http.StatusTooEarly, "Too Early", msg...)
+func (c *Context) AbortTooEarly(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusTooEarly, "Too Early", msg, err...)
 }
 
 // ErrorUpgradeRequired writes a 426 Upgrade Required response.
@@ -371,8 +379,8 @@ func (c *Context) ErrorUpgradeRequired(message any) error {
 }
 
 // AbortUpgradeRequired writes a standardized 426 Upgrade Required response.
-func (c *Context) AbortUpgradeRequired(msg ...string) error {
-	return c.abortWithStatus(http.StatusUpgradeRequired, "Upgrade Required", msg...)
+func (c *Context) AbortUpgradeRequired(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusUpgradeRequired, "Upgrade Required", msg, err...)
 }
 
 // ErrorPreconditionRequired writes a 428 Precondition Required response.
@@ -381,8 +389,8 @@ func (c *Context) ErrorPreconditionRequired(message any) error {
 }
 
 // AbortPreconditionRequired writes a standardized 428 Precondition Required response.
-func (c *Context) AbortPreconditionRequired(msg ...string) error {
-	return c.abortWithStatus(http.StatusPreconditionRequired, "Precondition Required", msg...)
+func (c *Context) AbortPreconditionRequired(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusPreconditionRequired, "Precondition Required", msg, err...)
 }
 
 // ErrorTooManyRequests writes a 429 Too Many Requests response.
@@ -391,8 +399,8 @@ func (c *Context) ErrorTooManyRequests(message any) error {
 }
 
 // AbortTooManyRequests writes a standardized 429 Too Many Requests response.
-func (c *Context) AbortTooManyRequests(msg ...string) error {
-	return c.abortWithStatus(http.StatusTooManyRequests, "Too Many Requests", msg...)
+func (c *Context) AbortTooManyRequests(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusTooManyRequests, "Too Many Requests", msg, err...)
 }
 
 // ErrorRequestHeaderFieldsTooLarge writes a 431 Request Header Fields Too Large response.
@@ -401,8 +409,8 @@ func (c *Context) ErrorRequestHeaderFieldsTooLarge(message any) error {
 }
 
 // AbortRequestHeaderFieldsTooLarge writes a standardized 431 Request Header Fields Too Large response.
-func (c *Context) AbortRequestHeaderFieldsTooLarge(msg ...string) error {
-	return c.abortWithStatus(http.StatusRequestHeaderFieldsTooLarge, "Request Header Fields Too Large", msg...)
+func (c *Context) AbortRequestHeaderFieldsTooLarge(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusRequestHeaderFieldsTooLarge, "Request Header Fields Too Large", msg, err...)
 }
 
 // ErrorUnavailableForLegalReasons writes a 451 Unavailable For Legal Reasons response.
@@ -411,8 +419,8 @@ func (c *Context) ErrorUnavailableForLegalReasons(message any) error {
 }
 
 // AbortUnavailableForLegalReasons writes a standardized 451 Unavailable For Legal Reasons response.
-func (c *Context) AbortUnavailableForLegalReasons(msg ...string) error {
-	return c.abortWithStatus(http.StatusUnavailableForLegalReasons, "Unavailable For Legal Reasons", msg...)
+func (c *Context) AbortUnavailableForLegalReasons(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusUnavailableForLegalReasons, "Unavailable For Legal Reasons", msg, err...)
 }
 
 // ********** 5xx Server Error Methods *************
@@ -428,8 +436,8 @@ func (c *Context) Abort(err error) error {
 }
 
 // AbortInternalServerError writes a standardized 500 Internal Server Error response.
-func (c *Context) AbortInternalServerError(msg ...string) error {
-	return c.abortWithStatus(http.StatusInternalServerError, "Internal Server Error", msg...)
+func (c *Context) AbortInternalServerError(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusInternalServerError, "Internal Server Error", msg, err...)
 }
 
 // ErrorNotImplemented writes a 501 Not Implemented response.
@@ -438,8 +446,8 @@ func (c *Context) ErrorNotImplemented(message any) error {
 }
 
 // AbortNotImplemented writes a standardized 501 Not Implemented response.
-func (c *Context) AbortNotImplemented(msg ...string) error {
-	return c.abortWithStatus(http.StatusNotImplemented, "Not Implemented", msg...)
+func (c *Context) AbortNotImplemented(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusNotImplemented, "Not Implemented", msg, err...)
 }
 
 // ErrorBadGateway writes a 502 Bad Gateway response.
@@ -448,8 +456,8 @@ func (c *Context) ErrorBadGateway(message any) error {
 }
 
 // AbortBadGateway writes a standardized 502 Bad Gateway response.
-func (c *Context) AbortBadGateway(msg ...string) error {
-	return c.abortWithStatus(http.StatusBadGateway, "Bad Gateway", msg...)
+func (c *Context) AbortBadGateway(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusBadGateway, "Bad Gateway", msg, err...)
 }
 
 // ErrorServiceUnavailable writes a 503 Service Unavailable response.
@@ -458,8 +466,8 @@ func (c *Context) ErrorServiceUnavailable(message any) error {
 }
 
 // AbortServiceUnavailable writes a standardized 503 Service Unavailable response.
-func (c *Context) AbortServiceUnavailable(msg ...string) error {
-	return c.abortWithStatus(http.StatusServiceUnavailable, "Service Unavailable", msg...)
+func (c *Context) AbortServiceUnavailable(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusServiceUnavailable, "Service Unavailable", msg, err...)
 }
 
 // ErrorGatewayTimeout writes a 504 Gateway Timeout response.
@@ -468,8 +476,8 @@ func (c *Context) ErrorGatewayTimeout(message any) error {
 }
 
 // AbortGatewayTimeout writes a standardized 504 Gateway Timeout response.
-func (c *Context) AbortGatewayTimeout(msg ...string) error {
-	return c.abortWithStatus(http.StatusGatewayTimeout, "Gateway Timeout", msg...)
+func (c *Context) AbortGatewayTimeout(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusGatewayTimeout, "Gateway Timeout", msg, err...)
 }
 
 // ErrorHTTPVersionNotSupported writes a 505 HTTP Version Not Supported response.
@@ -478,8 +486,8 @@ func (c *Context) ErrorHTTPVersionNotSupported(message any) error {
 }
 
 // AbortHTTPVersionNotSupported writes a standardized 505 HTTP Version Not Supported response.
-func (c *Context) AbortHTTPVersionNotSupported(msg ...string) error {
-	return c.abortWithStatus(http.StatusHTTPVersionNotSupported, "HTTP Version Not Supported", msg...)
+func (c *Context) AbortHTTPVersionNotSupported(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusHTTPVersionNotSupported, "HTTP Version Not Supported", msg, err...)
 }
 
 // ErrorVariantAlsoNegotiates writes a 506 Variant Also Negotiates response.
@@ -488,8 +496,8 @@ func (c *Context) ErrorVariantAlsoNegotiates(message any) error {
 }
 
 // AbortVariantAlsoNegotiates writes a standardized 506 Variant Also Negotiates response.
-func (c *Context) AbortVariantAlsoNegotiates(msg ...string) error {
-	return c.abortWithStatus(http.StatusVariantAlsoNegotiates, "Variant Also Negotiates", msg...)
+func (c *Context) AbortVariantAlsoNegotiates(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusVariantAlsoNegotiates, "Variant Also Negotiates", msg, err...)
 }
 
 // ErrorInsufficientStorage writes a 507 Insufficient Storage response.
@@ -498,8 +506,8 @@ func (c *Context) ErrorInsufficientStorage(message any) error {
 }
 
 // AbortInsufficientStorage writes a standardized 507 Insufficient Storage response.
-func (c *Context) AbortInsufficientStorage(msg ...string) error {
-	return c.abortWithStatus(http.StatusInsufficientStorage, "Insufficient Storage", msg...)
+func (c *Context) AbortInsufficientStorage(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusInsufficientStorage, "Insufficient Storage", msg, err...)
 }
 
 // ErrorLoopDetected writes a 508 Loop Detected response.
@@ -508,8 +516,8 @@ func (c *Context) ErrorLoopDetected(message any) error {
 }
 
 // AbortLoopDetected writes a standardized 508 Loop Detected response.
-func (c *Context) AbortLoopDetected(msg ...string) error {
-	return c.abortWithStatus(http.StatusLoopDetected, "Loop Detected", msg...)
+func (c *Context) AbortLoopDetected(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusLoopDetected, "Loop Detected", msg, err...)
 }
 
 // ErrorNotExtended writes a 510 Not Extended response.
@@ -518,8 +526,8 @@ func (c *Context) ErrorNotExtended(message any) error {
 }
 
 // AbortNotExtended writes a standardized 510 Not Extended response.
-func (c *Context) AbortNotExtended(msg ...string) error {
-	return c.abortWithStatus(http.StatusNotExtended, "Not Extended", msg...)
+func (c *Context) AbortNotExtended(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusNotExtended, "Not Extended", msg, err...)
 }
 
 // ErrorNetworkAuthenticationRequired writes a 511 Network Authentication Required response.
@@ -528,8 +536,8 @@ func (c *Context) ErrorNetworkAuthenticationRequired(message any) error {
 }
 
 // AbortNetworkAuthenticationRequired writes a standardized 511 Network Authentication Required response.
-func (c *Context) AbortNetworkAuthenticationRequired(msg ...string) error {
-	return c.abortWithStatus(http.StatusNetworkAuthenticationRequired, "Network Authentication Required", msg...)
+func (c *Context) AbortNetworkAuthenticationRequired(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusNetworkAuthenticationRequired, "Network Authentication Required", msg, err...)
 }
 
 // ********** Utility Methods *************

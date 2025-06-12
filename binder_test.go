@@ -31,7 +31,7 @@ import (
 )
 
 type User struct {
-	Name string `json:"name" required:"true"`
+	Name string `json:"name" required:"true" xml:"name" form:"name" query:"name" yaml:"name"`
 }
 
 func TestContext_Bind(t *testing.T) {
@@ -48,6 +48,10 @@ func TestContext_Bind(t *testing.T) {
 		if err := c.Bind(&user); err != nil {
 			return c.AbortBadRequest("Bad requests")
 		}
+		if ok, err := c.ShouldBind(&user); !ok {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
 		return c.JSON(http.StatusCreated, user)
 	})
 	o.Put("/hello", func(c Context) error {
@@ -60,6 +64,70 @@ func TestContext_Bind(t *testing.T) {
 	o.Get("/hello", func(c Context) error {
 		return c.JSON(http.StatusOK, books)
 	})
+
+	o.Post("/bind", func(c Context) error {
+		user := User{}
+		if ok, err := c.ShouldBind(&user); !ok {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Post("/multipart", func(c Context) error {
+		user := User{}
+		if err := c.BindMultipart(&user); err != nil {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Post("/xml", func(c Context) error {
+		user := User{}
+		if err := c.BindXML(&user); err != nil {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Post("/form", func(c Context) error {
+		user := User{}
+		if err := c.BindForm(&user); err != nil {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Get("/query", func(c Context) error {
+		user := User{}
+		if err := c.BindQuery(&user); err != nil {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Post("/json", func(c Context) error {
+		user := User{}
+		if err := c.BindJSON(&user); err != nil {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Post("/yaml", func(c Context) error {
+		user := User{}
+		if err := c.BindYAML(&user); err != nil {
+			return c.ErrorBadRequest("Bad requests")
+
+		}
+		return c.JSON(http.StatusCreated, user)
+	})
+	o.Post("/protobuf", func(c Context) error {
+		if err := c.BindProtoBuf(nil); err != nil {
+			return c.AbortBadRequest("Bad requests", err)
+
+		}
+		return c.OK(http.StatusOK)
+	})
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)
@@ -69,5 +137,6 @@ func TestContext_Bind(t *testing.T) {
 	waitForServer()
 	assertStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
 	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusBadRequest)
+	assertStatus(t, "POST", "http://localhost:8080/json", nil, nil, "", http.StatusBadRequest)
 
 }

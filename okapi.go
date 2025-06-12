@@ -1174,23 +1174,32 @@ func handleName(h HandleFunc) string {
 func handleAccessLog(next HandleFunc) HandleFunc {
 	return func(c Context) error {
 		if c.IsWebSocketUpgrade() || c.IsSSE() || !c.okapi.accessLog {
-			// Skip logging for WebSocket upgrades or Server-Sent Events
 			return next(c)
 		}
 		startTime := time.Now()
 		err := next(c)
-
+		status := c.Response.Status()
 		duration := goutils.FormatDuration(time.Since(startTime), 2)
-		c.okapi.logger.Info("[okapi]",
+
+		logger := c.okapi.logger
+		args := []any{
 			"method", c.Request.Method,
 			"url", c.Request.URL.Path,
-			"client_ip", c.RealIP(),
-			"status", c.Response.Status(),
+			"ip", c.RealIP(),
+			"host", c.Request.Host,
+			"status", status,
 			"duration", duration,
 			"referer", c.Request.Referer(),
 			"user_agent", c.Request.UserAgent(),
-		)
-
+		}
+		switch {
+		case status >= 500:
+			logger.Error("[okapi]", args...)
+		case status >= 400:
+			logger.Warn("[okapi]", args...)
+		default:
+			logger.Info("[okapi]", args...)
+		}
 		return err
 	}
 }

@@ -80,12 +80,6 @@ func (g *Group) BasePath() string {
 	return g.basePath
 }
 
-// SetBasePath updates the group's base path.
-// Note: Use with caution as it affects all routes in the group.
-func (g *Group) SetBasePath(basePath string) {
-	g.basePath = basePath
-}
-
 // Okapi returns the parent Okapi instance associated with this group.
 func (g *Group) Okapi() *Okapi {
 	return g.okapi

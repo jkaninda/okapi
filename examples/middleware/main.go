@@ -161,7 +161,8 @@ func main() {
 			return c.AbortBadRequest("invalid request", err)
 		}
 		fmt.Println(loginRequest.Username, loginRequest.Password)
-		if loginRequest.Username != "admin" && loginRequest.Password != "password" || loginRequest.Username != "user" && loginRequest.Password != "password" {
+		if loginRequest.Username != "admin" && loginRequest.Password != "password" ||
+			loginRequest.Username != "user" && loginRequest.Password != "password" {
 
 			return c.AbortUnauthorized("username or password is wrong")
 

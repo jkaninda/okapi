@@ -25,50 +25,115 @@
 package okapi
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 )
 
 // *********** SSE ***********
 
-// Message is a struct that represents a Server-Sent Events (SSE) connection.
+// Message represents a Server-Sent Events (SSE) message.
 type Message struct {
-	// ID is the identifier for the SSE connection.
-	ID string `json:"id" xml:"id"`
-	// Data is the Data to be sent to the SSE connection.
-	Data any `json:"message"`
-	// Event is the event type for the SSE connection.
+	ID    string `json:"id" xml:"id"`
+	Data  any    `json:"message"`
 	Event string `json:"event"`
-}
-type Send func(data any, eventType string) (string, error)
-
-// Send sends a message to the SSE connection.
-func (s *Message) Send(w http.ResponseWriter, data any, eventType string) (string, error) {
-	// Set the Content-Type header to text/event-stream
-	w.Header().Set("Content-Type", "text/event-stream")
-	// Set the Cache-Control header to no-cache
-	w.Header().Set("Cache-Control", "no-cache")
-	// Set the Connection header to keep-alive
-	w.Header().Set("Connection", "keep-alive")
-
-	// Write the SSE message to the response writer
-	if _, err := w.Write([]byte("id: " + s.ID + "\n")); err != nil {
-		return "", err
-	}
-	if _, err := w.Write([]byte("event: " + eventType + "\n")); err != nil {
-		return "", err
-	}
-	if _, err := w.Write([]byte("data: " + data.(string) + "\n\n")); err != nil {
-		return "", err
-	}
-
-	return s.ID, nil
+	Retry uint   `json:"retry,omitempty"` // Retry interval in milliseconds
 }
 
-// Close closes the SSE connection by flushing the response writer.
-func (s *Message) Close(w http.ResponseWriter) error {
-	// Flush the response writer to send the SSE message to the client
+// SendFunc defines the signature for a function that sends an SSE message.
+type SendFunc func(data any, eventType string) (string, error)
+
+// Send writes an SSE message to the response writer.
+func (m *Message) Send(w http.ResponseWriter) (string, error) {
+	setSSEHeaders(w)
+	// Generate ID if not set
+	if m.ID == "" {
+		m.ID = generateUUID()
+	}
+	if err := writeID(w, m.ID); err != nil {
+		return "", err
+	}
+	if err := writeEvent(w, m.Event); err != nil {
+		return "", err
+	}
+	if err := writeRetry(w, m.Retry); err != nil {
+		return "", err
+	}
+	if err := writeData(w, m.Data); err != nil {
+		return "", err
+	}
+
+	flush(w)
+
+	return m.ID, nil
+}
+
+// Close flushes the response writer to ensure data is sent to the client.
+func (m *Message) Close(w http.ResponseWriter) error {
+	flush(w)
+	return nil
+}
+
+func flush(w http.ResponseWriter) {
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}
-	return nil
+}
+
+func writeID(w http.ResponseWriter, id string) error {
+	if id == "" {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "id: %s\n", id)
+	return err
+}
+
+func writeEvent(w http.ResponseWriter, eventType string) error {
+	if eventType == "" {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "event: %s\n", eventType)
+	return err
+}
+
+func writeRetry(w http.ResponseWriter, retry uint) error {
+	if retry <= 0 {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "retry: %d\n", retry)
+	return err
+}
+
+func writeData(w http.ResponseWriter, data any) error {
+	var output string
+
+	switch v := data.(type) {
+	case string:
+		output = v
+	default:
+		jsonBytes, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("failed to encode data as JSON: %w", err)
+		}
+		output = string(jsonBytes)
+	}
+
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if _, err := fmt.Fprintf(w, "data: %s\n", line); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprint(w, "\n")
+	return err
+}
+
+func setSSEHeaders(w http.ResponseWriter) {
+	header := w.Header()
+	header["Content-Type"] = []string{"text/event-stream"}
+	if _, ok := header["Cache-Control"]; !ok {
+		header["Cache-Control"] = []string{"no-cache"}
+	}
+
 }

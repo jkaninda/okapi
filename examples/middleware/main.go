@@ -25,10 +25,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jkaninda/okapi"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 type Book struct {
@@ -41,6 +45,14 @@ type Book struct {
 type Author struct {
 	Name string `json:"name" form:"name"  max:"50" default:"anonymous" description:"Author name"`
 }
+type LoginRequest struct {
+	Username string `json:"username" form:"username" query:"username" required:"true"`
+	Password string `json:"password" form:"password" query:"password" required:"true"`
+}
+type LoginResponse struct {
+	Token    string `json:"token"`
+	ExpireAt int64  `json:"expire_at"`
+}
 
 var (
 	books = []*Book{
@@ -49,6 +61,11 @@ var (
 		{ID: 3, Name: "Go in Action", Price: 40, Qty: 75},
 		{ID: 4, Name: "Go Web Programming", Price: 35, Qty: 60},
 		{ID: 5, Name: "Go Design Patterns", Price: 45, Qty: 80},
+	}
+	adminClaims = jwt.MapClaims{
+		"sub":  "12345",
+		"role": "admin",
+		"exp":  time.Now().Add(2 * time.Hour).Unix(),
 	}
 )
 
@@ -61,41 +78,110 @@ func main() {
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
 	}, okapi.DocSummary("Home "))
 
-	o.Get("/books/{id}", findById,
-		okapi.DocSummary("Get book by ID"),
-		okapi.DocPathParam("id", "int", "Book ID"),
-		okapi.DocQueryParam("country", "string", "Country Name", false),
-		okapi.DocHeader("Key", "1234", "API Key", false),
-		okapi.DocTag("bookController"),
-		okapi.DocBearerAuth(),
-		okapi.DocRequestBody(Book{}),
-		okapi.DocResponse(Book{}))
+	// Create a new group with a base path for API routes
+	api := o.Group("/api")
+
+	// *************** V1 Group with Basic Auth middleware ********************
+	v1 := api.Group("/v1")
 	// ******* Admin Routes | Restricted Area ********
 	basicAuth := okapi.BasicAuthMiddleware{
 		Username: "admin",
 		Password: "password",
 		Realm:    "Restricted Area",
 	}
-	// Create a new group with a base path for API routes
-	api := o.Group("/api")
-
 	// Create a new group with a base path for admin routes and apply basic auth middleware
-	adminApi := api.Group("/admin", basicAuth.Middleware) // This group will require basic authentication
-	adminApi.Put("/books/:id", adminUpdate)
-	adminApi.Post("/books", adminStore,
-		okapi.DocSummary("store books"),
+	adminApi := v1.Group("/admin", basicAuth.Middleware) // This group will require basic authentication
+	adminApi.Put("/books/:id", adminUpdate, okapi.DocResponse(Book{}), okapi.DocRequestBody(Book{}))
+	adminApi.Post("/books", adminCreateBook,
+		okapi.DocSummary("create book"),
 		okapi.DocResponse(Book{}),
 		okapi.DocRequestBody(Book{}))
 
 	// ******* Public API Routes ********
-	v1 := api.Group("/v1")
 	// Apply custom middleware to the v1 group
 	v1.Use(customMiddleware)
 
 	// Define routes for the v1 group
-	v1.Get("/books", index, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
+	v1.Get("/books", getBooks, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
 	v1.Get("/books/:id", findById, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
 
+	// *************** V2 Group with JWT Auth middleware ********************
+	v2 := api.Group("/v2")
+
+	// ******* Admin API Routes ********
+	// Create middleware
+	// Setup
+	jwtAuth := okapi.JWTAuth{
+		SecretKey:   []byte("supersecret"),
+		TokenLookup: "header:Authorization",
+		ContextKey:  "user",
+		// ValidateRole is optional, it's to validate the role of user
+		ValidateRole: func(claims jwt.Claims) error {
+			mapClaims, ok := claims.(jwt.MapClaims)
+			if !ok {
+				return errors.New("invalid claims type")
+			}
+			role, ok := mapClaims["role"].(string)
+			if !ok || role != "admin" {
+				return errors.New("unauthorized role")
+			}
+			return nil
+		},
+	}
+
+	// Create a new group with a base path for admin routes and apply jwt auth middleware
+	adminApiV2 := v2.Group("/admin", jwtAuth.Middleware).WithBearerAuth() // This group will require jwt authentication
+	adminApiV2.Put("/books/:id", adminUpdate,
+		okapi.DocResponse(Book{}),
+		okapi.DocRequestBody(Book{}),
+		okapi.DocBearerAuth())
+	adminApiV2.Post("/books", adminCreateBook,
+		okapi.DocSummary("create a book"),
+		okapi.DocResponse(Book{}),
+		okapi.DocRequestBody(Book{}))
+
+	// ******* Public API Routes ********
+	// Define routes for the v1 group
+	v2.Post("/login", func(c okapi.Context) error {
+		loginRequest := &LoginRequest{}
+		if err := c.Bind(loginRequest); err != nil {
+			return c.AbortBadRequest("invalid request", "error", err.Error())
+		}
+		fmt.Println(loginRequest.Username, loginRequest.Password)
+		if loginRequest.Username != "admin" && loginRequest.Password != "password" {
+
+			return c.AbortUnauthorized("invalid request", "error", "username or password is wrong")
+
+		}
+		expireAt := time.Now().Add(2 * time.Hour).Unix()
+		token, err := okapi.GenerateJwtToken(jwtAuth.SecretKey, adminClaims, time.Duration(expireAt))
+		if err != nil {
+			return c.AbortInternalServerError("Internal server error", "error", err.Error())
+		}
+		return c.OK(LoginResponse{token, expireAt})
+
+	},
+		okapi.Doc().
+			Summary("login").
+			RequestBody(LoginRequest{}).
+			Response(LoginResponse{}).
+			Build(),
+	)
+	v2.Get("/books", getBooks, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
+	v2.Get("/books/:id", findById, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
+	v2.Delete("/books/:id", func(c okapi.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return c.AbortBadRequest("invalid request", "error", err.Error())
+		}
+		for i, book := range books {
+			if book.ID == id {
+				books = append(books[:i], books[i+1:]...)
+			}
+		}
+		return c.OK(okapi.M{"message": "Book deleted"})
+	})
+	v2.Put("/books/:id", adminUpdate)
 	// Start the server
 	err := o.Start()
 	if err != nil {
@@ -105,7 +191,7 @@ func main() {
 
 // ***** Handlers *****
 
-func adminStore(c okapi.Context) error {
+func adminCreateBook(c okapi.Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
 		return c.AbortBadRequest(fmt.Sprintf("Failed to bind book: %v", err))
@@ -135,7 +221,7 @@ func adminUpdate(c okapi.Context) error {
 	}
 	return c.AbortNotFound("Book not found")
 }
-func index(c okapi.Context) error {
+func getBooks(c okapi.Context) error {
 	return c.JSON(http.StatusOK, books)
 }
 func findById(c okapi.Context) error {

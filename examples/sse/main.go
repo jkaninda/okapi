@@ -27,7 +27,6 @@ package main
 import (
 	"github.com/jkaninda/okapi"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -64,32 +63,17 @@ func main() {
 		})
 	})
 	o.Get("/events", func(c okapi.Context) error {
-		c.Response.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Response.Header().Set("Access-Control-Expose-Headers", "Content-Type")
-
-		c.Response.Header().Set("Content-Type", "text/event-stream")
-		c.Response.Header().Set("Cache-Control", "no-cache")
-		c.Response.Header().Set("Connection", "keep-alive")
-
 		// Simulate sending events (you can replace this with real data)
-		for i := 0; i < 15; i++ {
-			data := "Event " + strconv.Itoa(i)
-			id := strconv.Itoa(i)
+		for i := 0; i < 10; i++ {
+			data := okapi.M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
 			event := "message"
-			if _, err := c.Response.Write([]byte("id: " + id + "\n")); err != nil {
-				return err
-			}
-			if _, err := c.Response.Write([]byte("event: " + event + "\n")); err != nil {
-				return err
-			}
-			if _, err := c.Response.Write([]byte("data: " + data + "\n\n")); err != nil {
+
+			err := c.SSEvent(event, data)
+			if err != nil {
 				return err
 			}
 			time.Sleep(2 * time.Second)
-			c.Response.(http.Flusher).Flush()
 		}
-		// Close the connection when done
-		<-c.Request.Context().Done()
 		return nil
 	})
 

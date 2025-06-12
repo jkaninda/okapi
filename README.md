@@ -267,11 +267,11 @@ o.Post("/books", func(c okapi.Context) error {
 
 	logo, err := c.FormFile("logo")
 	if err != nil {
-		return c.AbortWithError(http.StatusBadRequest, err)
+        return c.AbortBadRequest("Bad request", err)
 	}
 	file, err := logo.Open()
 	if err != nil {
-		return c.AbortWithError(http.StatusBadRequest, err)
+            return c.AbortBadRequest("Bad request", err)
 	}
 	defer file.Close()
 	// You can now read or save the uploaded file

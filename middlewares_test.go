@@ -67,8 +67,9 @@ func TestJwtMiddleware(t *testing.T) {
 	token := mustGenerateToken(t, auth.SecretKey, Claims)
 
 	// Setup server
-	o := Default()
+	o := New(WithAccessLogDisabled())
 	o.Use(auth.Middleware)
+	o.Use(LoggerMiddleware)
 	o.Get("/protected", func(c Context) error {
 		user, exists := c.Get(auth.ContextKey)
 		if !exists {

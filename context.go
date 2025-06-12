@@ -422,16 +422,16 @@ func (c *Context) HTMLView(code int, templateStr string, data any) error {
 
 // Render renders a template using the configured Renderer.
 func (c *Context) Render(code int, name string, data interface{}) error {
-	if c.okapi.Renderer == nil {
+	if c.okapi.renderer == nil {
 		return ErrNoRenderer
 	}
 	if name == "" {
 		return c.writeResponse(code, HTML, func() error {
-			return c.okapi.Renderer.Render(c.Response, "", nil, *c)
+			return c.okapi.renderer.Render(c.Response, "", nil, *c)
 		})
 	}
 	return c.writeResponse(code, HTML, func() error {
-		return c.okapi.Renderer.Render(c.Response, name, data, *c)
+		return c.okapi.renderer.Render(c.Response, name, data, *c)
 	})
 }
 

@@ -583,8 +583,12 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c okapi.Co
 tmpl := &Template{
 	templates: template.Must(template.ParseGlob("templates/*.html")),
 }
+o.With().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
 
-o.Renderer = tmpl
+// or
+// o.With().WithRenderer(tmpl)
+
+// o.Renderer = tmpl
 ```
 
 ### Rendering a View

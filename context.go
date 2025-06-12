@@ -48,8 +48,8 @@ type (
 		// Response http.ResponseWriter
 		Response Response
 		// store is a key/value store for storing data in the context
-		store  *Store
-		params *Params
+		store *Store
+		// params *Params
 	}
 	Store struct {
 		mu   sync.RWMutex
@@ -165,7 +165,6 @@ func (c *Context) Copy() *Context {
 		Request:  c.Request,      // Copy request reference
 		Response: c.Response,     // Copy response reference
 		store:    newStoreData(), // Initialize new data map
-		params:   c.params,       // Copy params
 	}
 	// Copy all key-value pairs to the new context
 	for k, v := range c.store.data {

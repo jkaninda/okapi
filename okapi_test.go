@@ -31,6 +31,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -262,6 +263,10 @@ func TestWithAddr(t *testing.T) {
 
 }
 func TestCustomConfig(t *testing.T) {
+	err := os.MkdirAll("public", 0777)
+	if err != nil {
+		return
+	}
 	router := mux.NewRouter()
 	o := New()
 	o.With(WithAddr(":8081"),

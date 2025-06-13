@@ -346,6 +346,7 @@ auth := okapi.BasicAuth{
 o.Use(auth.Middleware)
 o.Get("/admin", adminHandler)
 ```
+---
 ### JWT Middleware
 
 Okapi provides flexible JWT middleware that supports:
@@ -357,7 +358,7 @@ Okapi provides flexible JWT middleware that supports:
 * Optional role validation with `ValidateRole`
 * OpenAPI integration with `WithBearerAuth()`
 
----
+
 
 #### Example: Basic `HS256` Auth
 
@@ -368,7 +369,7 @@ jwtAuth := okapi.JWTAuth{
 	ContextKey:  "user",                        // Key to store claims in context
 }
 ```
----
+
 
 ####  Example: Auth via Remote JWKS (OIDC / Auth0)
 
@@ -380,7 +381,7 @@ jwtAuth := okapi.JWTAuth{
 }
 ```
 
----
+
 #### Optional Role Validation
 
 ```go
@@ -397,7 +398,6 @@ jwtAuth.ValidateRole = func(claims jwt.Claims) error {
 }
 ```
 
----
 
 #### Protect Routes with JWT
 

@@ -346,6 +346,69 @@ auth := okapi.BasicAuth{
 o.Use(auth.Middleware)
 o.Get("/admin", adminHandler)
 ```
+### JWT Middleware
+
+Okapi provides flexible JWT middleware that supports:
+
+* Symmetric signing (`HS256`) via `SecretKey`
+* Asymmetric signing (`RS256`, etc.) via `RSAKey`
+* Remote key discovery via `JwksUrl`
+* Local JWKS via `JwksFile`
+* Optional role validation with `ValidateRole`
+* OpenAPI integration with `WithBearerAuth()`
+
+---
+
+#### Example: Basic `HS256` Auth
+
+```go
+jwtAuth := okapi.JWTAuth{
+	SecretKey:   []byte("supersecret"),         // Shared secret for HS256
+    TokenLookup: "header:Authorization",        // Where to find the token (header, query, cookie) default: (header:Authorization)
+	ContextKey:  "user",                        // Key to store claims in context
+}
+```
+---
+
+####  Example: Auth via Remote JWKS (OIDC / Auth0)
+
+```go
+jwtAuth := okapi.JWTAuth{
+    JwksUrl:     "https://example.com/.well-known/jwks.json",  // Fetch keys from remote JWKS endpoint
+	TokenLookup: "header:Authorization",
+	ContextKey:  "user",
+}
+```
+
+---
+#### Optional Role Validation
+
+```go
+jwtAuth.ValidateRole = func(claims jwt.Claims) error {
+	mapClaims, ok := claims.(jwt.MapClaims)
+	if !ok {
+		return errors.New("invalid claims type")
+	}
+	role, ok := mapClaims["role"].(string)
+	if !ok || role != "admin" {
+		return errors.New("unauthorized role")
+	}
+	return nil
+}
+```
+
+---
+
+#### Protect Routes with JWT
+
+```go
+admin := o.Group("/admin", jwtAuth.Middleware). // Attach middleware to route group
+	WithBearerAuth()                             // Adds Bearer auth to OpenAPI docs
+
+admin.Get("/users", adminGetUsersHandler)       // Now protected by JWT
+```
+
+---
 
 ### CORS middleware
 

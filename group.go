@@ -30,6 +30,7 @@ type Group struct {
 	basePath    string
 	disabled    bool
 	bearerAuth  bool
+	deprecated  bool
 	middlewares []Middleware
 	okapi       *Okapi
 }
@@ -57,6 +58,13 @@ func (g *Group) Disable() *Group {
 // Returns the Group to allow method chaining.
 func (g *Group) WithBearerAuth() *Group {
 	g.bearerAuth = true
+	return g
+}
+
+// Deprecated marks the Group as deprecated for its routes.
+// Returns the Group to allow method chaining.
+func (g *Group) Deprecated() *Group {
+	g.deprecated = true
 	return g
 }
 
@@ -110,6 +118,9 @@ func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Rou
 func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *Route {
 	if g.bearerAuth {
 		opts = append(opts, DocBearerAuth())
+	}
+	if g.deprecated {
+		opts = append(opts, DocDeprecated())
 	}
 	return g.add(method, path, h, opts...)
 }

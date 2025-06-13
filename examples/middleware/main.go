@@ -72,7 +72,10 @@ var (
 func main() {
 	// Example usage of middlewares handling in Okapi
 	// Create a new Okapi instance
-	o := okapi.New().WithOpenAPIDocs()
+	o := okapi.New().WithOpenAPIDocs(okapi.OpenAPI{Licence: okapi.License{Name: "MIT License"}, Contact: okapi.Contact{
+		Name: "Jonas Kaninda",
+		URL:  "https://jkaninda.dev/",
+	}})
 
 	o.Get("/", func(c okapi.Context) error {
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
@@ -84,7 +87,7 @@ func main() {
 	// *************** V1 Group with Basic Auth middleware ********************
 	v1 := api.Group("/v1")
 	// ******* Admin Routes | Restricted Area ********
-	basicAuth := okapi.BasicAuthMiddleware{
+	basicAuth := okapi.BasicAuth{
 		Username: "admin",
 		Password: "password",
 		Realm:    "Restricted Area",
@@ -177,14 +180,13 @@ func main() {
 
 	},
 		okapi.Doc().
-			Summary("login").
+			Summary("Login").
 			RequestBody(LoginRequest{}).
 			Response(LoginResponse{}).
 			Build(),
 	)
 	v2.Get("/books", getBooks, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
 	v2.Get("/books/:id", findById, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
-	v2.Put("/books/:id", adminUpdate)
 	// Start the server
 	err := o.Start()
 	if err != nil {

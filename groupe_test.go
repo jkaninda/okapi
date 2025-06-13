@@ -42,7 +42,7 @@ func TestGroup(t *testing.T) {
 			return next(c)
 		}
 	})
-	test := o.Group("/test").Enable()
+	test := o.Group("/test").Enable().Deprecated()
 	test.BasePath()
 	_okapi := test.Okapi()
 	_okapi.With(WithDebug())

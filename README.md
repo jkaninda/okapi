@@ -451,7 +451,7 @@ func whoAmIHandler(c okapi.Context) error {
                 "name":  c.GetString("name"),
 		}, )
 }
-
+```
 
 #### Custom Claim Validation
 

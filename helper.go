@@ -27,6 +27,8 @@ package okapi
 import (
 	"crypto/rand"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -49,4 +51,34 @@ func generateUUID() string {
 		uuid[6:8],
 		uuid[8:10],
 		uuid[10:16])
+}
+func fPrintError(msg string, args ...interface{}) {
+	b := strings.Builder{}
+	b.WriteString(msg)
+
+	for i := 0; i+1 < len(args); i += 2 {
+		key, ok := args[i].(string)
+		if !ok {
+			key = fmt.Sprintf("invalid_key_%d", i)
+		}
+		b.WriteString(fmt.Sprintf(" %s=%v", key, args[i+1]))
+	}
+
+	b.WriteByte('\n')
+	_, _ = fmt.Fprint(os.Stderr, b.String())
+}
+func fPrint(msg string, args ...interface{}) {
+	b := strings.Builder{}
+	b.WriteString(msg)
+
+	for i := 0; i+1 < len(args); i += 2 {
+		key, ok := args[i].(string)
+		if !ok {
+			key = fmt.Sprintf("invalid_key_%d", i)
+		}
+		b.WriteString(fmt.Sprintf(" %s=%v", key, args[i+1]))
+	}
+
+	b.WriteByte('\n')
+	_, _ = fmt.Fprint(os.Stdout, b.String())
 }

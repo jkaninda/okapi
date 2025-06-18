@@ -232,10 +232,7 @@ func (c *Context) bindFileFieldWithStatus(tag string, valField reflect.Value, fi
 	defer func(file multipart.File) {
 		err = file.Close()
 		if err != nil {
-			_, err = fmt.Fprintf(defaultErrorWriter, "Failed to close response body")
-			if err != nil {
-				return
-			}
+			fPrintError("Failed to close response body")
 		}
 	}(file)
 
@@ -687,10 +684,7 @@ func (c *Context) BindProtoBuf(v proto.Message) error {
 	defer func(Body io.ReadCloser) {
 		err = Body.Close()
 		if err != nil {
-			_, err = fmt.Fprintf(defaultErrorWriter, "Failed to close response body")
-			if err != nil {
-				return
-			}
+			fPrintError("Failed to close response body")
 		}
 	}(c.Request.Body)
 	return proto.Unmarshal(body, v)

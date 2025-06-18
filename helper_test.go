@@ -45,4 +45,5 @@ func TestFPrintError(t *testing.T) {
 }
 func TestFPrint(t *testing.T) {
 	fPrint("Hello World")
+	fPrint("Hello World", "key1", "value1", "key2", "value2")
 }

@@ -71,7 +71,8 @@ type (
 	//
 	// Fields:
 	JWTAuth struct {
-		SecretKey []byte
+		SecretKey     []byte // Deprecated, use SigningSecret
+		SigningSecret []byte
 		// Static JWKS (JSON Web Key Set) loaded from file or base64. Optional.
 		JwksFile *Jwks
 		// URL to a remote JWKS endpoint for public key discovery. Optional.
@@ -292,7 +293,7 @@ func (jwtAuth JWTAuth) ValidateToken(c Context) (jwt.MapClaims, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return jwtAuth.SecretKey, nil
+		return signingSecret(jwtAuth.SigningSecret, jwtAuth.SecretKey), nil
 	})
 
 	if err != nil || !token.Valid {
@@ -319,9 +320,10 @@ func (jwtAuth JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 		}, nil
 	}
 
-	if jwtAuth.SecretKey != nil {
+	secret := signingSecret(jwtAuth.SigningSecret, jwtAuth.SecretKey)
+	if secret != nil {
 		return func(token *jwt.Token) (interface{}, error) {
-			return jwtAuth.SecretKey, nil
+			return secret, nil
 		}, nil
 	}
 	if len(jwtAuth.JwksFile.Keys) != 0 {
@@ -340,4 +342,12 @@ func (jwtAuth JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 	}
 
 	return nil, fmt.Errorf("no JWT secret, RSA key, or JWKS URL configured")
+}
+
+func signingSecret(signingSecret, old []byte) []byte {
+	if signingSecret != nil {
+		return signingSecret
+	}
+	return old
+
 }

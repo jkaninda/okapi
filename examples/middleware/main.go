@@ -115,9 +115,9 @@ func main() {
 	// Create middleware
 	// Setup
 	jwtAuth := okapi.JWTAuth{
-		SecretKey:   []byte("supersecret"),
-		TokenLookup: "header:Authorization",
-		ContextKey:  "user",
+		SigningSecret: []byte("supersecret"),
+		TokenLookup:   "header:Authorization",
+		ContextKey:    "user",
 		// ValidateRole is optional, it's to validate the role of user
 		ValidateRole: func(claims jwt.Claims) error {
 			mapClaims, ok := claims.(jwt.MapClaims)

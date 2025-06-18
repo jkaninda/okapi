@@ -216,7 +216,7 @@ func TestWithServer(t *testing.T) {
 
 	// Initialize the appropriate handler based on format preference
 
-	logger := slog.New(slog.NewJSONHandler(DefaultWriter, opts))
+	logger := slog.New(slog.NewJSONHandler(defaultWriter, opts))
 	cors := Cors{AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}, AllowedOrigins: []string{"*"}}
 	o := New()
 	o.With(WithPort(8081), WithIdleTimeout(15),

@@ -175,7 +175,7 @@ func LoadTLSConfig(certFile, keyFile, caFile string, clientAuth bool) (*tls.Conf
 
 		caCertPool := x509.NewCertPool()
 		if !caCertPool.AppendCertsFromPEM(caCert) {
-			_, _ = fmt.Fprintf(DefaultErrorWriter, "Warning: failed to append CA certs from PEM")
+			_, _ = fmt.Fprintf(defaultErrorWriter, "Warning: failed to append CA certs from PEM")
 		}
 
 		config.ClientCAs = caCertPool
@@ -215,7 +215,7 @@ func LoadJWKSFromFile(jwksInput string) (*Jwks, error) {
 
 		defer func() {
 			if cerr := file.Close(); cerr != nil {
-				_, _ = fmt.Fprint(DefaultErrorWriter, "Error closing JWKS file", "error", cerr)
+				_, _ = fmt.Fprint(defaultErrorWriter, "Error closing JWKS file", "error", cerr)
 			}
 		}()
 

@@ -58,7 +58,7 @@ func fetchJWKS(jwksURL string) (*Jwks, error) {
 	defer func(Body io.ReadCloser) {
 		err = Body.Close()
 		if err != nil {
-			_, err = fmt.Fprintf(DefaultErrorWriter, "error closing body: %v", err)
+			_, err = fmt.Fprintf(defaultErrorWriter, "error closing body: %v", err)
 			if err != nil {
 				return
 			}

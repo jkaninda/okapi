@@ -27,6 +27,7 @@ package okapi
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"log/slog"
 	"net/http"
@@ -34,51 +35,112 @@ import (
 	"time"
 )
 
+var SigningSecret = []byte("supersecret")
+
+const user = "user"
+
 func TestJwtMiddleware(t *testing.T) {
 	// Setup
 	auth := JWTAuth{
-		SecretKey:   []byte("supersecret"),
-		TokenLookup: "header:Authorization",
-		ContextKey:  "user",
-		ValidateRole: func(claims jwt.Claims) error {
+		Audience:      "okapi.example.com",
+		Issuer:        "okapi.example.com",
+		SigningSecret: SigningSecret,
+		TokenLookup:   "header:Authorization",
+		ClaimsExpression: "Equals(`email_verified`, `true`) " +
+			"&& OneOf(`user.role`, `admin`, `user`) " +
+			"&& Contains(`tags`, `vip`, `premium`, `gold`)",
+		ForwardClaims: map[string]string{
+			"email": "user.email",
+			"role":  "user.role",
+			"name":  "user.name",
+		},
+	}
+	adminAuth := JWTAuth{
+		Audience:         "okapi.example.com",
+		SigningSecret:    SigningSecret,
+		TokenLookup:      "header:Authorization",
+		ContextKey:       "user",
+		ClaimsExpression: "Equals(`email_verified`, `true`) && Equals(`user.role`, `admin`) && Contains(`tags`,`gold`)",
+		ForwardClaims: map[string]string{
+			"email": "user.email",
+			"role":  "user.role",
+			"name":  "user.name",
+		},
+		ValidateClaims: func(claims jwt.Claims) error {
+			fPrint("Validating claims using custom function")
 			mapClaims, ok := claims.(jwt.MapClaims)
 			if !ok {
 				return errors.New("invalid claims type")
 			}
-			role, ok := mapClaims["role"].(string)
+			role, ok := mapClaims["user"].(map[string]interface{})["role"]
 			if !ok || role != "admin" {
-				return errors.New("unauthorized role")
+				if role != "" {
+					return fmt.Errorf("role %s is not allowed to", role)
+				}
+				return fmt.Errorf("unauthorized role")
 			}
 			return nil
 		},
 	}
-	adminClaims := jwt.MapClaims{
-		"sub":  "12345",
-		"role": "admin",
-		"exp":  time.Now().Add(2 * time.Hour).Unix(),
+	jwtClaims := jwt.MapClaims{
+		"sub": "12345",
+		"iss": "okapi.example.com",
+		"aud": "okapi.example.com",
+		"user": map[string]string{
+			"name":  "",
+			"role":  "",
+			"email": "admin@example.com",
+		},
+		"email_verified": true,
+		"tags":           []string{},
+		"exp":            time.Now().Add(2 * time.Hour).Unix(),
 	}
-	Claims := jwt.MapClaims{
-		"sub":  "12345",
-		"role": "user",
-		"exp":  time.Now().Add(2 * time.Hour).Unix(),
+	jwtClaimsNoAud := jwt.MapClaims{
+		"sub": "12345",
+		"iss": "okapi.example.com",
+		"user": map[string]string{
+			"name":  "",
+			"role":  "",
+			"email": "admin@example.com",
+		},
+		"email_verified": true,
+		"tags":           []string{},
+		"exp":            time.Now().Add(2 * time.Hour).Unix(),
 	}
-	// Generate token
-	adminToken := mustGenerateToken(t, auth.SecretKey, adminClaims)
-	token := mustGenerateToken(t, auth.SecretKey, Claims)
+	// Generate Admin token with audience
+	jwtClaims[user].(map[string]string)["role"] = "admin"
+	jwtClaims[user].(map[string]string)["name"] = "Administrator"
+	jwtClaims["tags"] = []string{"gold"}
+	// Generate Admin token
+	adminToken := mustGenerateToken(t, auth.SigningSecret, jwtClaims)
+
+	// Generate User token
+	jwtClaims[user].(map[string]string)["role"] = user
+	jwtClaims[user].(map[string]string)["name"] = "User Name"
+	jwtClaims[user].(map[string]string)["email"] = "user@example.com"
+	jwtClaims["tags"] = []string{"vip"}
+	token := mustGenerateToken(t, auth.SigningSecret, jwtClaims)
+
+	// Generate a token without audience
+	jwtClaimsNoAud[user].(map[string]string)["role"] = user
+	jwtClaimsNoAud[user].(map[string]string)["name"] = "User Name"
+	jwtClaimsNoAud[user].(map[string]string)["email"] = "user@example.com"
+	jwtClaimsNoAud["tags"] = []string{"vip"}
+
+	noAudToken := mustGenerateToken(t, auth.SigningSecret, jwtClaimsNoAud)
 
 	// Setup server
 	o := New(WithAccessLogDisabled())
+	// Create a new group for the main routes
+	admin := o.Group("/admin", adminAuth.Middleware)
+	// Use the JWT middleware for the main routes
 	o.Use(auth.Middleware)
 	o.Use(LoggerMiddleware)
-	o.Get("/protected", func(c Context) error {
-		user, exists := c.Get(auth.ContextKey)
-		if !exists {
-			return c.ErrorForbidden(M{"error": "Unauthorized"})
-		}
-		slog.Info("Current user", "user", user)
-		return c.JSON(http.StatusOK, M{"user": user})
-	})
+	o.Get("/protected", whoAmIHandler)
 
+	admin.Get("/protected", whoAmIHandler)
+
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Failed to start server: %v", err)
@@ -87,13 +149,23 @@ func TestJwtMiddleware(t *testing.T) {
 	defer o.Stop()
 
 	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusForbidden)
+	assertStatus(t, "GET", "http://localhost:8080/admin/protected", nil, nil, "", http.StatusForbidden)
+
 	headers := map[string]string{
 		"Authorization": "Bearer " + token,
 	}
-	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusUnauthorized)
+	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
 
 	headers["Authorization"] = "Bearer " + adminToken
+	assertStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
+
+	headers["Authorization"] = "Bearer " + noAudToken
+	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusUnauthorized)
+	assertStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
+
 }
 func TestBasicAuth(t *testing.T) {
 	username := "user"
@@ -192,4 +264,19 @@ func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string
 		t.Fatal("Generated token is empty")
 	}
 	return token
+}
+
+func whoAmIHandler(c Context) error {
+	email := c.GetString("email")
+	if email == "" {
+		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
+	}
+	slog.Info("Who am I am ", "email", email, "role", c.GetString("role"), "name", c.GetString("name"))
+	// Respond with the current user information
+	return c.JSON(http.StatusOK, M{
+		"email": email,
+		"role":  c.GetString("role"),
+		"name":  c.GetString("name"),
+	},
+	)
 }

@@ -28,13 +28,11 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/subtle"
-	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	goutils "github.com/jkaninda/go-utils"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -64,51 +62,125 @@ type (
 	// JWTAuth is a configuration struct for JWT-based authentication middleware.
 	//
 	// You must configure at least one token verification mechanism:
-	// - SecretKey: for HMAC algorithms
+	// - SigningSecret: for HMAC algorithms
 	// - RsaKey: for RSA algorithms (e.g. RS256)
 	// - JwksUrl: to fetch public keys dynamically from a JWKS endpoint
 	// - JwksFile: to load static JWKS from a file or base64 string, use okapi.LoadJWKSFromFile()
 	//
 	// Fields:
+	// JWTAuth holds configuration for JWT-based authentication.
 	JWTAuth struct {
+		// SecretKey is a legacy secret key used for HMAC algorithms (e.g., HS256).
+		// Deprecated: Use SigningSecret instead.
 		SecretKey []byte
-		// Static JWKS (JSON Web Key Set) loaded from file or base64. Optional.
+
+		// SigningSecret is the key used for signing/validating tokens when using symmetric algorithms like HS256.
+		SigningSecret []byte
+
+		// JwksFile provides a static JWKS (JSON Web Key Set), either from a file or base64-encoded string.
+		// Use okapi.LoadJWKSFromFile() to load the JWKS from a file.
+		// Optional.
 		JwksFile *Jwks
-		// URL to a remote JWKS endpoint for public key discovery. Optional.
+
+		// JwksUrl specifies a remote JWKS endpoint URL for key discovery.
+		// Optional.
 		JwksUrl string
-		// Expected audience ("aud") claim in the token. Optional.
+
+		// Audience is the expected "aud" (audience) claim in the token.
+		// Optional.
 		Audience string
-		// Issuer Expected issuer ("iss") claim in the token. Optional.
+
+		// Issuer is the expected "iss" (issuer) claim in the token.
+		// Optional.
 		Issuer string
-		// RsaKey Public RSA key for verifying RS256 tokens. Optional.
+
+		// RsaKey is a public RSA key used to verify tokens signed with RS256.
+		// Optional.
 		RsaKey *rsa.PublicKey
-		// Algo Expected signing algorithm (e.g., "RS256", "HS256"). Optional.
+
+		// Algo specifies the expected signing algorithm (e.g., "RS256", "HS256").
+		// Optional.
 		Algo string
-		// TokenLookup Where to extract the token from (e.g., "header:Authorization", "query:token", "cookie:jwt").
-		// default: (header:Authorization)
+
+		// TokenLookup defines how and where to extract the token from the request.
+		// Supported formats include:
+		//   - "header:Authorization" (default)
+		//   - "query:token"
+		//   - "cookie:jwt"
 		TokenLookup string
-		// ContextKey where validated token claims will be stored (e.g., "user").
-		ContextKey string
-		// ValidateRole Optional role validation function
+		// ContextKey is the key used to store the full validated JWT claims in the request context.
+		//
+		// Use this when you need access to the entire set of claims for advanced processing or custom logic
+		// within your handler or middleware.
+		//
+		// If you only need specific claim values (e.g., "user.email", "user.id"), consider using ForwardClaims instead.
 		//
 		// Example:
+		//   ContextKey: "user"
+		ContextKey string
+		// ForwardClaims maps context keys to JWT claim paths (supports dot notation for nested fields).
+		// This extracts selected claims and stores them in the request context under the specified keys.
 		//
-		//	auth := JWTAuth{
-		//	SecretKey:   []byte("supersecret"),
-		//	TokenLookup: "header:Authorization",
-		//	ContextKey:  "user",
-		//	ValidateRole: func(claims jwt.Claims) error {
-		//	mapClaims, ok := claims.(jwt.MapClaims)
-		//	if !ok {
-		//	return errors.New("invalid claims type")
-		// }
-		//	role, ok := mapClaims["role"].(string)
-		//	if !ok || role != "admin" {
-		//	return errors.New("unauthorized role")
-		// }
-		//	return nil
-		// },
-		// }
+		// Use this when you want to expose only specific claims to handlers or middleware, without
+		// needing access to the entire token.
+		//
+		// Example:
+		//   ForwardClaims: map[string]string{
+		//     "email": "user.email",
+		//     "uid":   "user.id",
+		//   }
+		ForwardClaims map[string]string
+		// ClaimsExpression defines a custom expression to validate JWT claims.
+		// Useful for enforcing advanced conditions on claims such as role, scope, or custom fields.
+		//
+		// Supported functions:
+		//   - Equals(field, value)
+		//   - Prefix(field, prefix)
+		//   - Contains(field, val1, val2, ...)
+		//   - OneOf(field, val1, val2, ...)
+		//
+		// Logical Operators:
+		//   - !   — NOT
+		//   - &&  — AND (evaluated before OR)
+		//   - ||  — OR  (evaluated after AND)
+		//
+		// These operators allow you to combine multiple expressions to create complex validation logic.
+		// Example:
+		//   jwtAuth.ClaimsExpression = "Equals(`email_verified`, `true`) && OneOf(`user.role`, `admin`, `owner`) && Contains(`tags`, `vip`, `premium`)"
+		//
+		// In the above:
+		//   - The expression ensures the user is verified AND either has an admin/owner role,
+		//     OR belongs to a premium tag group.
+		ClaimsExpression string
+		// parsedExpression holds the compiled version of ClaimsExpression.
+		parsedExpression Expression
+		// ValidateClaims is an optional custom validation function for processing JWT claims.
+		// This provides full control over claim validation logic and can be used alongside or
+		// instead of ClaimsExpression.
+		//
+		// Return an error to reject the request.
+		//
+		// Example:
+		//   ValidateClaims: func(claims jwt.Claims) error {
+		//     mapClaims, ok := claims.(jwt.MapClaims)
+		//     if !ok {
+		//       return errors.New("invalid claims type")
+		//     }
+		//     if emailVerified, _ := mapClaims["email_verified"].(bool); !emailVerified {
+		//       return errors.New("email not verified")
+		//     }
+		//     if role, _ := mapClaims["role"].(string); role != "admin" {
+		//       return errors.New("unauthorized role")
+		//     }
+		//     return nil
+		//   }
+		ValidateClaims func(claims jwt.Claims) error
+
+		// Deprecated: Use ValidateClaims instead.
+		//
+		// ValidateRole was previously used for role-based access control, but has been
+		// replaced by the more general ValidateClaims function which allows for flexible
+		// validation of any JWT claims.
 		ValidateRole func(claims jwt.Claims) error
 	}
 )
@@ -204,7 +276,7 @@ func (b BodyLimit) Middleware(next HandleFunc) HandleFunc {
 }
 
 // Middleware validates JWT tokens from the configured source
-func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
+func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
 		tokenStr, err := jwtAuth.extractToken(c)
 		if err != nil || tokenStr == "" {
@@ -226,118 +298,43 @@ func (jwtAuth JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		if err != nil || !token.Valid {
 			return c.AbortUnauthorized("Invalid or expired token", err)
 		}
-		if jwtAuth.ValidateRole != nil {
-			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
+
+		// If claims expression is configured, validate the claims
+		if jwtAuth.ClaimsExpression != "" {
+			valid, err := jwtAuth.validateJWTClaims(token)
+			if err != nil {
+				fPrintError("Failed to validate JWT claims expression", "error", err)
+				return c.AbortUnauthorized("failed to validate JWT claims", err)
+			}
+			if !valid {
+				fPrintError("JWT claims did not meet required expression ")
+				return c.AbortUnauthorized("JWT claims did not meet required expression", err)
+			}
+		}
+		// If custom claims validation function is provided, use it
+		if jwtAuth.ValidateClaims != nil {
+			if err = jwtAuth.ValidateClaims(token.Claims); err != nil {
+				fPrintError("Failed to validate JWT role", "function", "ValidateRole", "error", err)
 				return c.AbortUnauthorized("Insufficient role", err)
 			}
 		}
+		// If ValidateRole is configured, validate the role claim
+		if jwtAuth.ValidateRole != nil {
+			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
+				fPrintError("Failed to validate JWT role", "function", "ValidateRole", "error", err)
+				return c.AbortUnauthorized("Insufficient role", err)
+			}
+		}
+		// Store claims in context
 		if jwtAuth.ContextKey != "" && token.Claims != nil {
 			c.Set(jwtAuth.ContextKey, token.Claims)
 		}
+		// Forward specific claims to context if configured
+		if jwtAuth.ForwardClaims != nil {
+			if err = jwtAuth.forwardContextFromClaims(token, &c); err != nil {
+				fPrintError("Failed to forward context from claims", "error", err)
+			}
+		}
 		return next(c)
 	}
-}
-
-// ********** Helpers **********************
-
-// extractToken pulls the token from header, query or cookie
-func (jwtAuth JWTAuth) extractToken(c Context) (string, error) {
-	tokenLookup := jwtAuth.TokenLookup
-	if tokenLookup == "" {
-		tokenLookup = "header:Authorization"
-	}
-	parts := strings.Split(tokenLookup, ":")
-	if len(parts) != 2 {
-		return "", errors.New("invalid token lookup config")
-	}
-
-	source, name := parts[0], parts[1]
-	switch source {
-	case "header":
-		auth := c.Request.Header.Get(name)
-		if strings.HasPrefix(auth, "Bearer ") {
-			return strings.TrimPrefix(auth, "Bearer "), nil
-		}
-		return auth, nil
-	case "query":
-		return c.Query(name), nil
-	case "cookie":
-		cookie, err := c.Request.Cookie(name)
-		if err != nil {
-			return "", err
-		}
-		return cookie.Value, nil
-	default:
-		return "", errors.New("unsupported token source")
-	}
-}
-
-// GenerateJwtToken generates a JWT with custom claims and expiry
-func GenerateJwtToken(secret []byte, claims jwt.MapClaims, ttl time.Duration) (string, error) {
-	claims["exp"] = time.Now().Add(ttl).Unix()
-	claims["iat"] = time.Now().Unix()
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(secret)
-}
-
-// ValidateToken checks the JWT token and returns the claims if valid
-func (jwtAuth JWTAuth) ValidateToken(c Context) (jwt.MapClaims, error) {
-	tokenStr, err := jwtAuth.extractToken(c)
-	if err != nil {
-		return nil, err
-	}
-
-	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return jwtAuth.SecretKey, nil
-	})
-
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid or expired token")
-	}
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		return claims, nil
-	}
-	return nil, errors.New("invalid claims type")
-}
-func (jwtAuth JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
-	if jwtAuth.JwksUrl != "" {
-		return func(token *jwt.Token) (interface{}, error) {
-			kid, ok := token.Header["kid"].(string)
-			if !ok {
-				return nil, fmt.Errorf("missing 'kid' in JWT header")
-			}
-			jwks, err := fetchJWKS(jwtAuth.JwksUrl)
-			if err != nil {
-				return nil, err
-			}
-			return jwks.getKey(kid)
-		}, nil
-	}
-
-	if jwtAuth.SecretKey != nil {
-		return func(token *jwt.Token) (interface{}, error) {
-			return jwtAuth.SecretKey, nil
-		}, nil
-	}
-	if len(jwtAuth.JwksFile.Keys) != 0 {
-		return func(token *jwt.Token) (interface{}, error) {
-			kid, ok := token.Header["kid"].(string)
-			if !ok {
-				return nil, fmt.Errorf("missing 'kid' in JWT header")
-			}
-			return jwtAuth.JwksFile.getKey(kid)
-		}, nil
-	}
-	if jwtAuth.RsaKey != nil {
-		return func(token *jwt.Token) (interface{}, error) {
-			return jwtAuth.RsaKey, nil
-		}, nil
-	}
-
-	return nil, fmt.Errorf("no JWT secret, RSA key, or JWKS URL configured")
 }

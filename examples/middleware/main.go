@@ -32,6 +32,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -62,11 +63,20 @@ var (
 		{ID: 4, Name: "Go Web Programming", Price: 35, Qty: 60},
 		{ID: 5, Name: "Go Design Patterns", Price: 45, Qty: 80},
 	}
-	adminClaims = jwt.MapClaims{
-		"sub":  "12345",
-		"role": "admin",
-		"exp":  time.Now().Add(2 * time.Hour).Unix(),
+	jwtClaims = jwt.MapClaims{
+		"sub": "12345",
+		"iss": "okapi.example.com",
+		"aud": "okapi.example.com",
+		"user": map[string]string{
+			"name":  "",
+			"role":  "",
+			"email": "admin@example.com",
+		},
+		"email_verified": true,
+		"tags":           []string{"vip", "premium", "gold"},
+		"exp":            time.Now().Add(2 * time.Hour).Unix(),
 	}
+	signingSecret = "supersecret"
 )
 
 func main() {
@@ -112,22 +122,27 @@ func main() {
 	v2 := api.Group("/v2")
 
 	// ******* Admin API Routes ********
-	// Create middleware
-	// Setup
+	// Setup JWT authentication middleware with claims expression
 	jwtAuth := okapi.JWTAuth{
-		SecretKey:   []byte("supersecret"),
-		TokenLookup: "header:Authorization",
-		ContextKey:  "user",
-		// ValidateRole is optional, it's to validate the role of user
-		ValidateRole: func(claims jwt.Claims) error {
+		SigningSecret:    []byte(signingSecret),
+		TokenLookup:      "header:Authorization",
+		ClaimsExpression: "Equals(`email_verified`, `true`) && OneOf(`user.role`, `admin`, `owner`) && Contains(`tags`, `vip`, `premium`, `gold`)",
+		ForwardClaims: map[string]string{
+			"email": "user.email",
+			"role":  "user.role",
+			"name":  "user.name",
+		},
+		ValidateClaims: func(claims jwt.Claims) error {
+			slog.Info("Validating JWT claims for role using custom function")
 			mapClaims, ok := claims.(jwt.MapClaims)
 			if !ok {
 				return errors.New("invalid claims type")
 			}
-			role, ok := mapClaims["role"].(string)
-			if !ok || role != "admin" {
+			role, ok := mapClaims["user"].(map[string]interface{})["role"]
+			if !ok || (role != "admin" && role != "user" && role != "owner") {
 				return errors.New("unauthorized role")
 			}
+			slog.Info("Role validation successful", "role", role)
 			return nil
 		},
 	}
@@ -155,6 +170,13 @@ func main() {
 		}
 		return c.OK(okapi.M{"message": "Book deleted"})
 	})
+	adminApiV2.Get("/whoami", whoAmI,
+		okapi.DocSummary("Get current user information"),
+		okapi.DocResponse(okapi.M{
+			"email": "",
+			"role":  "",
+			"name":  "",
+		}))
 
 	// ******* Public API Routes ********
 	// Define routes for the v2 group
@@ -165,14 +187,23 @@ func main() {
 		}
 		fmt.Println(loginRequest.Username, loginRequest.Password)
 		if loginRequest.Username != "admin" && loginRequest.Password != "password" ||
-			loginRequest.Username != "user" && loginRequest.Password != "password" {
+			loginRequest.Username != "owner" && loginRequest.Password != "password" {
 
 			return c.AbortUnauthorized("username or password is wrong")
 
 		}
-		adminClaims["role"] = loginRequest.Username
-		expireAt := 2 * time.Hour
-		token, err := okapi.GenerateJwtToken(jwtAuth.SecretKey, adminClaims, expireAt)
+		// Update JWT claims with user information
+		if _, ok := jwtClaims["user"].(map[string]string); ok {
+			slog.Info("Updating JWT claims for user", "username", loginRequest.Username)
+			jwtClaims["user"].(map[string]string)["name"] = strings.ToUpper(loginRequest.Username)
+			jwtClaims["user"].(map[string]string)["role"] = loginRequest.Username
+
+		}
+		// Set the expiration time for the JWT token
+		expireAt := 30 * time.Minute
+		jwtClaims["exp"] = time.Now().Add(expireAt).Unix()
+
+		token, err := okapi.GenerateJwtToken(jwtAuth.SigningSecret, jwtClaims, expireAt)
 		if err != nil {
 			return c.AbortInternalServerError("Internal server error", err)
 		}
@@ -244,6 +275,19 @@ func findById(c okapi.Context) error {
 		}
 	}
 	return c.ErrorNotFound(okapi.M{"error": "Book not found"})
+}
+func whoAmI(c okapi.Context) error {
+	email := c.GetString("email")
+	if email == "" {
+		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
+	}
+	// Respond with the current user information
+	return c.JSON(http.StatusOK, okapi.M{
+		"email": email,
+		"role":  c.GetString("role"),
+		"name":  c.GetString("name"),
+	},
+	)
 }
 
 func customMiddleware(next okapi.HandleFunc) okapi.HandleFunc {

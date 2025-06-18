@@ -39,3 +39,11 @@ func TestSecondToDuration(t *testing.T) {
 	slog.Info(duration.String())
 
 }
+func TestFPrintError(t *testing.T) {
+	fPrintError("Error occurred ", "code", 400, "message", "Invalid input")
+	slog.Info("Check the logs for formatted error message")
+}
+func TestFPrint(t *testing.T) {
+	fPrint("Hello World")
+	fPrint("Hello World", "key1", "value1", "key2", "value2")
+}

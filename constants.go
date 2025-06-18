@@ -35,7 +35,6 @@ const (
 	TRUE              = "true"
 
 	OpenApiVersion                = "3.0.0"
-	OpenApiURL                    = "http://localhost:8080"
 	OpenApiDocPrefix              = "/docs"
 	AccessControlAllowOrigin      = "Access-Control-Allow-Origin"
 	AccessControlAllowHeaders     = "Access-Control-Allow-Headers"

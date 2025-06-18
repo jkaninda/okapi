@@ -1094,7 +1094,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 			Title:      FrameworkName,
 			Version:    "1.0.0",
 			PathPrefix: OpenApiDocPrefix,
-			Servers:    Servers{{URL: OpenApiURL}},
+			Servers:    Servers{{}},
 		},
 	}
 

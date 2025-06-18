@@ -132,7 +132,7 @@ func main() {
 			"role":  "user.role",
 			"name":  "user.name",
 		},
-		ValidateRole: func(claims jwt.Claims) error {
+		ValidateClaims: func(claims jwt.Claims) error {
 			slog.Info("Validating JWT claims for role using custom function")
 			mapClaims, ok := claims.(jwt.MapClaims)
 			if !ok {

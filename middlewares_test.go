@@ -66,8 +66,8 @@ func TestJwtMiddleware(t *testing.T) {
 			"role":  "user.role",
 			"name":  "user.name",
 		},
-		ValidateRole: func(claims jwt.Claims) error {
-			fPrint("Validating role using custom function")
+		ValidateClaims: func(claims jwt.Claims) error {
+			fPrint("Validating claims using custom function")
 			mapClaims, ok := claims.(jwt.MapClaims)
 			if !ok {
 				return errors.New("invalid claims type")

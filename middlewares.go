@@ -154,23 +154,33 @@ type (
 		ClaimsExpression string
 		// parsedExpression holds the compiled version of ClaimsExpression.
 		parsedExpression Expression
-
-		// ValidateRole is an optional custom validation function for enforcing roles or other complex rules.
+		// ValidateClaims is an optional custom validation function for processing JWT claims.
+		// This provides full control over claim validation logic and can be used alongside or
+		// instead of ClaimsExpression.
 		//
-		// This can be used instead of or in addition to ClaimsExpression.
+		// Return an error to reject the request.
 		//
 		// Example:
-		//   ValidateRole: func(claims jwt.Claims) error {
+		//   ValidateClaims: func(claims jwt.Claims) error {
 		//     mapClaims, ok := claims.(jwt.MapClaims)
 		//     if !ok {
 		//       return errors.New("invalid claims type")
 		//     }
-		//     role, ok := mapClaims["role"].(string)
-		//     if !ok || role != "admin" {
+		//     if emailVerified, _ := mapClaims["email_verified"].(bool); !emailVerified {
+		//       return errors.New("email not verified")
+		//     }
+		//     if role, _ := mapClaims["role"].(string); role != "admin" {
 		//       return errors.New("unauthorized role")
 		//     }
 		//     return nil
 		//   }
+		ValidateClaims func(claims jwt.Claims) error
+
+		// Deprecated: Use ValidateClaims instead.
+		//
+		// ValidateRole was previously used for role-based access control, but has been
+		// replaced by the more general ValidateClaims function which allows for flexible
+		// validation of any JWT claims.
 		ValidateRole func(claims jwt.Claims) error
 	}
 )
@@ -301,6 +311,14 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 				return c.AbortUnauthorized("JWT claims did not meet required expression", err)
 			}
 		}
+		// If custom claims validation function is provided, use it
+		if jwtAuth.ValidateClaims != nil {
+			if err = jwtAuth.ValidateClaims(token.Claims); err != nil {
+				fPrintError("Failed to validate JWT role", "function", "ValidateRole", "error", err)
+				return c.AbortUnauthorized("Insufficient role", err)
+			}
+		}
+		// If ValidateRole is configured, validate the role claim
 		if jwtAuth.ValidateRole != nil {
 			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
 				fPrintError("Failed to validate JWT role", "function", "ValidateRole", "error", err)

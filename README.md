@@ -347,65 +347,151 @@ o.Use(auth.Middleware)
 o.Get("/admin", adminHandler)
 ```
 ---
+
 ### JWT Middleware
 
-Okapi provides flexible JWT middleware that supports:
+Okapi includes a powerful and flexible JWT middleware to secure your routes with JSON Web Tokens. It supports multiple signing mechanisms, key sources, claim validation strategies, and OpenAPI integration.
 
-* Symmetric signing (`HS256`) via `SecretKey`
-* Asymmetric signing (`RS256`, etc.) via `RSAKey`
-* Remote key discovery via `JwksUrl`
-* Local JWKS via `JwksFile`
-* Optional role validation with `ValidateRole`
-* OpenAPI integration with `WithBearerAuth()`
+####  Features
 
-
-
-#### Example: Basic `HS256` Auth
-
-```go
-jwtAuth := okapi.JWTAuth{
-	SecretKey:   []byte("supersecret"),         // Shared secret for HS256
-    TokenLookup: "header:Authorization",        // Where to find the token (header, query, cookie) default: (header:Authorization)
-	ContextKey:  "user",                        // Key to store claims in context
-}
-```
+* **HS256** symmetric signing via `SigningSecret`
+* **RS256** and other asymmetric algorithms via `RSAKey`
+* **Remote JWKS** discovery via `JwksUrl` (e.g., OIDC or Auth0)
+* **Local JWKS** via `JwksFile`
+* **Claims validation** with `ClaimsExpression` or `ValidateClaims`
+* **OpenAPI integration** with `.WithBearerAuth()`
+* **Selective claim forwarding** using `ForwardClaims`
 
 
-####  Example: Auth via Remote JWKS (OIDC / Auth0)
+
+#### Example: Basic HS256 Authentication
 
 ```go
 jwtAuth := okapi.JWTAuth{
-    JwksUrl:     "https://example.com/.well-known/jwks.json",  // Fetch keys from remote JWKS endpoint
-	TokenLookup: "header:Authorization",
-	ContextKey:  "user",
+    SigningSecret: []byte("supersecret"),      // Shared secret for HS256
+    TokenLookup:   "header:Authorization",     // Token source: header, query, or cookie (default: header:Authorization)
+    ContextKey:    "user",                     // Key under which claims are stored in context
 }
 ```
 
 
-#### Optional Role Validation
+#### Example: Remote JWKS (OIDC, Auth0)
 
 ```go
-jwtAuth.ValidateRole = func(claims jwt.Claims) error {
-	mapClaims, ok := claims.(jwt.MapClaims)
-	if !ok {
-		return errors.New("invalid claims type")
-	}
-	role, ok := mapClaims["role"].(string)
-	if !ok || role != "admin" {
-		return errors.New("unauthorized role")
-	}
-	return nil
+jwtAuth := okapi.JWTAuth{
+    JwksUrl:     "https://example.com/.well-known/jwks.json",  // Remote JWKS URL
+    TokenLookup: "header:Authorization",
+    ContextKey:  "user",
 }
 ```
 
 
-#### Protect Routes with JWT
+#### Claims Expression (Optional)
+
+Use `ClaimsExpression` to define rules for validating claims using simple expressions. This is ideal for access control based on roles, scopes, or other custom claim logic.
+
+##### Supported Functions
+
+* `Equals(field, value)`
+* `Prefix(field, prefix)`
+* `Contains(field, val1, val2, ...)`
+* `OneOf(field, val1, val2, ...)`
+
+#### Logical Operators
+
+* `!` — NOT
+* `&&` — AND (evaluated before OR)
+* `||` — OR (evaluated after AND)
+
+Example:
 
 ```go
-admin := o.Group("/admin", jwtAuth.Middleware). // Attach middleware to route group
-	WithBearerAuth()                             // Adds Bearer auth to OpenAPI docs
+jwtAuth := okapi.JWTAuth{
+    SigningSecret:    []byte("supersecret"),
+    ClaimsExpression: "Equals(`email_verified`, `true`) && Equals(`user.role`, `admin`) && Contains(`tags`, `gold`, `silver`)",
+    TokenLookup:      "header:Authorization",
+    ContextKey:       "user",
+    ForwardClaims: map[string]string{
+        "email": "user.email",
+        "role":  "user.role",
+        "name":  "user.name",
+    },
+}
+```
 
-admin.Get("/users", adminGetUsersHandler)       // Now protected by JWT
+
+#### Forwarding Claims to Context
+
+`ForwardClaims` lets you expose specific claims to your handlers via the request context. This keeps handlers decoupled from the full JWT while retaining useful information.
+
+> Supports **dot notation** for nested claims.
+
+Example:
+
+```go
+jwtAuth.ForwardClaims = map[string]string{
+    "email": "user.email",
+    "role":  "user.role",
+    "name":  "user.name",
+}
+```
+Get these claims in your handler:
+
+```go
+func whoAmIHandler(c okapi.Context) error {
+    email := c.GetString("email")
+    if email == "" {
+        return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
+    }
+	slog.Info("Who am I am ", "email", email, "role", c.GetString("role"), "name", c.GetString("name"))
+// Respond with the current user information
+    return c.JSON(http.StatusOK, M{
+                "email": email,
+                "role":  c.GetString("role"),
+                "name":  c.GetString("name"),
+		}, )
+}
+
+
+#### Custom Claim Validation
+
+You can define your own `ValidateClaims` function to fully control claim checks. Use this for advanced logic beyond what `ClaimsExpression` supports.
+You can combine this with `ClaimsExpression` for more complex scenarios.
+
+Example:
+
+```go
+jwtAuth.ValidateClaims = func(claims jwt.Claims) error {
+    mapClaims, ok := claims.(jwt.MapClaims)
+    if !ok {
+        return errors.New("invalid claims type")
+    }
+
+    if emailVerified, _ := mapClaims["email_verified"].(bool); !emailVerified {
+        return errors.New("email not verified")
+    }
+
+    if role, _ := mapClaims["role"].(string); role != "admin" {
+        return errors.New("unauthorized role")
+    }
+
+    return nil
+}
+```
+
+
+#### Protecting Routes
+
+Apply the JWT middleware to route groups or individual routes to require authentication.
+
+```go
+admin := o.Group("/admin", jwtAuth.Middleware). // Protect /admin routes
+    WithBearerAuth()                            // Adds Bearer auth to OpenAPI docs
+
+admin.Get("/users", adminGetUsersHandler)       // Secured route
+
+// Apply middleware globally (optional)
+o.Use(jwtAuth.Middleware)
 ```
 
 ---

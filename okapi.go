@@ -48,10 +48,10 @@ import (
 )
 
 var (
-	DefaultWriter      io.Writer = os.Stdout
-	DefaultErrorWriter io.Writer = os.Stderr
-	DefaultPort                  = 8080
-	DefaultAddr                  = ":8080"
+	defaultWriter      io.Writer = os.Stdout
+	defaultErrorWriter io.Writer = os.Stderr
+	defaultPort                  = 8080
+	defaultAddr                  = ":8080"
 )
 
 type (
@@ -299,7 +299,7 @@ func WithAccessLogDisabled() OptionFunc {
 func WithPort(port int) OptionFunc {
 	return func(o *Okapi) {
 		if port <= 0 {
-			port = DefaultPort
+			port = defaultPort
 		}
 		host, _, err := net.SplitHostPort(o.server.Addr)
 		if err != nil || host == "" {
@@ -313,10 +313,10 @@ func WithPort(port int) OptionFunc {
 func WithAddr(addr string) OptionFunc {
 	return func(o *Okapi) {
 		if strings.TrimSpace(addr) == "" || addr == ":" {
-			addr = DefaultAddr
+			addr = defaultAddr
 		}
 		if _, _, err := net.SplitHostPort(addr); err != nil {
-			addr = net.JoinHostPort(addr, strconv.Itoa(DefaultPort))
+			addr = net.JoinHostPort(addr, strconv.Itoa(defaultPort))
 		}
 		o.server.Addr = addr
 	}
@@ -694,7 +694,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	o.router.mux.StrictSlash(o.strictSlash)
 	o.context.okapi = o
 	o.applyCommon()
-	_, _ = fmt.Fprintf(DefaultWriter, "Starting HTTP server at %s\n", o.server.Addr)
+	_, _ = fmt.Fprintf(defaultWriter, "Starting HTTP server at %s\n", o.server.Addr)
 	// Serve with TLS if configured
 	if server.TLSConfig != nil {
 		return server.ListenAndServeTLS("", "")
@@ -710,7 +710,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 		}()
 
 		o.tlsServer.Handler = o
-		_, _ = fmt.Fprintf(DefaultWriter, "Starting HTTP server at %s\n", o.tlsServer.Addr)
+		_, _ = fmt.Fprintf(defaultWriter, "Starting HTTP server at %s\n", o.tlsServer.Addr)
 		return o.tlsServer.ListenAndServeTLS("", "")
 	}
 
@@ -720,7 +720,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 
 // Stop gracefully shuts down the Okapi server(s)
 func (o *Okapi) Stop() {
-	_, _ = fmt.Fprintf(DefaultWriter, "Gracefully shutting down HTTP server at %s\n", o.server.Addr)
+	_, _ = fmt.Fprintf(defaultWriter, "Gracefully shutting down HTTP server at %s\n", o.server.Addr)
 	if err := o.Shutdown(o.server); err != nil {
 		o.logger.Error("Failed to shutdown HTTP server", slog.String("error", err.Error()))
 		panic(err)
@@ -728,7 +728,7 @@ func (o *Okapi) Stop() {
 	o.server = nil
 
 	if o.withTlsServer && o.tlsServerConfig != nil && o.tlsServer != nil {
-		_, _ = fmt.Fprintf(DefaultWriter, "Gracefully shutting down HTTPS server at %s\n", o.tlsServer.Addr)
+		_, _ = fmt.Fprintf(defaultWriter, "Gracefully shutting down HTTPS server at %s\n", o.tlsServer.Addr)
 		if err := o.Shutdown(o.tlsServer); err != nil {
 			o.logger.Error("Failed to shutdown HTTPS server", slog.String("error", err.Error()))
 			panic(err)
@@ -1072,7 +1072,7 @@ func (o *Okapi) Group(path string, middlewares ...Middleware) *Group {
 // initConfig initializes a new Okapi instance.
 func initConfig(options ...OptionFunc) *Okapi {
 	server := &http.Server{
-		Addr: DefaultAddr,
+		Addr: defaultAddr,
 	}
 
 	o := &Okapi{

@@ -200,21 +200,42 @@ o.Delete("/books/:id", deleteBook)
 
 ### Route Groups
 
-Organize routes with nesting and middleware:
+Route groups in Okapi allow you to organize your routes under a common path prefix, apply middleware selectively, and control group-level behaviors like deprecation or disabling. 
+This feature makes it easy to manage API versioning, logical route separation, and access control.
+
+#### Features:
+
+* **Nesting**: Define sub-groups within a parent group to build hierarchical route structures.
+* **Middleware**: Attach middleware to a group to apply it to all nested routes.
+* **Deprecation**: Mark a group as deprecated to indicate it's being phased out (useful for OpenAPI documentation).
+* **Disabling**: Temporarily disable a group to return `404 Not Found` for all its routes.
+
+#### Example:
 
 ```go
+o := okapi.Default()
+
+// Create the main API group
 api := o.Group("/api")
 
-v1 := api.Group("/v1")
-v2 := api.Group("/v2")
+// Versioned subgroups
+v1 := api.Group("/v1").Deprecated()        // Marked as deprecated
+v2 := api.Group("/v2")                     // Active version
+v3 := api.Group("v3", testMiddleware).Disable() // Disabled, returns 404
 
-v1.Get("/users", getUsers)
-v2.Get("/users", getUsers)
+// Define routes
+v1.Get("/books", getBooks)
+v2.Get("/books", v2GetBooks)
+v3.Get("/books", v3GetBooks) // Will not be accessible
 
-
+// Admin subgroup with middleware
 admin := api.Group("/admin", adminMiddleware)
 admin.Get("/dashboard", getDashboard)
 ```
+This structure improves route readability and maintainability, especially in larger APIs.
+
+
+---
 
 ### Path Syntax Examples
 

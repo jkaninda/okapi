@@ -179,14 +179,24 @@ func (b *DocBuilder) RequestBody(v any) *DocBuilder {
 	return b
 }
 
-// Response adds a response schema to the route documentation using the provided value.
-func (b *DocBuilder) Response(v any) *DocBuilder {
-	b.options = append(b.options, DocResponse(v))
+// Response registers a response schema for the route's OpenAPI documentation.
+// It can be used in two ways:
+//  1. DocResponse(status int, value any) - Defines a response schema for the specified HTTP status code (e.g., 200, 201, 400).
+//  2. DocResponse(value any) - Shorthand for DocResponse(200, value).
+//
+// Examples:
+//
+//	DocResponse(201, CreatedResponse{})   // Response for 201 Created
+//	DocResponse(400, ErrorResponse{})     // Response for 400 Bad Request
+//	DocResponse(Response{})               // Response: assumes status 200
+func (b *DocBuilder) Response(statusOrValue any, vOptional ...any) *DocBuilder {
+	b.options = append(b.options, DocResponse(statusOrValue, vOptional...))
 	return b
 }
 
 // ErrorResponse defines an error response schema for a specific HTTP status code
 // in the route's OpenAPI documentation.
+// Deprecated: This function is deprecated in favor of Response(status, v).
 //
 // Parameters:
 //   - status: the HTTP status code (e.g., 400, 404, 500).
@@ -200,6 +210,12 @@ func (b *DocBuilder) ErrorResponse(status int, v any) *DocBuilder {
 // Summary adds a short summary description to the route documentation.
 func (b *DocBuilder) Summary(summary string) *DocBuilder {
 	b.options = append(b.options, DocSummary(summary))
+	return b
+}
+
+// Description adds a description to the route documentation.
+func (b *DocBuilder) Description(description string) *DocBuilder {
+	b.options = append(b.options, DocDescription(description))
 	return b
 }
 
@@ -250,6 +266,15 @@ func (b *DocBuilder) Header(name, typ, desc string, required bool) *DocBuilder {
 	return b
 }
 
+// ResponseHeader adds a response header to the route documentation
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description, optional
+func (b *DocBuilder) ResponseHeader(name, typ string, desc ...string) *DocBuilder {
+	b.options = append(b.options, DocResponseHeader(name, typ, desc...))
+	return b
+}
+
 // Build returns a single RouteOption composed of all accumulated documentation options.
 // This method is intended to be passed directly to route registration functions.
 //
@@ -283,6 +308,13 @@ func ptr[T any](v T) *T { return &v }
 func DocSummary(summary string) RouteOption {
 	return func(doc *Route) {
 		doc.summary = summary
+	}
+}
+
+// DocDescription sets a description for the route
+func DocDescription(description string) RouteOption {
+	return func(doc *Route) {
+		doc.description = description
 	}
 }
 
@@ -381,19 +413,66 @@ func DocTags(tags ...string) RouteOption {
 	}
 }
 
-// DocResponse defines the response schema for the route
-// v: a Go value whose type will be used to generate the response schema
-func DocResponse(v any) RouteOption {
+// DocResponseHeader adds a response header to the route documentation
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description, optional
+func DocResponseHeader(name, typ string, desc ...string) RouteOption {
 	return func(doc *Route) {
-		if v == nil {
-			return
+		schema := getSchemaForType(typ)
+		description := ""
+		// Initialize responseHeaders map if it doesn't exist
+		if doc.responseHeaders == nil {
+			doc.responseHeaders = make(map[string]*openapi3.HeaderRef)
 		}
-		doc.response = reflectToSchemaWithInfo(v).Schema
+		if len(desc) != 0 {
+			description = desc[0]
+		}
+		doc.responseHeaders[name] = &openapi3.HeaderRef{
+			Value: &openapi3.Header{
+				Parameter: openapi3.Parameter{
+					Description: description,
+					Required:    true,
+					Schema:      schema,
+				},
+			},
+		}
+	}
+}
+
+// DocResponse registers a response schema for the route's OpenAPI documentation.
+// It can be used in two ways:
+//  1. DocResponse(status int, value any) - Defines a response schema for the specified HTTP status code (e.g., 200, 201, 400).
+//  2. DocResponse(value any) - Shorthand for DocResponse(200, value).
+//
+// Examples:
+//
+//	DocResponse(201, CreatedResponse{})   // Response for 201 Created
+//	DocResponse(400, ErrorResponse{})     // Response for 400 Bad Request
+//	DocResponse(Response{})               // Response: assumes status 200
+func DocResponse(statusOrValue any, vOptional ...any) RouteOption {
+	return func(doc *Route) {
+		switch val := statusOrValue.(type) {
+		case int:
+			// usage: DocResponse(200, value)
+			if len(vOptional) == 0 || vOptional[0] == nil {
+				return
+			}
+			doc.responses[val] = reflectToSchemaWithInfo(vOptional[0]).Schema
+
+		default:
+			// usage: DocResponse(value)
+			if val == nil {
+				return
+			}
+			doc.responses[200] = reflectToSchemaWithInfo(val).Schema
+		}
 	}
 }
 
 // DocErrorResponse defines an error response schema for a specific HTTP status code
 // in the route's OpenAPI documentation.
+// Deprecated: This function is deprecated in favor of DocResponse(status, v).
 //
 // Parameters:
 //   - status: the HTTP status code (e.g., 400, 404, 500).
@@ -441,7 +520,7 @@ func DocDeprecated() RouteOption {
 // by aggregating all the route documentation into a single OpenAPI 3.0 spec
 func (o *Okapi) buildOpenAPISpec() {
 	spec := &openapi3.T{
-		OpenAPI: OpenApiVersion,
+		OpenAPI: openApiVersion,
 		Info: &openapi3.Info{
 			Title:   o.openAPI.Title,
 			Version: o.openAPI.Version,
@@ -523,38 +602,25 @@ func (o *Okapi) buildOpenAPISpec() {
 
 			op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
 		}
-
-		// Handle responses
-		if r.response != nil {
-			schemaRef := o.getOrCreateSchemaComponent(r.response, schemaRegistry, spec.Components.Schemas)
-			apiResponse := &openapi3.Response{
-				Description: ptr("OK"),
-				Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
-			}
-
-			// Add example if available
-			if r.responseExample != nil {
-				apiResponse.Content["application/json"].Example = r.responseExample
-			}
-
-			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
-		}
-
 		if len(r.responses) != 0 {
 			for key, resp := range r.responses {
 				schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
 				apiResponse := &openapi3.Response{
 					Description: ptr(http.StatusText(key)),
 					Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
+					Headers:     r.responseHeaders,
 				}
 				op.Responses.Set(strconv.Itoa(key), &openapi3.ResponseRef{
 					Value: apiResponse,
 				})
 			}
-		} else {
-			// Add default responses
-			o.addDefaultErrorResponses(op, r)
 		}
+		// Add default responses
+		op.Responses.Set("500", &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: ptr("Internal Server Error"),
+			},
+		})
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {

@@ -41,11 +41,11 @@ func main() {
 		return c.OK(response)
 	},
 		// OpenAPI Documentation
-		okapi.DocSummary("create a new Book"),
-		okapi.DocRequestBody(Book{}),                                   //  Request body
+		okapi.DocSummary("New Book"),
+		okapi.DocDescription("Create a new Book"),
+		okapi.DocRequestBody(Book{}),
 		okapi.DocResponse(Response{}),                                  // Success Response body
-		okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
-
+		okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), //  Error response body
 	)
 	// Start the server
 	if err := o.Start(); err != nil {

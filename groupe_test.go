@@ -43,7 +43,6 @@ func TestGroup(t *testing.T) {
 		}
 	})
 	test := o.Group("/test").Enable().Deprecated()
-	test.BasePath()
 	_okapi := test.Okapi()
 	_okapi.With(WithDebug())
 	// Go's standard HTTP middleware function
@@ -78,6 +77,11 @@ func TestGroup(t *testing.T) {
 	api.Get("/group", func(c Context) error {
 		slog.Info("Calling route", "path", c.Request.URL.Path)
 		return c.OK(M{"message": "Welcome to Okapi!"})
+	})
+	newG := NewGroup("group", o, LoggerMiddleware)
+	newG.Get("/group", func(c Context) error {
+		slog.Info("Calling route", "path", c.Request.URL.Path)
+		return c.OK(M{"message": "Welcome to Okapi's new group!"})
 	})
 
 	go func() {

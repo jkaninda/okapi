@@ -1062,7 +1062,7 @@ func (o *Okapi) Group(path string, middlewares ...Middleware) *Group {
 		panic("Group path cannot be empty")
 	}
 	group := &Group{
-		basePath:    path,
+		Prefix:      path,
 		okapi:       o,
 		middlewares: middlewares,
 	}

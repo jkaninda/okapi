@@ -81,7 +81,7 @@ func TestOpenAPI(t *testing.T) {
 		DocAutoPathParams(),
 		DocQueryParam("auth", "string", "auth name", true),
 		DocBearerAuth(),
-		DocResponse(Book{}),
+		DocResponse(201, Book{}),
 		DocRequestBody(Book{}),
 		DocTags("Book Tag"),
 		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
@@ -104,6 +104,7 @@ func TestOpenAPI(t *testing.T) {
 	)
 	v2.Delete("/books/:id", anyHandler,
 		Doc().Summary("Delete Book").
+			Description("Delete a book by ID").
 			BearerAuth().
 			PathParam("id", "int", "book id").
 			Response(Book{}).

@@ -179,14 +179,24 @@ func (b *DocBuilder) RequestBody(v any) *DocBuilder {
 	return b
 }
 
-// Response adds a response schema to the route documentation using the provided value.
-func (b *DocBuilder) Response(v any) *DocBuilder {
-	b.options = append(b.options, DocResponse(v))
+// Response registers a response schema for the route's OpenAPI documentation.
+// It can be used in two ways:
+//  1. DocResponse(status int, value any) - Defines a response schema for the specified HTTP status code (e.g., 200, 201, 400).
+//  2. DocResponse(value any) - Shorthand for DocResponse(200, value).
+//
+// Examples:
+//
+//	DocResponse(201, CreatedResponse{})   // Response for 201 Created
+//	DocResponse(400, ErrorResponse{})     // Response for 400 Bad Request
+//	DocResponse(Response{})               // Response: assumes status 200
+func (b *DocBuilder) Response(statusOrValue any, vOptional ...any) *DocBuilder {
+	b.options = append(b.options, DocResponse(statusOrValue, vOptional...))
 	return b
 }
 
 // ErrorResponse defines an error response schema for a specific HTTP status code
 // in the route's OpenAPI documentation.
+// Deprecated: This function is deprecated in favor of Response(status, v).
 //
 // Parameters:
 //   - status: the HTTP status code (e.g., 400, 404, 500).
@@ -200,6 +210,12 @@ func (b *DocBuilder) ErrorResponse(status int, v any) *DocBuilder {
 // Summary adds a short summary description to the route documentation.
 func (b *DocBuilder) Summary(summary string) *DocBuilder {
 	b.options = append(b.options, DocSummary(summary))
+	return b
+}
+
+// Description adds a description to the route documentation.
+func (b *DocBuilder) Description(description string) *DocBuilder {
+	b.options = append(b.options, DocDescription(description))
 	return b
 }
 
@@ -283,6 +299,13 @@ func ptr[T any](v T) *T { return &v }
 func DocSummary(summary string) RouteOption {
 	return func(doc *Route) {
 		doc.summary = summary
+	}
+}
+
+// DocDescription sets a description for the route
+func DocDescription(description string) RouteOption {
+	return func(doc *Route) {
+		doc.description = description
 	}
 }
 
@@ -381,19 +404,39 @@ func DocTags(tags ...string) RouteOption {
 	}
 }
 
-// DocResponse defines the response schema for the route
-// v: a Go value whose type will be used to generate the response schema
-func DocResponse(v any) RouteOption {
+// DocResponse registers a response schema for the route's OpenAPI documentation.
+// It can be used in two ways:
+//  1. DocResponse(status int, value any) - Defines a response schema for the specified HTTP status code (e.g., 200, 201, 400).
+//  2. DocResponse(value any) - Shorthand for DocResponse(200, value).
+//
+// Examples:
+//
+//	DocResponse(201, CreatedResponse{})   // Response for 201 Created
+//	DocResponse(400, ErrorResponse{})     // Response for 400 Bad Request
+//	DocResponse(Response{})               // Response: assumes status 200
+func DocResponse(statusOrValue any, vOptional ...any) RouteOption {
 	return func(doc *Route) {
-		if v == nil {
-			return
+		switch val := statusOrValue.(type) {
+		case int:
+			// usage: DocResponse(200, value)
+			if len(vOptional) == 0 || vOptional[0] == nil {
+				return
+			}
+			doc.responses[val] = reflectToSchemaWithInfo(vOptional[0]).Schema
+
+		default:
+			// usage: DocResponse(value)
+			if val == nil {
+				return
+			}
+			doc.responses[200] = reflectToSchemaWithInfo(val).Schema
 		}
-		doc.response = reflectToSchemaWithInfo(v).Schema
 	}
 }
 
 // DocErrorResponse defines an error response schema for a specific HTTP status code
 // in the route's OpenAPI documentation.
+// Deprecated: This function is deprecated in favor of DocResponse(status, v).
 //
 // Parameters:
 //   - status: the HTTP status code (e.g., 400, 404, 500).

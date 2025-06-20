@@ -114,7 +114,6 @@ type (
 		requiresAuth    bool
 		deprecated      bool
 		requestExample  map[string]interface{}
-		responseExample map[string]interface{}
 		responses       map[int]*openapi3.SchemaRef
 		description     string
 		disabled        bool
@@ -1204,15 +1203,6 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 	}
 }
 
-func (o *Okapi) addDefaultErrorResponses(op *openapi3.Operation, r *Route) {
-
-	op.Responses.Set("500", &openapi3.ResponseRef{
-		Value: &openapi3.Response{
-			Description: ptr(http.StatusText(http.StatusInternalServerError)),
-		},
-	})
-
-}
 func printBanner() {
 	fmt.Println(banner)
 }

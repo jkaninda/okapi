@@ -232,7 +232,7 @@ func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
 
 			realm := b.Realm
 			if realm == "" {
-				realm = FrameworkName
+				realm = okapiName
 			}
 			c.Response.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
 			return c.String(http.StatusUnauthorized, "Unauthorized")
@@ -314,7 +314,7 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		// If custom claims validation function is provided, use it
 		if jwtAuth.ValidateClaims != nil {
 			if err = jwtAuth.ValidateClaims(token.Claims); err != nil {
-				fPrintError("Failed to validate JWT role", "function", "ValidateRole", "error", err)
+				fPrintError("Failed to validate JWT role", "function", "ValidateClaims", "error", err)
 				return c.AbortUnauthorized("Insufficient role", err)
 			}
 		}

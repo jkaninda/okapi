@@ -266,6 +266,15 @@ func (b *DocBuilder) Header(name, typ, desc string, required bool) *DocBuilder {
 	return b
 }
 
+// ResponseHeader adds a response header to the route documentation
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description, optional
+func (b *DocBuilder) ResponseHeader(name, typ string, desc ...string) *DocBuilder {
+	b.options = append(b.options, DocResponseHeader(name, typ, desc...))
+	return b
+}
+
 // Build returns a single RouteOption composed of all accumulated documentation options.
 // This method is intended to be passed directly to route registration functions.
 //
@@ -404,6 +413,33 @@ func DocTags(tags ...string) RouteOption {
 	}
 }
 
+// DocResponseHeader adds a response header to the route documentation
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description, optional
+func DocResponseHeader(name, typ string, desc ...string) RouteOption {
+	return func(doc *Route) {
+		schema := getSchemaForType(typ)
+		description := ""
+		// Initialize responseHeaders map if it doesn't exist
+		if doc.responseHeaders == nil {
+			doc.responseHeaders = make(map[string]*openapi3.HeaderRef)
+		}
+		if len(desc) != 0 {
+			description = desc[0]
+		}
+		doc.responseHeaders[name] = &openapi3.HeaderRef{
+			Value: &openapi3.Header{
+				Parameter: openapi3.Parameter{
+					Description: description,
+					Required:    true,
+					Schema:      schema,
+				},
+			},
+		}
+	}
+}
+
 // DocResponse registers a response schema for the route's OpenAPI documentation.
 // It can be used in two ways:
 //  1. DocResponse(status int, value any) - Defines a response schema for the specified HTTP status code (e.g., 200, 201, 400).
@@ -484,7 +520,7 @@ func DocDeprecated() RouteOption {
 // by aggregating all the route documentation into a single OpenAPI 3.0 spec
 func (o *Okapi) buildOpenAPISpec() {
 	spec := &openapi3.T{
-		OpenAPI: OpenApiVersion,
+		OpenAPI: openApiVersion,
 		Info: &openapi3.Info{
 			Title:   o.openAPI.Title,
 			Version: o.openAPI.Version,
@@ -566,38 +602,25 @@ func (o *Okapi) buildOpenAPISpec() {
 
 			op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
 		}
-
-		// Handle responses
-		if r.response != nil {
-			schemaRef := o.getOrCreateSchemaComponent(r.response, schemaRegistry, spec.Components.Schemas)
-			apiResponse := &openapi3.Response{
-				Description: ptr("OK"),
-				Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
-			}
-
-			// Add example if available
-			if r.responseExample != nil {
-				apiResponse.Content["application/json"].Example = r.responseExample
-			}
-
-			op.Responses.Set("200", &openapi3.ResponseRef{Value: apiResponse})
-		}
-
 		if len(r.responses) != 0 {
 			for key, resp := range r.responses {
 				schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
 				apiResponse := &openapi3.Response{
 					Description: ptr(http.StatusText(key)),
 					Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
+					Headers:     r.responseHeaders,
 				}
 				op.Responses.Set(strconv.Itoa(key), &openapi3.ResponseRef{
 					Value: apiResponse,
 				})
 			}
-		} else {
-			// Add default responses
-			o.addDefaultErrorResponses(op, r)
 		}
+		// Add default responses
+		op.Responses.Set("500", &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: ptr("Internal Server Error"),
+			},
+		})
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {

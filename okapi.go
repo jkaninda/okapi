@@ -107,10 +107,10 @@ type (
 		tags            []string
 		summary         string
 		request         *openapi3.SchemaRef
-		response        *openapi3.SchemaRef
 		pathParams      []*openapi3.ParameterRef
 		queryParams     []*openapi3.ParameterRef
 		headers         []*openapi3.ParameterRef
+		responseHeaders map[string]*openapi3.HeaderRef
 		requiresAuth    bool
 		deprecated      bool
 		requestExample  map[string]interface{}
@@ -1091,9 +1091,9 @@ func initConfig(options ...OptionFunc) *Okapi {
 		maxMultipartMemory: defaultMaxMemory,
 		cors:               Cors{},
 		openAPI: &OpenAPI{
-			Title:      FrameworkName,
+			Title:      okapiName,
 			Version:    "1.0.0",
-			PathPrefix: OpenApiDocPrefix,
+			PathPrefix: openApiDocPrefix,
 			Servers:    Servers{{}},
 		},
 	}
@@ -1205,18 +1205,10 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 }
 
 func (o *Okapi) addDefaultErrorResponses(op *openapi3.Operation, r *Route) {
-	// Add default error responses
-	if r.requiresAuth {
-		op.Responses.Set("401", &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: ptr("Unauthorized"),
-			},
-		})
-	}
 
 	op.Responses.Set("500", &openapi3.ResponseRef{
 		Value: &openapi3.Response{
-			Description: ptr("Internal Server Error"),
+			Description: ptr(http.StatusText(http.StatusInternalServerError)),
 		},
 	})
 

@@ -280,7 +280,7 @@ func (b *DocBuilder) ResponseHeader(name, typ string, desc ...string) *DocBuilde
 //
 // Example:
 //
-//	okapi.Get("/books", handler, okapi.Doc().Response(Book{}).Summary("List books").Build())
+//	okapi.Get("/books", handler, okapi.Doc().response(Book{}).Summary("List books").Build())
 func (b *DocBuilder) Build() RouteOption {
 	return b.AsOption()
 }
@@ -292,7 +292,7 @@ func (b *DocBuilder) Build() RouteOption {
 //
 // Example:
 //
-//	okapi.Get("/books", handler, okapi.Doc().Response(Book{}).AsOption())
+//	okapi.Get("/books", handler, okapi.Doc().response(Book{}).AsOption())
 func (b *DocBuilder) AsOption() RouteOption {
 	return func(r *Route) {
 		for _, opt := range b.options {
@@ -447,9 +447,9 @@ func DocResponseHeader(name, typ string, desc ...string) RouteOption {
 //
 // Examples:
 //
-//	DocResponse(201, CreatedResponse{})   // Response for 201 Created
-//	DocResponse(400, ErrorResponse{})     // Response for 400 Bad Request
-//	DocResponse(Response{})               // Response: assumes status 200
+//	DocResponse(201, CreatedResponse{})   // response for 201 Created
+//	DocResponse(400, ErrorResponse{})     // response for 400 Bad request
+//	DocResponse(response{})               // response: assumes status 200
 func DocResponse(statusOrValue any, vOptional ...any) RouteOption {
 	return func(doc *Route) {
 		switch val := statusOrValue.(type) {

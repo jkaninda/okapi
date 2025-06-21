@@ -127,7 +127,7 @@ func TestOpenAPI(t *testing.T) {
 
 }
 func anyHandler(c Context) error {
-	slog.Info("Calling route", "path", c.Request.URL.Path, "method", c.Request.Method)
+	slog.Info("Calling route", "path", c.Request().URL.Path, "method", c.request.Method)
 	c.SetHeader("X-RateLimit-Limit", "100")
 	return c.OK(M{"message": "Hello from Okapi!"})
 

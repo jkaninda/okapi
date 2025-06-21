@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-// BasicAuthMiddleware is a middleware that adds basic authentication to the Request context.
+// BasicAuthMiddleware is a middleware that adds basic authentication to the request context.
 
 type (
 	// BasicAuth provides basic authentication for routes.
@@ -195,19 +195,19 @@ func LoggerMiddleware(next HandleFunc) HandleFunc {
 		}
 		startTime := time.Now()
 		err := next(c)
-		status := c.Response.Status()
+		status := c.response.StatusCode()
 		duration := goutils.FormatDuration(time.Since(startTime), 2)
 
 		logger := c.okapi.logger
 		args := []any{
-			"method", c.Request.Method,
-			"url", c.Request.URL.Path,
+			"method", c.request.Method,
+			"url", c.request.URL.Path,
 			"ip", c.RealIP(),
-			"host", c.Request.Host,
+			"host", c.request.Host,
 			"status", status,
 			"duration", duration,
-			"referer", c.Request.Referer(),
-			"user_agent", c.Request.UserAgent(),
+			"referer", c.request.Referer(),
+			"user_agent", c.request.UserAgent(),
 		}
 		switch {
 		case status >= 500:
@@ -225,7 +225,7 @@ func LoggerMiddleware(next HandleFunc) HandleFunc {
 // It returns 401 Unauthorized and sets the WWW-Authenticate header on failure.
 func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
-		username, password, ok := c.Request.BasicAuth()
+		username, password, ok := c.request.BasicAuth()
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(username), []byte(b.Username)) != 1 ||
 			subtle.ConstantTimeCompare([]byte(password), []byte(b.Password)) != 1 {
@@ -234,7 +234,7 @@ func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
 			if realm == "" {
 				realm = okapiName
 			}
-			c.Response.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
+			c.response.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
 			return c.String(http.StatusUnauthorized, "Unauthorized")
 		}
 		contextKey := b.ContextKey
@@ -261,7 +261,7 @@ func (b BodyLimit) Middleware(next HandleFunc) HandleFunc {
 		const errTooLarge = "Request body too large"
 
 		// LimitReader prevents reading more than MaxBytes+1
-		body, err := io.ReadAll(io.LimitReader(c.Request.Body, b.MaxBytes+1))
+		body, err := io.ReadAll(io.LimitReader(c.request.Body, b.MaxBytes+1))
 		if err != nil {
 			return c.String(http.StatusInternalServerError, errReadBody)
 		}
@@ -270,7 +270,7 @@ func (b BodyLimit) Middleware(next HandleFunc) HandleFunc {
 		}
 
 		// Reset request body for downstream handlers
-		c.Request.Body = io.NopCloser(bytes.NewReader(body))
+		c.request.Body = io.NopCloser(bytes.NewReader(body))
 		return next(c)
 	}
 }

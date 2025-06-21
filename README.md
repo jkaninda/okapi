@@ -847,10 +847,10 @@ This makes it easy to focus on business logic without worrying about low-level H
 
 ### Context Fields
 
-| Field      | Description                             |
-|------------|-----------------------------------------|
-| `Request`  | The raw `*http.Request` object          |
-| `Response` | The raw `http.ResponseWriter` interface |
+| Method       | Description                                                |
+|--------------|------------------------------------------------------------|
+| `Request()`  | The underlying `*http.Request` for accessing request data  |
+| `Response()` | The underlying `http.ResponseWriter` for sending responses |
 
 
 

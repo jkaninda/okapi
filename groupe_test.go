@@ -75,12 +75,12 @@ func TestGroup(t *testing.T) {
 	api.Connect("hello", helloHandler)
 
 	api.Get("/group", func(c Context) error {
-		slog.Info("Calling route", "path", c.Request.URL.Path)
+		slog.Info("Calling route", "path", c.request.URL.Path)
 		return c.OK(M{"message": "Welcome to Okapi!"})
 	})
 	newG := NewGroup("group", o, LoggerMiddleware)
 	newG.Get("/group", func(c Context) error {
-		slog.Info("Calling route", "path", c.Request.URL.Path)
+		slog.Info("Calling route", "path", c.request.URL.Path)
 		return c.OK(M{"message": "Welcome to Okapi's new group!"})
 	})
 
@@ -135,7 +135,7 @@ func TestRegister(t *testing.T) {
 
 }
 func helloHandler(c Context) error {
-	slog.Info("Calling route", "path", c.Request.URL.Path, "method", c.Request.Method)
+	slog.Info("Calling route", "path", c.request.URL.Path, "method", c.request.Method)
 	return c.OK(M{"message": "Hello from Okapi!"})
 
 }

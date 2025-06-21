@@ -281,6 +281,7 @@ func whoAmI(c okapi.Context) error {
 	if email == "" {
 		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
 	}
+
 	// Respond with the current user information
 	return c.JSON(http.StatusOK, okapi.M{
 		"email": email,
@@ -292,13 +293,17 @@ func whoAmI(c okapi.Context) error {
 
 func customMiddleware(next okapi.HandleFunc) okapi.HandleFunc {
 	return func(c okapi.Context) error {
-		slog.Info("Custom middleware executed", "path", c.Request.URL.Path, "method", c.Request.Method)
+		slog.Info("Custom middleware executed", "path", c.Request().URL.Path, "method", c.Request().Method)
 		// Call the next handler in the chain
 		if err := next(c); err != nil {
 			// If an error occurs, log it and return a generic error response
 			slog.Error("Error in custom middleware", "error", err)
 			return c.JSON(http.StatusInternalServerError, okapi.M{"error": "Internal Server Error"})
 		}
+		c.Response().StatusCode()
+		bytesSent := c.Response().BodyBytesSent()
+		slog.Info("Response sent", "status", c.Response().StatusCode(), "bytes_sent", bytesSent)
+
 		return nil
 	}
 }

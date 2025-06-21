@@ -53,12 +53,12 @@ type Cors struct {
 // CORSHandler applies CORS headers and handles preflight (OPTIONS) requests.
 func (cors Cors) CORSHandler(next HandleFunc) HandleFunc {
 	return func(c Context) error {
-		origin := c.Request.Header.Get("Origin")
+		origin := c.request.Header.Get("Origin")
 		if !allowedOrigin(cors.AllowedOrigins, origin) {
 			return next(c)
 		}
 
-		h := c.Response.Header()
+		h := c.response.Header()
 
 		// Always set origin
 		h.Set(AccessControlAllowOrigin, origin)
@@ -71,14 +71,14 @@ func (cors Cors) CORSHandler(next HandleFunc) HandleFunc {
 		// Allow headers
 		if len(cors.AllowedHeaders) > 0 {
 			h.Set(AccessControlAllowHeaders, strings.Join(cors.AllowedHeaders, ", "))
-		} else if reqHeaders := c.Request.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+		} else if reqHeaders := c.request.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
 			h.Set(AccessControlAllowHeaders, reqHeaders)
 		}
 
 		// Allow methods
 		if len(cors.AllowMethods) > 0 {
 			h.Set(AccessControlAllowMethods, strings.Join(cors.AllowMethods, ", "))
-		} else if reqMethod := c.Request.Header.Get("Access-Control-Request-Method"); reqMethod != "" {
+		} else if reqMethod := c.request.Header.Get("Access-Control-Request-Method"); reqMethod != "" {
 			h.Set(AccessControlAllowMethods, reqMethod)
 		}
 
@@ -93,8 +93,8 @@ func (cors Cors) CORSHandler(next HandleFunc) HandleFunc {
 		}
 
 		// Preflight response
-		if c.Request.Method == http.MethodOptions {
-			c.Response.WriteHeader(http.StatusNoContent)
+		if c.request.Method == http.MethodOptions {
+			c.response.WriteHeader(http.StatusNoContent)
 			return nil
 		}
 

@@ -122,7 +122,7 @@ type (
 	Response interface {
 		http.ResponseWriter
 		BodyBytesSent() int64
-		Status() int
+		StatusCode() int
 		Close()
 		Hijack() (net.Conn, *bufio.ReadWriter, error)
 	}
@@ -539,8 +539,8 @@ func (r *response) BodyBytesSent() int64 {
 	return 0
 }
 
-// Status returns the HTTP status code of the response writer.
-func (r *response) Status() int {
+// StatusCode returns the HTTP status code of the response writer.
+func (r *response) StatusCode() int {
 	if !r.headerWritten {
 		return http.StatusOK
 	}
@@ -645,7 +645,7 @@ func (o *Okapi) Use(middlewares ...Middleware) {
 // Example:
 //
 //	okapi.UseMiddleware(func(next http.Handler) http.Handler {
-//	    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+//	    return http.HandlerFunc(func(w http.ResponseWriter, r *http.request) {
 //	        w.Header().Set("X-Powered-By", "Okapi")
 //	        next.ServeHTTP(w, r)
 //	    })
@@ -657,8 +657,8 @@ func (o *Okapi) UseMiddleware(mw func(http.Handler) http.Handler) {
 		// Convert HandleFunc to http.Handler
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := Context{
-				Request:  r,
-				Response: &response{writer: w},
+				request:  r,
+				response: &response{writer: w},
 				okapi:    o,
 			}
 			if err := next(ctx); err != nil {
@@ -671,7 +671,7 @@ func (o *Okapi) UseMiddleware(mw func(http.Handler) http.Handler) {
 
 		// Convert back to HandleFunc
 		return func(ctx Context) error {
-			wrapped.ServeHTTP(ctx.Response, ctx.Request)
+			wrapped.ServeHTTP(ctx.response, ctx.request)
 			return nil
 		}
 	})
@@ -862,8 +862,8 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 	// Main handler
 	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		ctx := Context{
-			Request:  r,
-			Response: &response{writer: w},
+			request:  r,
+			response: &response{writer: w},
 			okapi:    o,
 		}
 		if route.disabled {
@@ -1012,12 +1012,12 @@ func (o *Okapi) registerOptionsHandler(path string) {
 func (o *Okapi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ctx := &Context{
-		Request:  r,
-		Response: &response{writer: w},
+		request:  r,
+		response: &response{writer: w},
 		okapi:    o,
 	}
 	handler := func(c *Context) {
-		o.router.mux.ServeHTTP(c.Response, c.Request)
+		o.router.mux.ServeHTTP(c.response, c.request)
 	}
 	handler(ctx)
 }
@@ -1075,8 +1075,8 @@ func initConfig(options ...OptionFunc) *Okapi {
 
 	o := &Okapi{
 		context: &Context{
-			Request:  new(http.Request),
-			Response: &response{},
+			request:  new(http.Request),
+			response: &response{},
 			store:    newStoreData(),
 		},
 		router:             newRouter(),
@@ -1176,19 +1176,19 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 		}
 		startTime := time.Now()
 		err := next(c)
-		status := c.Response.Status()
+		status := c.response.StatusCode()
 		duration := goutils.FormatDuration(time.Since(startTime), 2)
 
 		logger := c.okapi.logger
 		args := []any{
-			"method", c.Request.Method,
-			"url", c.Request.URL.Path,
+			"method", c.request.Method,
+			"url", c.request.URL.Path,
 			"ip", c.RealIP(),
-			"host", c.Request.Host,
+			"host", c.request.Host,
 			"status", status,
 			"duration", duration,
-			"referer", c.Request.Referer(),
-			"user_agent", c.Request.UserAgent(),
+			"referer", c.request.Referer(),
+			"user_agent", c.request.UserAgent(),
 		}
 		switch {
 		case status >= 500:
@@ -1208,8 +1208,8 @@ func printBanner() {
 func (o *Okapi) wrapHandleFunc(h HandleFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := Context{
-			Request:  r,
-			Response: &response{writer: w},
+			request:  r,
+			response: &response{writer: w},
 			okapi:    o,
 		}
 		if err := h(ctx); err != nil {
@@ -1221,7 +1221,7 @@ func (o *Okapi) wrapHandleFunc(h HandleFunc) http.Handler {
 }
 func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 	return func(ctx Context) error {
-		h.ServeHTTP(ctx.Response, ctx.Request)
+		h.ServeHTTP(ctx.response, ctx.request)
 		return nil
 	}
 }

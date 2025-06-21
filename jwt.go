@@ -48,7 +48,7 @@ func (jwtAuth *JWTAuth) extractToken(c Context) (string, error) {
 	source, name := parts[0], parts[1]
 	switch source {
 	case "header":
-		auth := c.Request.Header.Get(name)
+		auth := c.request.Header.Get(name)
 		if strings.HasPrefix(auth, "Bearer ") {
 			return strings.TrimPrefix(auth, "Bearer "), nil
 		}
@@ -56,7 +56,7 @@ func (jwtAuth *JWTAuth) extractToken(c Context) (string, error) {
 	case "query":
 		return c.Query(name), nil
 	case "cookie":
-		cookie, err := c.Request.Cookie(name)
+		cookie, err := c.request.Cookie(name)
 		if err != nil {
 			return "", err
 		}

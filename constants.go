@@ -44,7 +44,7 @@ const (
 	AccessControlAllowCredentials = "Access-Control-Allow-Credentials"
 )
 
-// Constants for HTTP Status Codes
+// Constants for HTTP StatusCode Codes
 const (
 	StatusNotFound            = http.StatusNotFound
 	StatusBadRequest          = http.StatusBadRequest

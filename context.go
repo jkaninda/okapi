@@ -43,10 +43,10 @@ import (
 type (
 	Context struct {
 		okapi *Okapi
-		// Request is the http.Request object
-		Request *http.Request
-		// Response http.ResponseWriter
-		Response Response
+		// request is the http.Request object
+		request *http.Request
+		// response http.ResponseWriter
+		response Response
 		// store is a key/value store for storing data in the context
 		store *Store
 		// params *Params
@@ -90,6 +90,22 @@ func getAs[T any](c *Context, key string) (v T, ok bool) {
 	}
 	v, ok = raw.(T)
 	return
+}
+
+// Request a new Context instance with the given request
+func (c *Context) Request() *http.Request {
+	return c.request // Return the request object
+}
+
+// Response returns the http.ResponseWriter for writing responses.
+// This is an alias for ResponseWriter for convenience.
+func (c *Context) Response() Response {
+	return c.response // Return the response writer
+}
+
+// ResponseWriter returns the http.ResponseWriter for writing responses.
+func (c *Context) ResponseWriter() http.ResponseWriter {
+	return c.response // Return the http.ResponseWriter
 }
 
 // Get retrieves a value from the context's data store with thread-safe access.
@@ -162,8 +178,8 @@ func (c *Context) GetInt64(key string) int64 {
 // Copy creates a shallow copy of the context with a new data map.
 func (c *Context) Copy() *Context {
 	newCtx := &Context{
-		Request:  c.Request,      // Copy request reference
-		Response: c.Response,     // Copy response reference
+		request:  c.request,      // Copy request reference
+		response: c.response,     // Copy response reference
 		store:    newStoreData(), // Initialize new data map
 	}
 	// Copy all key-value pairs to the new context
@@ -173,33 +189,33 @@ func (c *Context) Copy() *Context {
 	return newCtx
 }
 
-// ************** Request Utilities *****************
+// ************** request Utilities *****************
 
 // RealIP returns the client's real IP address, handling proxies.
 func (c *Context) RealIP() string {
-	return realIP(c.Request)
+	return realIP(c.request)
 }
 
 // Referer retrieves the Referer header value from the request.
 func (c *Context) Referer() string {
-	return c.Request.Referer() // Get Referer header
+	return c.request.Referer() // Get Referer header
 }
 
 // Param retrieves a URL path parameter value.
 func (c *Context) Param(key string) string {
-	return mux.Vars(c.Request)[key] // Get from router's path variables
+	return mux.Vars(c.request)[key] // Get from router's path variables
 }
 
 // Query retrieves a URL query parameter value.
 // Returns empty string if parameter doesn't exist.
 func (c *Context) Query(key string) string {
-	return c.Request.URL.Query().Get(key) // Get from URL query string
+	return c.request.URL.Query().Get(key) // Get from URL query string
 }
 
 // QueryMap returns all query parameters as a map.
 // Only includes the first value for each parameter.
 func (c *Context) QueryMap() map[string]string {
-	values := c.Request.URL.Query()
+	values := c.request.URL.Query()
 	result := make(map[string]string, len(values))
 	for k, v := range values {
 		if len(v) > 0 {
@@ -211,7 +227,7 @@ func (c *Context) QueryMap() map[string]string {
 
 // Accept returns the Accept header values as a slice.
 func (c *Context) Accept() []string {
-	accept := c.Request.Header.Get("Accept")
+	accept := c.request.Header.Get("Accept")
 	if accept == "" {
 		return nil // Return nil if header not present
 	}
@@ -221,7 +237,7 @@ func (c *Context) Accept() []string {
 // AcceptLanguage returns the Accept-Language header values as a slice.
 // Trims whitespace from each language tag.
 func (c *Context) AcceptLanguage() []string {
-	languages := c.Request.Header.Get("Accept-Language")
+	languages := c.request.Header.Get("Accept-Language")
 	if languages == "" {
 		return nil // Return nil if header not present
 	}
@@ -234,26 +250,26 @@ func (c *Context) AcceptLanguage() []string {
 
 // ContentType returns the Content-Type header value.
 func (c *Context) ContentType() string {
-	return c.Request.Header.Get(ContentTypeHeader)
+	return c.request.Header.Get(ContentTypeHeader)
 }
 
 // Form retrieves a form value after parsing the form data.
 func (c *Context) Form(key string) string {
-	_ = c.Request.ParseForm() // Parse form if not already done
-	return c.Request.FormValue(key)
+	_ = c.request.ParseForm() // Parse form if not already done
+	return c.request.FormValue(key)
 }
 
 // FormValue retrieves a form value, including multipart form data.
 func (c *Context) FormValue(key string) string {
-	_ = c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory) // Parse multipart form
-	return c.Request.FormValue(key)
+	_ = c.request.ParseMultipartForm(c.okapi.maxMultipartMemory) // Parse multipart form
+	return c.request.FormValue(key)
 }
 
 // FormFile retrieves a file from multipart form data.
 // Returns the file and any error encountered.
 func (c *Context) FormFile(key string) (*multipart.FileHeader, error) {
-	_ = c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory)
-	f, fh, err := c.Request.FormFile(key)
+	_ = c.request.ParseMultipartForm(c.okapi.maxMultipartMemory)
+	f, fh, err := c.request.FormFile(key)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +283,7 @@ func (c *Context) FormFile(key string) (*multipart.FileHeader, error) {
 // Cookie retrieves a cookie value by name.
 // Returns empty string and error if cookie not found.
 func (c *Context) Cookie(name string) (string, error) {
-	cookie, err := c.Request.Cookie(name)
+	cookie, err := c.request.Cookie(name)
 	if err != nil {
 		return "", err
 	}
@@ -280,7 +296,7 @@ func (c *Context) SetCookie(name, value string, maxAge int, path, domain string,
 	if path == "" {
 		path = "/" // Default path to root
 	}
-	http.SetCookie(c.Response, &http.Cookie{
+	http.SetCookie(c.response, &http.Cookie{
 		Name:     name,
 		Value:    url.QueryEscape(value), // URL-encode cookie value
 		MaxAge:   maxAge,
@@ -294,44 +310,44 @@ func (c *Context) SetCookie(name, value string, maxAge int, path, domain string,
 // IsWebSocketUpgrade checks if the request is a WebSocket upgrade request.
 func (c *Context) IsWebSocketUpgrade() bool {
 	// Check if the request is a WebSocket upgrade request
-	return c.Request.Header.Get("Upgrade") == "websocket" && c.Request.Method == http.MethodGet
+	return c.request.Header.Get("Upgrade") == "websocket" && c.request.Method == http.MethodGet
 }
 
 // IsSSE checks if the request is for Server-Sent Events (SSE).
 func (c *Context) IsSSE() bool {
 	// Check if the request is for Server-Sent Events
-	return c.Request.Header.Get("Accept") == "text/event-stream" && c.Request.Method == http.MethodGet
+	return c.request.Header.Get("Accept") == "text/event-stream" && c.request.Method == http.MethodGet
 }
 
-// ************* Response Utilities *************
+// ************* response Utilities *************
 
 // SetHeader sets a response header.
 func (c *Context) SetHeader(key, value string) {
-	c.Response.Header().Set(key, value)
+	c.response.Header().Set(key, value)
 }
 
 // Header gets a request header by key.
 func (c *Context) Header(key string) string {
-	return c.Request.Header.Get(key)
+	return c.request.Header.Get(key)
 }
 
 // Headers returns all request headers as a map.
 func (c *Context) Headers() map[string][]string {
-	return c.Request.Header
+	return c.request.Header
 }
 
 // WriteStatus writes the HTTP status code to the response.
 func (c *Context) WriteStatus(code int) {
-	c.Response.WriteHeader(code)
+	c.response.WriteHeader(code)
 }
 
 // writeResponse is a helper for writing responses with common headers and status.
 // Takes care of content type, status code, and error handling.
 func (c *Context) writeResponse(code int, contentType string, writeFunc func() error) error {
-	c.Response.Header().Set(ContentTypeHeader, contentType)
-	c.Response.WriteHeader(code)
+	c.response.Header().Set(ContentTypeHeader, contentType)
+	c.response.WriteHeader(code)
 	if err := writeFunc(); err != nil {
-		http.Error(c.Response, err.Error(), http.StatusInternalServerError)
+		http.Error(c.response, err.Error(), http.StatusInternalServerError)
 		return err
 	}
 	return nil
@@ -340,7 +356,7 @@ func (c *Context) writeResponse(code int, contentType string, writeFunc func() e
 // JSON writes a JSON response with the given status code.
 func (c *Context) JSON(code int, v any) error {
 	return c.writeResponse(code, JSON, func() error {
-		return json.NewEncoder(c.Response).Encode(v)
+		return json.NewEncoder(c.response).Encode(v)
 	})
 }
 
@@ -357,21 +373,21 @@ func (c *Context) Created(v any) error {
 // XML writes an XML response with the given status code.
 func (c *Context) XML(code int, v any) error {
 	return c.writeResponse(code, XML, func() error {
-		return xml.NewEncoder(c.Response).Encode(v)
+		return xml.NewEncoder(c.response).Encode(v)
 	})
 }
 
 // YAML writes a YAML response with the given status code.
 func (c *Context) YAML(code int, data any) error {
 	return c.writeResponse(code, YAML, func() error {
-		return yaml.NewEncoder(c.Response).Encode(data)
+		return yaml.NewEncoder(c.response).Encode(data)
 	})
 }
 
 // Text writes a plain text response with the given status code.
 func (c *Context) Text(code int, v any) error {
 	return c.writeResponse(code, PLAIN, func() error {
-		_, err := fmt.Fprint(c.Response, v)
+		_, err := fmt.Fprint(c.response, v)
 		return err
 	})
 }
@@ -382,7 +398,7 @@ func (c *Context) SSEvent(name string, message any) error {
 		Event: name,
 		Data:  message,
 	}
-	_, err := msg.Send(c.Response)
+	_, err := msg.Send(c.response)
 	if err != nil {
 		return err
 	}
@@ -397,7 +413,7 @@ func (c *Context) String(code int, data any) error {
 // Data writes a raw byte response with the given content type and status code.
 func (c *Context) Data(code int, contentType string, data []byte) error {
 	return c.writeResponse(code, contentType, func() error {
-		_, err := c.Response.Write(data)
+		_, err := c.response.Write(data)
 		return err
 	})
 }
@@ -427,18 +443,18 @@ func (c *Context) Render(code int, name string, data interface{}) error {
 	}
 	if name == "" {
 		return c.writeResponse(code, HTML, func() error {
-			return c.okapi.renderer.Render(c.Response, "", nil, *c)
+			return c.okapi.renderer.Render(c.response, "", nil, *c)
 		})
 	}
 	return c.writeResponse(code, HTML, func() error {
-		return c.okapi.renderer.Render(c.Response, name, data, *c)
+		return c.okapi.renderer.Render(c.response, name, data, *c)
 	})
 }
 
 // renderHTML is a helper for rendering HTML templates.
 func (c *Context) renderHTML(code int, tmpl *template.Template, data any) error {
 	return c.writeResponse(code, HTML, func() error {
-		return tmpl.Execute(c.Response, data) // Execute template with data
+		return tmpl.Execute(c.response, data) // Execute template with data
 	})
 }
 
@@ -446,14 +462,14 @@ func (c *Context) renderHTML(code int, tmpl *template.Template, data any) error 
 func (c *Context) Redirect(code int, location string) {
 	c.SetHeader(LocationHeader, location)                         // Set Location header
 	c.WriteStatus(code)                                           // Write status code
-	_, _ = fmt.Fprintf(c.Response, "Redirecting to %s", location) // Optional message
+	_, _ = fmt.Fprintf(c.response, "Redirecting to %s", location) // Optional message
 }
 
 // *********** File Serving **************
 
 // ServeFile serves a file from the filesystem.
 func (c *Context) ServeFile(path string) {
-	http.ServeFile(c.Response, c.Request, path) // Use standard library file server
+	http.ServeFile(c.response, c.request, path) // Use standard library file server
 }
 
 // ServeFileFromFS serves a file from a custom http.FileSystem.
@@ -468,23 +484,23 @@ func (c *Context) ServeFileFromFS(filepath string, fs http.FileSystem) {
 	}
 
 	// Preserve original URL.Path
-	oldPath := c.Request.URL.Path
-	defer func() { c.Request.URL.Path = oldPath }()
-	c.Request.URL.Path = filepath
+	oldPath := c.request.URL.Path
+	defer func() { c.request.URL.Path = oldPath }()
+	c.request.URL.Path = filepath
 
-	http.FileServer(fs).ServeHTTP(c.Response, c.Request)
+	http.FileServer(fs).ServeHTTP(c.response, c.request)
 }
 
 // ServeFileAttachment serves a file as an attachment (download).
 func (c *Context) ServeFileAttachment(path, filename string) {
 	c.SetHeader("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	http.ServeFile(c.Response, c.Request, path)
+	http.ServeFile(c.response, c.request, path)
 }
 
 // ServeFileInline serves a file to be displayed inline in the browser.
 func (c *Context) ServeFileInline(path, filename string) {
 	c.SetHeader("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
-	http.ServeFile(c.Response, c.Request, path)
+	http.ServeFile(c.response, c.request, path)
 }
 
 // *********** MultipartMemory **************

@@ -58,8 +58,8 @@ type ValidationErrorResponse struct {
 
 // Error writes a basic error response with the given status code and message.
 func (c *Context) Error(code int, message string) error {
-	c.Response.WriteHeader(code)
-	_, err := c.Response.Write([]byte(message))
+	c.response.WriteHeader(code)
+	_, err := c.response.Write([]byte(message))
 	if err != nil {
 		return fmt.Errorf("failed to write error response: %w", err)
 	}
@@ -131,14 +131,14 @@ func (c *Context) abortWithStatus(code int, defaultMsg string, msg string, err .
 
 // ********** 4xx Client Error Methods *************
 
-// ErrorBadRequest writes a 400 Bad Request response.
+// ErrorBadRequest writes a 400 Bad request response.
 func (c *Context) ErrorBadRequest(message any) error {
 	return c.JSON(http.StatusBadRequest, message)
 }
 
-// AbortBadRequest writes a standardized 400 Bad Request response.
+// AbortBadRequest writes a standardized 400 Bad request response.
 func (c *Context) AbortBadRequest(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusBadRequest, "Bad Request", msg, err...)
+	return c.abortWithStatus(http.StatusBadRequest, "Bad request", msg, err...)
 }
 
 // ErrorUnauthorized writes a 401 Unauthorized response.
@@ -211,14 +211,14 @@ func (c *Context) AbortProxyAuthRequired(msg string, err ...error) error {
 	return c.abortWithStatus(http.StatusProxyAuthRequired, "Proxy Authentication Required", msg, err...)
 }
 
-// ErrorRequestTimeout writes a 408 Request Timeout response.
+// ErrorRequestTimeout writes a 408 request Timeout response.
 func (c *Context) ErrorRequestTimeout(message any) error {
 	return c.JSON(http.StatusRequestTimeout, message)
 }
 
-// AbortRequestTimeout writes a standardized 408 Request Timeout response.
+// AbortRequestTimeout writes a standardized 408 request Timeout response.
 func (c *Context) AbortRequestTimeout(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusRequestTimeout, "Request Timeout", msg, err...)
+	return c.abortWithStatus(http.StatusRequestTimeout, "request Timeout", msg, err...)
 }
 
 // ErrorConflict writes a 409 Conflict response.
@@ -261,24 +261,24 @@ func (c *Context) AbortPreconditionFailed(msg string, err ...error) error {
 	return c.abortWithStatus(http.StatusPreconditionFailed, "Precondition Failed", msg, err...)
 }
 
-// ErrorRequestEntityTooLarge writes a 413 Request Entity Too Large response.
+// ErrorRequestEntityTooLarge writes a 413 request Entity Too Large response.
 func (c *Context) ErrorRequestEntityTooLarge(message any) error {
 	return c.JSON(http.StatusRequestEntityTooLarge, message)
 }
 
-// AbortRequestEntityTooLarge writes a standardized 413 Request Entity Too Large response.
+// AbortRequestEntityTooLarge writes a standardized 413 request Entity Too Large response.
 func (c *Context) AbortRequestEntityTooLarge(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusRequestEntityTooLarge, "Request Entity Too Large", msg, err...)
+	return c.abortWithStatus(http.StatusRequestEntityTooLarge, "request Entity Too Large", msg, err...)
 }
 
-// ErrorRequestURITooLong writes a 414 Request-URI Too Long response.
+// ErrorRequestURITooLong writes a 414 request-URI Too Long response.
 func (c *Context) ErrorRequestURITooLong(message any) error {
 	return c.JSON(http.StatusRequestURITooLong, message)
 }
 
-// AbortRequestURITooLong writes a standardized 414 Request-URI Too Long response.
+// AbortRequestURITooLong writes a standardized 414 request-URI Too Long response.
 func (c *Context) AbortRequestURITooLong(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusRequestURITooLong, "Request-URI Too Long", msg, err...)
+	return c.abortWithStatus(http.StatusRequestURITooLong, "request-URI Too Long", msg, err...)
 }
 
 // ErrorUnsupportedMediaType writes a 415 Unsupported Media Type response.
@@ -321,14 +321,14 @@ func (c *Context) AbortTeapot(msg string, err ...error) error {
 	return c.abortWithStatus(http.StatusTeapot, "I'm a teapot", msg, err...)
 }
 
-// ErrorMisdirectedRequest writes a 421 Misdirected Request response.
+// ErrorMisdirectedRequest writes a 421 Misdirected request response.
 func (c *Context) ErrorMisdirectedRequest(message any) error {
 	return c.JSON(http.StatusMisdirectedRequest, message)
 }
 
-// AbortMisdirectedRequest writes a standardized 421 Misdirected Request response.
+// AbortMisdirectedRequest writes a standardized 421 Misdirected request response.
 func (c *Context) AbortMisdirectedRequest(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusMisdirectedRequest, "Misdirected Request", msg, err...)
+	return c.abortWithStatus(http.StatusMisdirectedRequest, "Misdirected request", msg, err...)
 }
 
 // ErrorUnprocessableEntity writes a 422 Unprocessable Entity response.
@@ -418,14 +418,14 @@ func (c *Context) AbortTooManyRequests(msg string, err ...error) error {
 	return c.abortWithStatus(http.StatusTooManyRequests, "Too Many Requests", msg, err...)
 }
 
-// ErrorRequestHeaderFieldsTooLarge writes a 431 Request Header Fields Too Large response.
+// ErrorRequestHeaderFieldsTooLarge writes a 431 request Header Fields Too Large response.
 func (c *Context) ErrorRequestHeaderFieldsTooLarge(message any) error {
 	return c.JSON(http.StatusRequestHeaderFieldsTooLarge, message)
 }
 
-// AbortRequestHeaderFieldsTooLarge writes a standardized 431 Request Header Fields Too Large response.
+// AbortRequestHeaderFieldsTooLarge writes a standardized 431 request Header Fields Too Large response.
 func (c *Context) AbortRequestHeaderFieldsTooLarge(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusRequestHeaderFieldsTooLarge, "Request Header Fields Too Large", msg, err...)
+	return c.abortWithStatus(http.StatusRequestHeaderFieldsTooLarge, "request Header Fields Too Large", msg, err...)
 }
 
 // ErrorUnavailableForLegalReasons writes a 451 Unavailable For Legal Reasons response.

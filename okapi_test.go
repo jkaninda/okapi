@@ -196,7 +196,7 @@ func TestStart(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("Request failed: %v", err)
+		t.Fatalf("request failed: %v", err)
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -231,11 +231,7 @@ func TestWithServer(t *testing.T) {
 		})
 
 	})
-	o.Get("/", func(c Context) error {
-		c.Response.BodyBytesSent()
-
-		return c.OK(Book{})
-	})
+	o.Get("/", customResponseWriter)
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)
@@ -451,20 +447,44 @@ func show(c Context) error {
 			return c.JSON(http.StatusOK, book)
 		}
 	}
-	return c.JSON(http.StatusNotFound, M{"error": "Book not found"})
+	resp := c.Response()
+	resp.WriteHeader(http.StatusNotFound)
+	// If the book is not found, return a 404 Not Found error
+	_, err := resp.Write([]byte("Book not found"))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func customResponseWriter(c Context) error {
+	// Create a custom response writer
+	resp := c.ResponseWriter()
+	resp.Header().Set("Content-Type", "application/json")
+	resp.WriteHeader(http.StatusOK)
+
+	// Write a custom response
+	_, err := resp.Write([]byte(`{"message": "This is a custom response"}`))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func customMiddleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
+		request := c.Request()
 		start := time.Now()
-		slog.Info("Custom middleware executed", "path", c.Request.URL.Path, "method", c.Request.Method)
+		slog.Info("Custom middleware executed", "path", request.URL.Path, "method", request.Method)
 		// Call the next handler in the chain
 		if err := next(c); err != nil {
 			// If an error occurs, log it and return a generic error response
 			slog.Error("Error in custom middleware", "error", err)
 			return c.JSON(http.StatusInternalServerError, M{"error": "Internal Server Error"})
 		}
-		slog.Info("Request took", "duration", time.Since(start))
+		bytesSent := c.Response().BodyBytesSent()
+		slog.Info("Response sent", "status", c.Response().StatusCode(), "bytes_sent", bytesSent)
+		slog.Info("request took", "duration", time.Since(start))
 		return nil
 	}
 }

@@ -40,6 +40,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ShouldBind is a convenience method that binds request data to a struct and returns a boolean indicating success.
 func (c *Context) ShouldBind(v any) (bool, error) {
 	if err := c.Bind(v); err != nil {
 		return false, err
@@ -94,8 +95,9 @@ func (c *Context) Bind(out any) error {
 	return validateStruct(out)
 }
 
+// BindMultipart binds multipart form data to the provided struct.
 func (c *Context) BindMultipart(out any) error {
-	if err := c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory); err != nil {
+	if err := c.request.ParseMultipartForm(c.okapi.maxMultipartMemory); err != nil {
 		return fmt.Errorf("invalid multipart form: %w", err)
 	}
 
@@ -224,7 +226,7 @@ func (c *Context) bindFileFieldWithStatus(tag string, valField reflect.Value, fi
 	}
 
 	// Handle single file
-	file, header, err := c.Request.FormFile(tag)
+	file, header, err := c.request.FormFile(tag)
 	if err != nil {
 		// File not found or error - return false to indicate no value was set
 		return false, nil
@@ -253,13 +255,13 @@ func (c *Context) bindFileFieldWithStatus(tag string, valField reflect.Value, fi
 
 func (c *Context) bindMultipleFilesWithStatus(tag string, valField reflect.Value) (bool, error) {
 	// Get the multipart form
-	if c.Request.MultipartForm == nil {
-		if err := c.Request.ParseMultipartForm(c.okapi.maxMultipartMemory); err != nil {
+	if c.request.MultipartForm == nil {
+		if err := c.request.ParseMultipartForm(c.okapi.maxMultipartMemory); err != nil {
 			return false, fmt.Errorf("failed to parse multipart form: %w", err)
 		}
 	}
 
-	fileHeaders := c.Request.MultipartForm.File[tag]
+	fileHeaders := c.request.MultipartForm.File[tag]
 	if len(fileHeaders) == 0 {
 		// No files found - return false to indicate no value was set
 		return false, nil
@@ -276,7 +278,7 @@ func (c *Context) bindMultipleFilesWithStatus(tag string, valField reflect.Value
 }
 
 func (c *Context) bindHeaderFieldWithStatus(tag string, v reflect.Value, fld reflect.StructField) (bool, error) {
-	headerValue := c.Request.Header.Get(tag)
+	headerValue := c.request.Header.Get(tag)
 	if headerValue == "" {
 		// No header value found - return false to indicate no value was set
 		return false, nil
@@ -289,7 +291,7 @@ func (c *Context) bindHeaderFieldWithStatus(tag string, v reflect.Value, fld ref
 func (c *Context) bindFormFieldWithStatus(tag string, valField reflect.Value, field reflect.StructField) (bool, error) {
 	// Handle slice types (arrays)
 	if valField.Kind() == reflect.Slice && valField.Type().Elem().Kind() == reflect.String {
-		values := c.Request.MultipartForm.Value[tag]
+		values := c.request.MultipartForm.Value[tag]
 		if len(values) == 0 {
 			// No form values found - return false to indicate no value was set
 			return false, nil
@@ -319,7 +321,7 @@ func (c *Context) bindFormFieldWithStatus(tag string, valField reflect.Value, fi
 	}
 
 	// Handle single values
-	values := c.Request.MultipartForm.Value[tag]
+	values := c.request.MultipartForm.Value[tag]
 	if len(values) == 0 {
 		// No form values found - return false to indicate no value was set
 		return false, nil
@@ -331,15 +333,15 @@ func (c *Context) bindFormFieldWithStatus(tag string, valField reflect.Value, fi
 
 func (c *Context) bindQueryFieldWithStatus(tag string, vf reflect.Value, fld reflect.StructField) (bool, error) {
 	// Parse query parameters if not already parsed
-	if c.Request.Form == nil {
-		if err := c.Request.ParseForm(); err != nil {
+	if c.request.Form == nil {
+		if err := c.request.ParseForm(); err != nil {
 			return false, fmt.Errorf("failed to parse query parameters: %w", err)
 		}
 	}
 
 	// Handle slice types (arrays)
 	if vf.Kind() == reflect.Slice && vf.Type().Elem().Kind() == reflect.String {
-		values := c.Request.Form[tag]
+		values := c.request.Form[tag]
 		if len(values) == 0 {
 			// No query values found - return false to indicate no value was set
 			return false, nil
@@ -369,7 +371,7 @@ func (c *Context) bindQueryFieldWithStatus(tag string, vf reflect.Value, fld ref
 	}
 
 	// Handle single values
-	value := c.Request.FormValue(tag)
+	value := c.request.FormValue(tag)
 	if value == "" {
 		// No query value found - return false to indicate no value was set
 		return false, nil
@@ -464,7 +466,7 @@ func (c *Context) bindFromFields(out any) error {
 
 		if !wasSet {
 			if tag := field.Tag.Get("header"); tag != "" {
-				if value := c.Request.Header.Get(tag); value != "" {
+				if value := c.request.Header.Get(tag); value != "" {
 					err = setValueWithValidation(valField, value, field)
 					if err != nil {
 						return fmt.Errorf("bind error for field %s: %w", field.Name, err)
@@ -665,19 +667,19 @@ func isZero(v reflect.Value) bool {
 }
 
 func (c *Context) BindJSON(v any) error {
-	return json.NewDecoder(c.Request.Body).Decode(v)
+	return json.NewDecoder(c.request.Body).Decode(v)
 }
 
 func (c *Context) BindXML(v any) error {
-	return xml.NewDecoder(c.Request.Body).Decode(v)
+	return xml.NewDecoder(c.request.Body).Decode(v)
 }
 
 func (c *Context) BindYAML(v any) error {
-	return yaml.NewDecoder(c.Request.Body).Decode(v)
+	return yaml.NewDecoder(c.request.Body).Decode(v)
 }
 
 func (c *Context) BindProtoBuf(v proto.Message) error {
-	body, err := io.ReadAll(c.Request.Body)
+	body, err := io.ReadAll(c.request.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read request body: %w", err)
 	}
@@ -686,22 +688,22 @@ func (c *Context) BindProtoBuf(v proto.Message) error {
 		if err != nil {
 			fPrintError("Failed to close response body")
 		}
-	}(c.Request.Body)
+	}(c.request.Body)
 	return proto.Unmarshal(body, v)
 }
 
 func (c *Context) BindQuery(v any) error {
-	if err := c.Request.ParseForm(); err != nil {
+	if err := c.request.ParseForm(); err != nil {
 		return fmt.Errorf("invalid query data: %w", err)
 	}
-	return formToStruct(c.Request.Form, v)
+	return formToStruct(c.request.Form, v)
 }
 
 func (c *Context) BindForm(v any) error {
-	if err := c.Request.ParseForm(); err != nil {
+	if err := c.request.ParseForm(); err != nil {
 		return fmt.Errorf("invalid form data: %w", err)
 	}
-	return formToStruct(c.Request.Form, v)
+	return formToStruct(c.request.Form, v)
 }
 
 func formToStruct(data url.Values, v any) error {

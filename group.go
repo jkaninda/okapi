@@ -218,7 +218,7 @@ func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http.Request), opts ...RouteOption) {
 	// Convert standard handler to HandleFunc
 	converted := func(c Context) error {
-		h(c.Response, c.Request)
+		h(c.response, c.request)
 		return nil
 	}
 	// Apply group middleware
@@ -259,8 +259,8 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 		// Convert HandleFunc to http.Handler
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := Context{
-				Request:  r,
-				Response: &response{writer: w},
+				request:  r,
+				response: &response{writer: w},
 				okapi:    g.okapi,
 			}
 			if err := next(ctx); err != nil {
@@ -273,7 +273,7 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 
 		// Convert back to HandleFunc
 		return func(ctx Context) error {
-			wrapped.ServeHTTP(ctx.Response, ctx.Request)
+			wrapped.ServeHTTP(ctx.response, ctx.request)
 			return nil
 		}
 	})

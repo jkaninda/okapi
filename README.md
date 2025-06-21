@@ -157,7 +157,7 @@ func main() {
     okapi.DocSummary("Create a new Book"), // Route Summary
     okapi.DocRequestBody(Book{}),                                   //  Request body
     okapi.DocResponse(Response{}),                                  // Success Response body
-    okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
+    okapi.DocResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
 
   )
   // Start the server
@@ -212,6 +212,7 @@ This feature makes it easy to manage API versioning, logical route separation, a
 * **Middleware**: Attach middleware to a group to apply it to all nested routes.
 * **Deprecation**: Mark a group as deprecated to indicate it's being phased out (useful for OpenAPI documentation).
 * **Disabling**: Temporarily disable a group to return `404 Not Found` for all its routes.
+* **Tagging**: Automatically tag routes in OpenAPI documentation based on group names.
 
 #### Example:
 
@@ -374,7 +375,7 @@ o.Get("/admin", adminHandler)
 
 ### JWT Middleware
 
-Okapi includes a powerful and flexible JWT middleware to secure your routes with JSON Web Tokens. It supports multiple signing mechanisms, key sources, claim validation strategies, and OpenAPI integration.
+Okapi includes powerful and flexible JWT middleware to secure your routes with JSON Web Tokens. It supports multiple signing mechanisms, key sources, claim validation strategies, and OpenAPI integration.
 
 ####  Features
 

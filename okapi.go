@@ -103,7 +103,6 @@ type (
 		Method          string
 		handle          HandleFunc
 		chain           chain
-		groupPath       string
 		tags            []string
 		summary         string
 		request         *openapi3.SchemaRef
@@ -757,61 +756,61 @@ func (o *Okapi) SetContext(ctx *Context) {
 // Get registers a new GET route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(GET, path, "", h, opts...)
+	return o.addRoute(GET, path, nil, h, opts...)
 }
 
 // Post registers a new POST route with the given path and handler function.
 // Returns the created *Route for possible chaining or modification.
 func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(POST, path, "", h, opts...)
+	return o.addRoute(POST, path, nil, h, opts...)
 }
 
 // Put registers a new PUT route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(PUT, path, "", h, opts...)
+	return o.addRoute(PUT, path, nil, h, opts...)
 }
 
 // Delete registers a new DELETE route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(http.MethodDelete, path, "", h, opts...)
+	return o.addRoute(http.MethodDelete, path, nil, h, opts...)
 }
 
 // Patch registers a new PATCH route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(PATCH, path, "", h, opts...)
+	return o.addRoute(PATCH, path, nil, h, opts...)
 }
 
 // Options registers a new OPTIONS route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(http.MethodOptions, path, "", h, opts...)
+	return o.addRoute(http.MethodOptions, path, nil, h, opts...)
 }
 
 // Head registers a new HEAD route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(HEAD, path, "", h, opts...)
+	return o.addRoute(HEAD, path, nil, h, opts...)
 }
 
 // Connect registers a new CONNECT route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(http.MethodConnect, path, "", h, opts...)
+	return o.addRoute(http.MethodConnect, path, nil, h, opts...)
 }
 
 // Trace registers a new TRACE route with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(TRACE, path, "", h, opts...)
+	return o.addRoute(TRACE, path, nil, h, opts...)
 }
 
 // Any registers a route that matches any HTTP method with the given path and handler function.
 // Returns the created *Route
 func (o *Okapi) Any(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute("", path, "", h, opts...)
+	return o.addRoute("", path, nil, h, opts...)
 }
 
 // ********** Static Content ***************
@@ -836,19 +835,19 @@ func (o *Okapi) StaticFS(prefix string, fs http.FileSystem) {
 }
 
 // addRoute adds a route with the specified method to the Okapi instance
-func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts ...RouteOption) *Route {
 	if path == "" {
 		panic("Path cannot be empty")
 	}
-	if groupPath == "" {
-		groupPath = "default"
+	if len(tags) == 0 {
+		tags = []string{"default"}
 	}
 	path = normalizeRoutePath(path)
 	route := &Route{
 		Name:      handleName(h),
 		Path:      path,
 		Method:    method,
-		groupPath: groupPath,
+		tags:      tags,
 		handle:    h,
 		chain:     o,
 		responses: make(map[int]*openapi3.SchemaRef),
@@ -913,7 +912,7 @@ func (o *Okapi) addRoute(method, path, groupPath string, h HandleFunc, opts ...R
 //	    return nil
 //	})
 func (o *Okapi) Handle(method, path string, h HandleFunc, opts ...RouteOption) {
-	o.addRoute(method, path, "", h, opts...)
+	o.addRoute(method, path, nil, h, opts...)
 }
 
 // HandleHTTP registers a new route using a standard http.Handler.
@@ -936,7 +935,7 @@ func (o *Okapi) Handle(method, path string, h HandleFunc, opts ...RouteOption) {
 //
 //	okapi.HandleHTTP("GET", "/static", http.FileServer(http.Dir("./public")))
 func (o *Okapi) HandleHTTP(method, path string, h http.Handler, opts ...RouteOption) {
-	o.addRoute(method, path, "", o.wrapHTTPHandler(h), opts...)
+	o.addRoute(method, path, nil, o.wrapHTTPHandler(h), opts...)
 }
 
 // HandleStd is a convenience method for registering handlers using the standard
@@ -1225,4 +1224,34 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 		h.ServeHTTP(ctx.Response, ctx.Request)
 		return nil
 	}
+}
+
+// Register registers a list of RouteDefinition to the Okapi instance.
+// This method allows you to define multiple routes in a single call, which can be useful for
+// organizing your routes in a more structured way.
+// Example:
+//
+//	routes := []okapi.RouteDefinition{
+//	    {
+//	        Method:  "GET",
+//	        Path:    "/example",
+//	        Handler: exampleHandler,
+//	        Options: []okapi.RouteOption{
+//	            okapi.DocSummary("Example GET request"),
+//	        },
+//	    },
+//	    {
+//	        Method:  "POST",
+//	        Path:    "/example",
+//	        Handler: exampleHandler,
+//	        Options: []okapi.RouteOption{
+//	            okapi.DocSummary("Example POST request"),
+//	        },
+//	    },
+//	}
+//	// Create a new Okapi instance
+//	app := okapi.New()
+//	app.Register(app, routes...)
+func (o *Okapi) Register(routes ...RouteDefinition) {
+	RegisterRoutes(o, routes)
 }

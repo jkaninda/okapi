@@ -184,6 +184,9 @@ Visit [`http://localhost:8080`](http://localhost:8080) to see the response:
 
 Visit [`http://localhost:8080/docs/`](http://localhost:8080/docs/) to see the documentation
 
+See the [examples](https://github.com/jkaninda/okapi/tree/main/examples) folder for more examples of Okapi in action
+
+
 ---
 
 ## Routing
@@ -597,13 +600,14 @@ This approach uses individual `okapi.Doc*` functions for each aspect of your rou
 
 ```go
 o.Get("/books", getBooksHandler,
-  okapi.DocSummary("List all available books"),
-  okapi.DocTags("Books"),
-  okapi.DocQueryParam("author", "string", "Filter by author name", false),
-  okapi.DocQueryParam("limit", "int", "Maximum results to return (default 20)", false),
-  okapi.DocResponse([]Book{}), // Response for OpenAPI docs
-  okapi.DocErrorResponse(400, ErrorResponse{}),// Response error for OpenAPI docs
-  okapi.DocErrorResponse(401, ErrorResponse{}),// Response error for OpenAPI docs
+    okapi.DocSummary("List all available books"),
+    okapi.DocTags("Books"),
+    okapi.DocQueryParam("author", "string", "Filter by author name", false),
+    okapi.DocQueryParam("limit", "int", "Maximum results to return (default 20)", false), 
+    okapi.DocResponseHeader("X-Client-Id", "string", "Client ID of the request"),
+    okapi.DocResponse([]Book{}), // Response for OpenAPI docs, Shorthand for DocResponse(200, value)
+    okapi.DocResponse(400, ErrorResponse{}),// Response error for OpenAPI docs
+    okapi.DocResponse(401, ErrorResponse{}),// Response error for OpenAPI docs
 
 )
 ```
@@ -619,28 +623,29 @@ o.Post("/books", createBookHandler,
     Summary("Add a new book to inventory").
     Tags("Books").
     BearerAuth().
+	ResponseHeader("X-Client-Id", "string", "Client ID of the request").
     RequestBody(BookRequest{}).
-    Response(Book{}).
-	ErrorResponse(400,ErrorResponse{}).
-	ErrorResponse(401,ErrorResponse{}).
+    Response(201,Book{}).
+    Response(400,ErrorResponse{}).
+    Response(401,ErrorResponse{}).
     Build(),
 )
 ```
 
 ### Available Documentation Options
 
-| Method                                       | Description                         |
-|----------------------------------------------|-------------------------------------|
-| `DocSummary()`/`Doc().Summary()`             | Short endpoint description          |
-| `DocTag()/DocTags()`/`Doc().Tags()`          | Groups related endpoints            |
-| `DocBearerAuth()`                            | Enables Bearer token authentication |
-| `DocRequestBody()`/`Doc().RequestBody()`     | Documents request body structure    |
-| `DocResponse()`/`Doc().Response()`           | Documents response structure        |
-| `DocPathParam()`/`Doc().PathParam()`         | Documents path parameters           |
-| `DocQueryParam()`/`Doc().QueryParam()`       | Documents query parameters          |
-| `DocHeader()`/ `Doc().Header()`              | Documents header parameters         |
-| `DocErrorResponse()`/`Doc().ErrorResponse()` | Documents response error            |
-| `DocDeprecated()`/`Doc().Deprecated()`       | Mark route deprecated               |
+| Method                                         | Description                         |
+|------------------------------------------------|-------------------------------------|
+| `DocSummary()`/`Doc().Summary()`               | Short endpoint description          |
+| `DocTag()/DocTags()`/`Doc().Tags()`            | Groups related endpoints            |
+| `DocBearerAuth()`                              | Enables Bearer token authentication |
+| `DocRequestBody()`/`Doc().RequestBody()`       | Documents request body structure    |
+| `DocResponse()`/`Doc().Response()`             | Documents response structure        |
+| `DocPathParam()`/`Doc().PathParam()`           | Documents path parameters           |
+| `DocQueryParam()`/`Doc().QueryParam()`         | Documents query parameters          |
+| `DocHeader()`/ `Doc().Header()`                | Documents header parameters         |
+| `DocResponseHeader()`/`Doc().ResponseHeader()` | Documents response header           |
+| `DocDeprecated()`/`Doc().Deprecated()`         | Mark route deprecated               |
 
 
 ### Swagger UI Preview
@@ -823,6 +828,140 @@ o.Static("/static", "public/assets")
 ```
 ---
 
+## Context
+
+Okapi provides a powerful and lightweight `Context` object that wraps the HTTP request and response. It is designed to simplify handling HTTP requests by offering a clean and expressive API for accessing request data, binding parameters, sending responses, and managing errors.
+
+The `Context` is passed to all route handlers and supports:
+
+* Accessing path parameters, query parameters, form values, file uploads, and headers
+* Binding request data to structs using various formats (JSON, XML, YAML, form data, etc.)
+* Sending structured responses (JSON, text, HTML, XML, file)
+* Handling cookies, headers, and other request metadata
+* Managing the request lifecycle (e.g., aborting early)
+* Built-in helpers for standardized error responses
+* Access to the underlying `*http.Request` and `http.ResponseWriter` for low-level control
+
+This makes it easy to focus on business logic without worrying about low-level HTTP details.
+
+
+### Context Fields
+
+| Field      | Description                             |
+|------------|-----------------------------------------|
+| `Request`  | The raw `*http.Request` object          |
+| `Response` | The raw `http.ResponseWriter` interface |
+
+
+
+### Binding Methods
+
+The context supports multiple binding mechanisms depending on content type and request source
+
+---
+
+### Response Methods
+
+Okapi provides a rich set of response methods to send various types of responses back to the client. These methods automatically set the appropriate HTTP status codes and content types.
+
+---
+
+## Error Handling
+
+Okapi provides a comprehensive error-handling system. You can return an `error` directly from your route handler, and Okapi will format the response automatically.
+
+Additionally, the `Context` includes many helper methods to send standardized HTTP error responses with custom messages and optional wrapped errors.
+
+
+These helpers provide consistency and reduce boilerplate when handling errors in your handlers or middleware.
+
+---
+
+## Route Definition
+
+Okapi provides a clean, declarative way to define and register routes. It supports all standard HTTP methods, including `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, and `OPTIONS`.
+
+You can define routes individually or register multiple routes at once using the `okapi.RegisterRoutes` function and the `RouteDefinition` struct, which is especially useful when organizing routes by controller or feature module.
+
+
+
+### Defining Routes with `RouteDefinition`
+
+To group and manage routes more effectively, you can define them as a slice of `okapi.RouteDefinition`. This pattern is ideal for structuring routes in controllers or service layers.
+
+#### Example: Book Controller
+
+```go
+type BookController struct{}
+
+func (bc *BookController) GetBooks(c okapi.Context) error {
+	// Simulate fetching books from a database
+	return c.OK(okapi.M{"success": true, "message": "Books retrieved successfully"})
+}
+
+func (bc *BookController) CreateBook(c okapi.Context) error {
+	// Simulate creating a book in a database
+	return c.Created(okapi.M{
+		"success": true,
+		"message": "Book created successfully",
+	})
+}
+```
+
+
+### Defining Controller Routes
+
+```go
+func (bc *BookController) Routes() []okapi.RouteDefinition {
+	apiGroup := &okapi.Group{Prefix: "/api"}
+	return []okapi.RouteDefinition{
+		{
+			Method:  http.MethodGet,
+			Path:    "/books",
+			Handler: bc.GetBooks,
+			Group:   apiGroup,
+		},
+		{
+			Method:  http.MethodPost,
+			Path:    "/books",
+			Handler: bc.CreateBook,
+			Group:   apiGroup,
+			Options: []okapi.RouteOption{
+				okapi.DocSummary("Create Book"), // OpenAPI documentation
+			},
+		},
+	}
+}
+```
+
+
+### Registering Routes
+
+You can register routes using one of the following approaches:
+
+```go
+app := okapi.Default()
+bookController := &BookController{}
+
+// Method 1: Register directly to the app instance
+app.Register(bookController.Routes()...)
+
+// Using a route group
+// apiGroup := app.Group("/api")
+// apiGroup.Register(bookController.Routes()...)
+
+
+// Method 2: Use the global helper to register with the target instance
+okapi.RegisterRoutes(app, bookController.Routes())
+```
+
+Both methods achieve the same result, choose the one that best fits your project’s style.
+
+#### See the example in the [examples/route-definition](https://github.com/jkaninda/okapi/tree/main/examples/route-definition) directory for a complete application using this pattern.
+
+---
+
+
 ##  Standard Library Compatibility
 
 **Okapi** integrates seamlessly with Go’s `net/http` standard library, enabling you to:
@@ -938,17 +1077,35 @@ Contributions are welcome!
 5. Open a Pull Request
 
 
-
 ---
-## Give a Star! ⭐
+
+## 🌟 Star History
 
 ⭐ If you find Okapi useful, please consider giving it a star on [GitHub](https://github.com/jkaninda/okapi)!
+
+[![Star History Chart](https://api.star-history.com/svg?repos=jkaninda/okapi&type=Date)](https://star-history.com/#jkaninda/okapi&Date)
+
+## 📞 Support & Community
+
+- **🐛 Bug Reports:** [GitHub Issues](https://github.com/jkaninda/okapi/issues)
+- **💡 Feature Requests:** [GitHub Discussions](https://github.com/jkaninda/okapi/discussions)
+- **📧 Contact:** Open an issue for any questions
+- **💼 LinkedIn:** [Jonas Kaninda](https://www.linkedin.com/in/jkaninda/)
 
 
 ## License
 
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-## Copyright
+---
 
-Copyright (c) 2025 Jonas Kaninda
+<div align="center">
+
+**Made with ❤️ for the Go community**
+
+**⭐ Star us on GitHub — it helps!**
+
+**Copyright (c) 2025 Jonas Kaninda**
+
+
+</div>

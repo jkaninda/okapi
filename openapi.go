@@ -557,11 +557,6 @@ func (o *Okapi) buildOpenAPISpec() {
 			DocAutoPathParams()(r)
 		}
 
-		tags := r.tags
-		if tags == nil {
-			tags = append(tags, r.groupPath)
-		}
-
 		item := spec.Paths.Value(r.Path)
 		if item == nil {
 			item = &openapi3.PathItem{}
@@ -571,7 +566,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		op := &openapi3.Operation{
 			Summary:     r.summary,
 			Description: r.description,
-			Tags:        tags,
+			Tags:        r.tags,
 			Parameters:  append(append(r.pathParams, r.queryParams...), r.headers...),
 			Responses:   &openapi3.Responses{},
 			Deprecated:  r.deprecated,

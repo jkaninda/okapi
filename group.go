@@ -27,7 +27,10 @@ package okapi
 import "net/http"
 
 type Group struct {
-	Prefix      string
+	// Prefix is the base path for all routes in this group.
+	Prefix string
+	// Tags is an optional tag for the group, used for documentation purposes.
+	Tags        []string
 	disabled    bool
 	bearerAuth  bool
 	deprecated  bool
@@ -67,6 +70,12 @@ func (g *Group) Disable() *Group {
 // Returns the Group to allow method chaining.
 func (g *Group) WithBearerAuth() *Group {
 	g.bearerAuth = true
+	return g
+}
+
+// WithTags sets the tags for the Group, which can be used for documentation purposes.
+func (g *Group) WithTags(tags []string) *Group {
+	g.Tags = tags
 	return g
 }
 
@@ -120,8 +129,12 @@ func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Rou
 	for i := len(g.middlewares) - 1; i >= 0; i-- {
 		finalHandler = g.middlewares[i](finalHandler)
 	}
+	tags := g.Tags
+	if len(tags) == 0 {
+		tags = []string{g.Prefix}
+	}
 	// Register the route with the joined base path and route path
-	return g.okapi.addRoute(method, fullPath, g.Prefix, finalHandler, opts...).SetDisabled(g.disabled)
+	return g.okapi.addRoute(method, fullPath, tags, finalHandler, opts...).SetDisabled(g.disabled)
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
@@ -131,6 +144,14 @@ func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *
 	}
 	if g.deprecated {
 		opts = append(opts, DocDeprecated())
+	}
+	if len(g.Tags) != 0 {
+		for _, tag := range g.Tags {
+			if tag == "" {
+				continue // Skip empty tags
+			}
+			opts = append(opts, DocTag(tag))
+		}
 	}
 	return g.add(method, path, h, opts...)
 }
@@ -204,8 +225,12 @@ func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http
 	for i := len(g.middlewares) - 1; i >= 0; i-- {
 		converted = g.middlewares[i](converted)
 	}
+	tags := g.Tags
+	if len(tags) == 0 {
+		tags = []string{g.Prefix}
+	}
 	// Register route
-	g.okapi.addRoute(method, joinPaths(g.Prefix, path), g.Prefix, converted, opts...).SetDisabled(g.disabled)
+	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).SetDisabled(g.disabled)
 }
 
 // HandleHTTP registers a standard http.Handler and wraps it with the group's middleware chain.
@@ -216,8 +241,12 @@ func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 	for i := len(g.middlewares) - 1; i >= 0; i-- {
 		converted = g.middlewares[i](converted)
 	}
+	tags := g.Tags
+	if len(tags) == 0 {
+		tags = []string{g.Prefix}
+	}
 	// Register route
-	g.okapi.addRoute(method, joinPaths(g.Prefix, path), g.Prefix, converted, opts...).SetDisabled(g.disabled)
+	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).SetDisabled(g.disabled)
 }
 
 // UseMiddleware registers a standard HTTP middleware function and integrates
@@ -248,4 +277,51 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 			return nil
 		}
 	})
+}
+
+// Register registers a slice of RouteDefinition with the group.
+// It ensures that each route is associated with the group and its Okapi instance.
+// If a route's Group field is nil, it assigns the current group to it.
+// If the route's Group's Okapi reference is nil, it assigns the group's Okapi instance to it.
+// This method is useful for bulk registering routes defined in a controller or similar structure.
+//
+// Example:
+//
+//	routes := []okapi.RouteDefinition{
+//	    {
+//	        Method:  "GET",
+//	        Path:    "/example",
+//	        Handler: exampleHandler,
+//	        Options: []okapi.RouteOption{
+//	            okapi.DocSummary("Example GET request"),
+//	        },
+//	    },
+//	    {
+//	        Method:  "POST",
+//	        Path:    "/example",
+//	        Handler: exampleHandler,
+//	        Options: []okapi.RouteOption{
+//	            okapi.DocSummary("Example POST request"),
+//	        },
+//	    },
+//	}
+//	// Create a new Okapi instance
+//	app := okapi.New()
+//
+// api:= app.Group("/api")
+//
+// api.Register(routes...)
+func (g *Group) Register(routes ...RouteDefinition) {
+	for _, r := range routes {
+		if r.Group == nil {
+			r.Group = g
+		} else if r.Group.okapi == nil {
+			r.Group.okapi = g.okapi
+		}
+		tags := r.Group.Tags
+		if len(tags) == 0 {
+			tags = []string{g.Prefix}
+		}
+		g.okapi.addRoute(r.Method, joinPaths(g.Prefix, r.Path), tags, r.Handler, r.Options...).SetDisabled(g.disabled)
+	}
 }

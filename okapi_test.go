@@ -102,7 +102,7 @@ func TestStart(t *testing.T) {
 		DocSummary("Book Summary"),
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
-		DocTags("Book Tag"),
+		DocTags("Book Tags"),
 	)
 
 	v1 := api.Group("/v1")
@@ -288,6 +288,42 @@ func TestCustomConfig(t *testing.T) {
 	assertStatus(t, "GET", "http://localhost:8081/openapi.json", nil, nil, "", http.StatusNotFound)
 
 }
+
+type BookController struct{}
+
+func (bc *BookController) GetBooks(c Context) error {
+	// Simulate fetching books from a database
+	return c.OK(M{"success": true, "message": "Books retrieved successfully"})
+}
+
+func (bc *BookController) CreateBook(c Context) error {
+	// Simulate creating a book in a database
+	return c.Created(M{
+		"success": true,
+		"message": "Book created successfully",
+	})
+}
+func TestRegisterRoutes(t *testing.T) {
+	app := New()
+	bookController := &BookController{}
+
+	// Method 1: Register directly to the app instance
+	app.Register(bookController.Routes()...)
+	// Method 2: Register using RegisterRoutes
+	RegisterRoutes(app, bookController.Routes())
+
+	go func() {
+		if err := app.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer app.Stop()
+	waitForServer()
+
+	assertStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/core/books", nil, nil, "", http.StatusCreated)
+
+}
 func assertStatus(t *testing.T, method, url string,
 	headers map[string]string,
 	body io.Reader,
@@ -430,5 +466,25 @@ func customMiddleware(next HandleFunc) HandleFunc {
 		}
 		slog.Info("Request took", "duration", time.Since(start))
 		return nil
+	}
+}
+func (bc *BookController) Routes() []RouteDefinition {
+	coreGroup := &Group{Prefix: "/core", Tags: []string{"CoreGroup"}}
+	return []RouteDefinition{
+		{
+			Method:  http.MethodGet,
+			Path:    "/books",
+			Handler: bc.GetBooks,
+			Group:   coreGroup,
+		},
+		{
+			Method:  http.MethodPost,
+			Path:    "/books",
+			Handler: bc.CreateBook,
+			Group:   coreGroup,
+			Options: []RouteOption{
+				DocSummary("Create Book"), // OpenAPI documentation
+			},
+		},
 	}
 }

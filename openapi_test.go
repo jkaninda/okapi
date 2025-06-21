@@ -44,7 +44,7 @@ func TestOpenAPI(t *testing.T) {
 		DocBearerAuth(),
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
-		DocTags("Book Tag"),
+		DocTags("Book Tags"),
 		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
 	)
 	v1.Put("/books", anyHandler,
@@ -54,7 +54,7 @@ func TestOpenAPI(t *testing.T) {
 		DocBearerAuth(),
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
-		DocTags("Book Tag"),
+		DocTags("Book Tags"),
 		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
 	)
 	v1.Get("/books", anyHandler,
@@ -62,7 +62,7 @@ func TestOpenAPI(t *testing.T) {
 		DocQueryParam("auth", "string", "auth name", true),
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
-		DocTags("Book Tag"),
+		DocTags("Book Tags"),
 		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
 		DocDeprecated(),
 	)
@@ -71,7 +71,7 @@ func TestOpenAPI(t *testing.T) {
 		DocPathParam("id", "int", "book id"),
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
-		DocTags("Book Tag"),
+		DocTags("Book Tags"),
 		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
 		DocDeprecated(),
 	)
@@ -80,10 +80,11 @@ func TestOpenAPI(t *testing.T) {
 		DocSummary("Book Summary"),
 		DocAutoPathParams(),
 		DocQueryParam("auth", "string", "auth name", true),
+		DocResponseHeader("X-RateLimit-Limit", "int", "The number of requests allowed per minute"),
 		DocBearerAuth(),
 		DocResponse(201, Book{}),
 		DocRequestBody(Book{}),
-		DocTags("Book Tag"),
+		DocTags("Book Tags"),
 		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
 	)
 	v2.Put("/books", anyHandler,
@@ -91,15 +92,16 @@ func TestOpenAPI(t *testing.T) {
 			BearerAuth().
 			Response(Book{}).
 			RequestBody(Book{}).
-			Tags("Book Tag").
+			Tags("Book Tags").
 			ErrorResponse(http.StatusBadRequest, M{"": ""}).AsOption(),
 	)
 	v2.Get("/books", anyHandler,
 		Doc().Summary("Book Summary").
 			BearerAuth().
 			QueryParam("auth", "string", "auth name", true).
-			Response(Book{}).
-			Tags("Book Tag").
+			ResponseHeader("X-RateLimit-Limit", "int", "The number of requests allowed per minute").
+			Response(200, Book{}).
+			Tags("Book Tags").
 			ErrorResponse(http.StatusBadRequest, M{"": ""}).Build(),
 	)
 	v2.Delete("/books/:id", anyHandler,
@@ -108,7 +110,7 @@ func TestOpenAPI(t *testing.T) {
 			BearerAuth().
 			PathParam("id", "int", "book id").
 			Response(Book{}).
-			Tags("Book Tag").
+			Tags("Book Tags").
 			ErrorResponse(http.StatusBadRequest, M{"": ""}).Build(),
 	)
 	go func() {
@@ -126,6 +128,7 @@ func TestOpenAPI(t *testing.T) {
 }
 func anyHandler(c Context) error {
 	slog.Info("Calling route", "path", c.Request.URL.Path, "method", c.Request.Method)
+	c.SetHeader("X-RateLimit-Limit", "100")
 	return c.OK(M{"message": "Hello from Okapi!"})
 
 }

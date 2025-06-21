@@ -107,6 +107,33 @@ func TestGroup(t *testing.T) {
 	assertStatus(t, "HEAD", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 }
+func TestRegister(t *testing.T) {
+	app := New()
+	coreGroup := app.Group("/core").SetDisabled(false).WithTags([]string{"CoreGroup"})
+
+	coreGroup.Use(func(next HandleFunc) HandleFunc {
+		return func(c Context) (err error) {
+			slog.Info("Core Group middleware")
+			return next(c)
+		}
+	})
+
+	bookController := &BookController{}
+
+	coreGroup.Register(bookController.Routes()...)
+
+	go func() {
+		if err := app.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer app.Stop()
+	waitForServer()
+
+	assertStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)
+	assertStatus(t, "POST", "http://localhost:8080/core/books", nil, nil, "", http.StatusCreated)
+
+}
 func helloHandler(c Context) error {
 	slog.Info("Calling route", "path", c.Request.URL.Path, "method", c.Request.Method)
 	return c.OK(M{"message": "Hello from Okapi!"})

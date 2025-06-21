@@ -77,6 +77,6 @@ func greetingHandler(c okapi.Context) error {
 	return c.JSON(http.StatusOK, okapi.M{
 		"message":    fmt.Sprintf("Hello %s!", name),
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
-		"user_agent": c.request.UserAgent(),
+		"user_agent": c.Request().UserAgent(),
 	})
 }

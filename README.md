@@ -486,7 +486,9 @@ You can combine this with `ClaimsExpression` for more complex scenarios.
 Example:
 
 ```go
-jwtAuth.ValidateClaims = func(claims jwt.Claims) error {
+jwtAuth.ValidateClaims = func(c Context, claims jwt.Claims) error {
+    method := c.Request().Method
+    fPrint("Request method,", "method", method)
     mapClaims, ok := claims.(jwt.MapClaims)
     if !ok {
         return errors.New("invalid claims type")

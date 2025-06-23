@@ -44,8 +44,8 @@ func main() {
 		okapi.DocSummary("New Book"),
 		okapi.DocDescription("Create a new Book"),
 		okapi.DocRequestBody(Book{}),
-		okapi.DocResponse(Response{}),                                  // Success Response body
-		okapi.DocErrorResponse(http.StatusBadRequest, ErrorResponse{}), //  Error response body
+		okapi.DocResponse(Response{}),                             // Success Response body
+		okapi.DocResponse(http.StatusBadRequest, ErrorResponse{}), //  Error response body
 	)
 	// Start the server
 	if err := o.Start(); err != nil {

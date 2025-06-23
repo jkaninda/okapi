@@ -101,7 +101,6 @@ type (
 		Name            string
 		Path            string
 		Method          string
-		handle          HandleFunc
 		chain           chain
 		tags            []string
 		summary         string
@@ -109,6 +108,7 @@ type (
 		pathParams      []*openapi3.ParameterRef
 		queryParams     []*openapi3.ParameterRef
 		headers         []*openapi3.ParameterRef
+		middlewares     []Middleware
 		responseHeaders map[string]*openapi3.HeaderRef
 		requiresAuth    bool
 		deprecated      bool
@@ -116,6 +116,8 @@ type (
 		responses       map[int]*openapi3.SchemaRef
 		description     string
 		disabled        bool
+		handle          HandleFunc // Original handler
+		handler         HandleFunc // Final handler with middleware chain
 	}
 
 	// Response interface defines the methods for writing HTTP responses.
@@ -134,7 +136,7 @@ type (
 
 // chain is an interface that defines a method for chaining handlers.
 type chain interface {
-	Next(hf HandleFunc) HandleFunc
+	next(hf HandleFunc) HandleFunc
 }
 
 // Disable marks the Route as disabled, causing it to return 404 Not Found.
@@ -157,6 +159,32 @@ func (r *Route) Enable() *Route {
 func (r *Route) SetDisabled(disabled bool) *Route {
 	r.disabled = disabled
 	return r
+}
+
+// Deprecated marks the Route as deprecated.
+// Returns the Route to allow method chaining.
+func (r *Route) Deprecated() *Route {
+	r.deprecated = true
+	return r
+}
+
+// UseMiddleware registers one or more middleware functions to the Route.
+func UseMiddleware(m ...Middleware) RouteOption {
+	return func(r *Route) {
+		if len(m) == 0 {
+			return
+		}
+		r.middlewares = append(r.middlewares, m...)
+	}
+}
+
+// Use registers one or more middleware functions to the Route.
+func (r *Route) Use(m ...Middleware) {
+	if len(m) == 0 {
+		return
+	}
+	r.middlewares = append(r.middlewares, m...)
+	r.handler = r.next(r.handle)
 }
 
 // Response implementation
@@ -633,6 +661,9 @@ func (o *Okapi) Start() error {
 //
 // Note: For group-specific middleware, use Group.Use() instead.
 func (o *Okapi) Use(middlewares ...Middleware) {
+	if len(middlewares) == 0 {
+		return
+	}
 	o.middlewares = append(o.middlewares, middlewares...)
 }
 
@@ -856,9 +887,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 		opt(route)
 	}
 	o.routes = append(o.routes, route)
-
-	handler := o.Next(h)
-
+	route.handler = route.next(h)
 	// Main handler
 	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		ctx := Context{
@@ -870,7 +899,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 			http.Error(w, "404 page not found", http.StatusNotFound)
 			return
 		}
-		if err := handler(ctx); err != nil {
+		if err := route.handler(ctx); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}).Methods(method)
@@ -1022,18 +1051,21 @@ func (o *Okapi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler(ctx)
 }
 
-// Middlewares returns the list of middlewares
-func (o *Okapi) Middlewares() []Middleware {
-	return o.middlewares
-}
-
-// Next applies the middlewares in correct order
-func (o *Okapi) Next(h HandleFunc) HandleFunc {
+// next applies the middlewares in correct order
+func (o *Okapi) next(h HandleFunc) HandleFunc {
 	// Start with the original handler
 	for i := len(o.middlewares) - 1; i >= 0; i-- {
 		h = o.middlewares[i](h)
 	}
 	return h
+}
+
+// next applies the middlewares in correct order for a specific route
+func (r *Route) next(h HandleFunc) HandleFunc {
+	for i := len(r.middlewares) - 1; i >= 0; i-- {
+		h = r.middlewares[i](h)
+	}
+	return r.chain.next(h)
 }
 func (o *Okapi) Routes() []Route {
 	routes := make([]Route, 0, len(o.routes))
@@ -1055,12 +1087,12 @@ func (o *Okapi) Routes() []Route {
 //	api := okapi.Group("/api", AuthMiddleware) // All /api routes require auth
 //	api.Get("/users", getUserHandler)          // Handles /api/users
 //	api.Post("/users", createUserHandler)      // Handles /api/users
-func (o *Okapi) Group(path string, middlewares ...Middleware) *Group {
-	if len(path) == 0 {
-		panic("Group path cannot be empty")
+func (o *Okapi) Group(prefix string, middlewares ...Middleware) *Group {
+	if len(prefix) == 0 {
+		panic("Group prefix cannot be empty")
 	}
 	group := &Group{
-		Prefix:      path,
+		Prefix:      prefix,
 		okapi:       o,
 		middlewares: middlewares,
 	}
@@ -1192,11 +1224,11 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 		}
 		switch {
 		case status >= 500:
-			logger.Error("[okapi]", args...)
+			logger.Error("[okapi] Incoming request", args...)
 		case status >= 400:
-			logger.Warn("[okapi]", args...)
+			logger.Warn("[okapi] Incoming request", args...)
 		default:
-			logger.Info("[okapi]", args...)
+			logger.Info("[okapi] Incoming request", args...)
 		}
 		return err
 	}

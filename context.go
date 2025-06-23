@@ -31,6 +31,7 @@ import (
 	"github.com/gorilla/mux"
 	"gopkg.in/yaml.v3"
 	"html/template"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -106,6 +107,15 @@ func (c *Context) Response() Response {
 // ResponseWriter returns the http.ResponseWriter for writing responses.
 func (c *Context) ResponseWriter() http.ResponseWriter {
 	return c.response // Return the http.ResponseWriter
+}
+
+// Logger returns the logger instance associated with the Okapi context.
+func (c *Context) Logger() *slog.Logger {
+	if c.okapi.logger == nil {
+		return slog.Default()
+	}
+	return c.okapi.logger
+
 }
 
 // Get retrieves a value from the context's data store with thread-safe access.

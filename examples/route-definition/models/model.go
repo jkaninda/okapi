@@ -24,8 +24,6 @@
 
 package models
 
-// **************** Models ************************
-
 type Response struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
@@ -40,4 +38,20 @@ type ErrorResponse struct {
 	Success bool `json:"success"`
 	Status  int  `json:"status"`
 	Details any  `json:"details"`
+}
+
+type AuthRequest struct {
+	Username string `json:"username" required:"true" description:"Username for authentication"`
+	Password string `json:"password" required:"true" description:"Password for authentication"`
+}
+type AuthResponse struct {
+	Success   bool   `json:"success"`
+	Message   string `json:"message"`
+	Token     string `json:"token,omitempty"`
+	ExpiresAt int64  `json:"expires,omitempty"`
+}
+type UserInfo struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
 }

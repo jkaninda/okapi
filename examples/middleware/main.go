@@ -132,7 +132,9 @@ func main() {
 			"role":  "user.role",
 			"name":  "user.name",
 		},
-		ValidateClaims: func(claims jwt.Claims) error {
+		ValidateClaims: func(c okapi.Context, claims jwt.Claims) error {
+			method := c.Request().Method
+			slog.Info("Validating JWT claims", "method", method)
 			slog.Info("Validating JWT claims for role using custom function")
 			mapClaims, ok := claims.(jwt.MapClaims)
 			if !ok {

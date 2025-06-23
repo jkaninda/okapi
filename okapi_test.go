@@ -272,7 +272,7 @@ func TestCustomConfig(t *testing.T) {
 		WithMux(router)).WithDebug().
 		WithOpenAPIDisabled()
 
-	o.Get("/", func(c Context) error { return c.OK(Book{}) })
+	o.Get("/", func(c Context) error { return c.OK(Book{}) }).Deprecated()
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)

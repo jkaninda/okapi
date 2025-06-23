@@ -25,27 +25,36 @@
 package controllers
 
 import (
+	"fmt"
 	"github.com/jkaninda/okapi"
+	"github.com/jkaninda/okapi/examples/route-definition/middlewares"
 	"github.com/jkaninda/okapi/examples/route-definition/models"
 	"net/http"
 	"strconv"
 )
 
 type BookController struct{}
-type HomeController struct{}
+type CommonController struct{}
+type AuthController struct{}
 
 var (
 	books = []*models.Book{
-		{Id: 1, Name: "Book One", Price: 100},
-		{Id: 2, Name: "Book Two", Price: 200},
-		{Id: 3, Name: "Book Three", Price: 300},
+		{Id: 1, Name: "The Go Programming Language ", Price: 100},
+		{Id: 2, Name: "Building REST/API With Okapi ", Price: 50},
+		{Id: 3, Name: "Learning Go", Price: 200},
+		{Id: 4, Name: "Go Web Programming", Price: 300},
+		{Id: 5, Name: "Go in Action", Price: 150},
 	}
+	ApiVersion = "V1"
 )
 
 // ****************** Controllers *****************
 
-func (hc *HomeController) Home(c okapi.Context) error {
+func (hc *CommonController) Home(c okapi.Context) error {
 	return c.OK(okapi.M{"message": "Welcome to the Okapi Web Framework!"})
+}
+func (hc *CommonController) Version(c okapi.Context) error {
+	return c.OK(okapi.M{"version": ApiVersion})
 }
 func (bc *BookController) GetBooks(c okapi.Context) error {
 	// Simulate fetching books from a database
@@ -82,4 +91,54 @@ func (bc *BookController) GetBook(c okapi.Context) error {
 		}
 	}
 	return c.AbortNotFound("Book not found")
+}
+func (bc *BookController) DeleteBook(c okapi.Context) error {
+	id := c.Param("id")
+	i, err := strconv.Atoi(id)
+	if err != nil {
+		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+	}
+
+	// Simulate deleting a book from a database
+	for index, book := range books {
+		if book.Id == i {
+			books = append(books[:index], books[index+1:]...)
+			return c.OK(models.Response{
+				Success: true,
+				Message: "Book deleted successfully",
+			})
+		}
+	}
+	return c.AbortNotFound("Book not found")
+}
+
+// ******************** AuthController *****************
+
+func (bc *AuthController) Login(c okapi.Context) error {
+	authRequest := &models.AuthRequest{}
+	err := c.Bind(authRequest)
+	if err != nil {
+		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+	}
+	// Validate the authRequest and generate a JWT token
+	authResponse, err := middlewares.Login(authRequest)
+	if err != nil {
+		return c.ErrorUnauthorized(authResponse)
+	}
+	return c.OK(authResponse)
+}
+func (bc *AuthController) WhoAmI(c okapi.Context) error {
+	// Get User Information from the context, shared by the JWT middleware using forwardClaims
+	email := c.GetString("email")
+	if email == "" {
+		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
+	}
+
+	// Respond with the current user information
+	return c.OK(models.UserInfo{
+		Email: email,
+		Role:  c.GetString("role"),
+		Name:  c.GetString("name"),
+	},
+	)
 }

@@ -161,7 +161,7 @@ type (
 		// Return an error to reject the request.
 		//
 		// Example:
-		//   ValidateClaims: func(claims jwt.Claims) error {
+		//   ValidateClaims: func(c okapi.Context,claims jwt.Claims) error {
 		//     mapClaims, ok := claims.(jwt.MapClaims)
 		//     if !ok {
 		//       return errors.New("invalid claims type")
@@ -174,7 +174,7 @@ type (
 		//     }
 		//     return nil
 		//   }
-		ValidateClaims func(claims jwt.Claims) error
+		ValidateClaims func(c Context, claims jwt.Claims) error
 
 		// Deprecated: Use ValidateClaims instead.
 		//
@@ -211,11 +211,11 @@ func LoggerMiddleware(next HandleFunc) HandleFunc {
 		}
 		switch {
 		case status >= 500:
-			logger.Error("[okapi]", args...)
+			logger.Error("[okapi] Incoming request", args...)
 		case status >= 400:
-			logger.Warn("[okapi]", args...)
+			logger.Warn("[okapi] Incoming request", args...)
 		default:
-			logger.Info("[okapi]", args...)
+			logger.Info("[okapi] Incoming request", args...)
 		}
 		return err
 	}
@@ -234,6 +234,7 @@ func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
 			if realm == "" {
 				realm = okapiName
 			}
+			c.Logger().Warn("Basic Authentication Required", "ip", c.RealIP(), "realm", realm)
 			c.response.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
 			return c.String(http.StatusUnauthorized, "Unauthorized")
 		}
@@ -266,6 +267,7 @@ func (b BodyLimit) Middleware(next HandleFunc) HandleFunc {
 			return c.String(http.StatusInternalServerError, errReadBody)
 		}
 		if int64(len(body)) > b.MaxBytes {
+			c.Logger().Warn("Request body too large", "size", len(body), "max_size", b.MaxBytes, "ip", c.RealIP())
 			return c.String(http.StatusRequestEntityTooLarge, errTooLarge)
 		}
 
@@ -280,11 +282,15 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 	return func(c Context) error {
 		tokenStr, err := jwtAuth.extractToken(c)
 		if err != nil || tokenStr == "" {
+			c.Logger().Debug("Failed to extract token", "error", err, "ip", c.RealIP())
+			c.Logger().Warn("Failed to extract token", "error", err, "ip", c.RealIP())
 			return c.AbortForbidden("Missing or invalid token", err)
 		}
 
 		keyFunc, err := jwtAuth.resolveKeyFunc()
 		if err != nil {
+			c.Logger().Debug("Failed to resolve key function", "error", err, "ip", c.RealIP())
+			c.Logger().Debug("Failed to resolve key function", "error", err, "ip", c.RealIP(), "token", tokenStr)
 			return c.AbortInternalServerError("Failed to resolve key function", err)
 
 		}
@@ -303,26 +309,27 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		if jwtAuth.ClaimsExpression != "" {
 			valid, err := jwtAuth.validateJWTClaims(token)
 			if err != nil {
-				fPrintError("Failed to validate JWT claims expression", "error", err)
-				return c.AbortUnauthorized("failed to validate JWT claims", err)
+				c.Logger().Warn("Failed to validate JWT claims expression", "error", err)
+				return c.AbortUnauthorized("failed to validate authentication permissions", err)
 			}
 			if !valid {
-				fPrintError("JWT claims did not meet required expression ")
-				return c.AbortUnauthorized("JWT claims did not meet required expression", err)
+				c.Logger().Warn("JWT claims did not meet required expression ", "error", err)
+				return c.AbortUnauthorized("Insufficient permissions", err)
 			}
 		}
 		// If custom claims validation function is provided, use it
 		if jwtAuth.ValidateClaims != nil {
-			if err = jwtAuth.ValidateClaims(token.Claims); err != nil {
-				fPrintError("Failed to validate JWT role", "function", "ValidateClaims", "error", err)
-				return c.AbortUnauthorized("Insufficient role", err)
+			if err = jwtAuth.ValidateClaims(c, token.Claims); err != nil {
+				c.Logger().Warn("Failed to validate JWT role", "function", "ValidateClaims", "error", err)
+				c.Logger().Debug("Failed to validate JWT role", "function", "ValidateClaims", "expression", jwtAuth.ClaimsExpression, "error", err)
+				return c.AbortUnauthorized("Insufficient permissions")
 			}
 		}
 		// If ValidateRole is configured, validate the role claim
 		if jwtAuth.ValidateRole != nil {
 			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
-				fPrintError("Failed to validate JWT role", "function", "ValidateRole", "error", err)
-				return c.AbortUnauthorized("Insufficient role", err)
+				c.Logger().Warn("Failed to validate JWT role", "function", "ValidateRole", "error", err)
+				return c.AbortUnauthorized("Insufficient permissions", err)
 			}
 		}
 		// Store claims in context
@@ -332,7 +339,7 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		// Forward specific claims to context if configured
 		if jwtAuth.ForwardClaims != nil {
 			if err = jwtAuth.forwardContextFromClaims(token, &c); err != nil {
-				fPrintError("Failed to forward context from claims", "error", err)
+				c.Logger().Error("Failed to forward context from claims", "error", err)
 			}
 		}
 		return next(c)

@@ -62,6 +62,8 @@ type OpenAPI struct {
 	Servers    Servers // List of server URLs where the API is hosted
 	Licence    License // License information for the API
 	Contact    Contact // Contact information for the API maintainers
+	// SecuritySchemes defines security schemes for the OpenAPI specification.
+	SecuritySchemes openapi3.SecuritySchemes
 }
 
 // License contains license information for the API.
@@ -306,15 +308,15 @@ func ptr[T any](v T) *T { return &v }
 
 // DocSummary sets a short summary description for the route
 func DocSummary(summary string) RouteOption {
-	return func(doc *Route) {
-		doc.summary = summary
+	return func(r *Route) {
+		r.summary = summary
 	}
 }
 
 // DocDescription sets a description for the route
 func DocDescription(description string) RouteOption {
-	return func(doc *Route) {
-		doc.description = description
+	return func(route *Route) {
+		route.description = description
 	}
 }
 
@@ -323,9 +325,9 @@ func DocDescription(description string) RouteOption {
 // typ: parameter type (e.g., "string", "int", "uuid")
 // desc: parameter description
 func DocPathParam(name, typ, desc string) RouteOption {
-	return func(doc *Route) {
+	return func(r *Route) {
 		schema := getSchemaForType(typ)
-		doc.pathParams = append(doc.pathParams, &openapi3.ParameterRef{
+		r.pathParams = append(r.pathParams, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
 				In:          "path",
@@ -341,19 +343,19 @@ func DocPathParam(name, typ, desc string) RouteOption {
 // and adds them to the documentation.
 // It skips parameters that are already defined.
 func DocAutoPathParams() RouteOption {
-	return func(doc *Route) {
-		pathParams := extractPathParams(doc.Path)
+	return func(r *Route) {
+		pathParams := extractPathParams(r.Path)
 		for _, param := range pathParams {
 			// Check if parameter already exists to avoid duplicates
 			exists := false
-			for _, existing := range doc.pathParams {
+			for _, existing := range r.pathParams {
 				if existing.Value.Name == param.Value.Name {
 					exists = true
 					break
 				}
 			}
 			if !exists {
-				doc.pathParams = append(doc.pathParams, param)
+				r.pathParams = append(r.pathParams, param)
 			}
 		}
 	}
@@ -365,9 +367,9 @@ func DocAutoPathParams() RouteOption {
 // desc: parameter description
 // required: whether the parameter is required
 func DocQueryParam(name, typ, desc string, required bool) RouteOption {
-	return func(doc *Route) {
+	return func(r *Route) {
 		schema := getSchemaForType(typ)
-		doc.queryParams = append(doc.queryParams, &openapi3.ParameterRef{
+		r.queryParams = append(r.queryParams, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
 				In:          "query",
@@ -385,9 +387,9 @@ func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 // desc: header description
 // required: whether the header is required
 func DocHeader(name, typ, desc string, required bool) RouteOption {
-	return func(doc *Route) {
+	return func(r *Route) {
 		schema := getSchemaForType(typ)
-		doc.headers = append(doc.headers, &openapi3.ParameterRef{
+		r.headers = append(r.headers, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
 				In:          "header",
@@ -401,8 +403,8 @@ func DocHeader(name, typ, desc string, required bool) RouteOption {
 
 // DocTag adds a single tag to categorize the route
 func DocTag(tag string) RouteOption {
-	return func(doc *Route) {
-		doc.tags = append(doc.tags, tag)
+	return func(r *Route) {
+		r.tags = append(r.tags, tag)
 	}
 }
 
@@ -418,17 +420,17 @@ func DocTags(tags ...string) RouteOption {
 // typ: header value type (e.g., "string", "int")
 // desc: header description, optional
 func DocResponseHeader(name, typ string, desc ...string) RouteOption {
-	return func(doc *Route) {
+	return func(r *Route) {
 		schema := getSchemaForType(typ)
 		description := ""
 		// Initialize responseHeaders map if it doesn't exist
-		if doc.responseHeaders == nil {
-			doc.responseHeaders = make(map[string]*openapi3.HeaderRef)
+		if r.responseHeaders == nil {
+			r.responseHeaders = make(map[string]*openapi3.HeaderRef)
 		}
 		if len(desc) != 0 {
 			description = desc[0]
 		}
-		doc.responseHeaders[name] = &openapi3.HeaderRef{
+		r.responseHeaders[name] = &openapi3.HeaderRef{
 			Value: &openapi3.Header{
 				Parameter: openapi3.Parameter{
 					Description: description,
@@ -530,19 +532,21 @@ func (o *Okapi) buildOpenAPISpec() {
 		Paths:   &openapi3.Paths{},
 		Servers: o.openAPI.Servers.ToOpenAPI(),
 		Components: &openapi3.Components{
-			SecuritySchemes: openapi3.SecuritySchemes{
-				"BearerAuth": &openapi3.SecuritySchemeRef{
-					Value: &openapi3.SecurityScheme{
-						Type:         "http",
-						Scheme:       "bearer",
-						BearerFormat: "JWT",
-					},
-				},
-			},
-			Schemas: make(openapi3.Schemas),
+			SecuritySchemes: o.openAPI.SecuritySchemes,
+			Schemas:         make(openapi3.Schemas),
 		},
 	}
-
+	if o.openAPI.SecuritySchemes == nil && o.hasBearerAuth() {
+		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
+			"BearerAuth": &openapi3.SecuritySchemeRef{
+				Value: &openapi3.SecurityScheme{
+					Type:         "http",
+					Scheme:       "bearer",
+					BearerFormat: "JWT",
+				},
+			},
+		}
+	}
 	// Initialize schema registry for reusable components
 	schemaRegistry := make(map[string]*SchemaInfo)
 
@@ -637,6 +641,15 @@ func (o *Okapi) buildOpenAPISpec() {
 	}
 
 	o.openapiSpec = spec
+}
+func (o *Okapi) hasBearerAuth() bool {
+	// Check if any route requires Bearer authentication
+	for _, r := range o.routes {
+		if r.requiresAuth {
+			return true
+		}
+	}
+	return false
 }
 
 // getOrCreateSchemaComponent creates reusable schema components for complex types

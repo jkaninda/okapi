@@ -66,8 +66,13 @@ func TestJwtMiddleware(t *testing.T) {
 			"role":  "user.role",
 			"name":  "user.name",
 		},
-		ValidateClaims: func(claims jwt.Claims) error {
+		ValidateClaims: func(c Context, claims jwt.Claims) error {
 			fPrint("Validating claims using custom function")
+			method := c.Request().Method
+			fPrint("Request method,", "method", method)
+			if method != http.MethodGet && method != http.MethodPost {
+				return fmt.Errorf("method %s is not allowed", method)
+			}
 			mapClaims, ok := claims.(jwt.MapClaims)
 			if !ok {
 				return errors.New("invalid claims type")
@@ -213,7 +218,7 @@ func TestStdMiddleware(t *testing.T) {
 	})
 	o.Get("/", func(c Context) error {
 		return c.JSON(http.StatusOK, M{"hello": "world"})
-	})
+	}).Use(helloMiddleware)
 	api := o.Group("/api")
 	api.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -222,6 +227,11 @@ func TestStdMiddleware(t *testing.T) {
 			handler.ServeHTTP(w, r)
 		})
 	})
+	api.Get("/hello", func(c Context) error {
+		c.Logger().Info("Hello World")
+		return c.JSON(http.StatusOK, M{"hello": "world"})
+	}, UseMiddleware(helloMiddleware),
+	).Use(helloMiddleware)
 	api.Get("/", func(c Context) error {
 		return c.JSON(http.StatusOK, M{"hello": "world"})
 	})
@@ -237,7 +247,6 @@ func TestStdMiddleware(t *testing.T) {
 	})
 
 	slog.Info("Route count", "count", len(o.Routes()))
-	slog.Info("Middleware count", "count", len(o.Middlewares()))
 	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -251,6 +260,7 @@ func TestStdMiddleware(t *testing.T) {
 
 	assertStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusCreated)
 }
@@ -279,4 +289,12 @@ func whoAmIHandler(c Context) error {
 		"name":  c.GetString("name"),
 	},
 	)
+}
+
+func helloMiddleware(next HandleFunc) HandleFunc {
+	return func(c Context) error {
+		slog.Info("Hello Okapi Route middleware function")
+		return next(c)
+	}
+
 }

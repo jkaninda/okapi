@@ -175,6 +175,12 @@ type (
 		//     return nil
 		//   }
 		ValidateClaims func(c Context, claims jwt.Claims) error
+		// OnUnauthorized defines a custom handler function that is called when JWT validation fails.
+		// This includes scenarios such as missing, expired, malformed, or invalid tokens,
+		// or when claims validation (via ClaimsExpression or ValidateClaims) is unsuccessful.
+		//
+		// Use this to customize the error response sent to unauthorized clients.
+		OnUnauthorized HandleFunc
 
 		// Deprecated: Use ValidateClaims instead.
 		//
@@ -284,6 +290,9 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		if err != nil || tokenStr == "" {
 			c.Logger().Debug("Failed to extract token", "error", err, "ip", c.RealIP())
 			c.Logger().Warn("Failed to extract token", "error", err, "ip", c.RealIP())
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
 			return c.AbortForbidden("Missing or invalid token", err)
 		}
 
@@ -302,6 +311,9 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 			jwt.WithAudience(jwtAuth.Audience),
 			jwt.WithIssuer(jwtAuth.Issuer))
 		if err != nil || !token.Valid {
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
 			return c.AbortUnauthorized("Invalid or expired token", err)
 		}
 
@@ -310,18 +322,27 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 			valid, err := jwtAuth.validateJWTClaims(token)
 			if err != nil {
 				c.Logger().Warn("Failed to validate JWT claims expression", "error", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
 				return c.AbortUnauthorized("failed to validate authentication permissions", err)
 			}
 			if !valid {
 				c.Logger().Warn("JWT claims did not meet required expression ", "error", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
 				return c.AbortUnauthorized("Insufficient permissions", err)
 			}
 		}
 		// If custom claims validation function is provided, use it
 		if jwtAuth.ValidateClaims != nil {
 			if err = jwtAuth.ValidateClaims(c, token.Claims); err != nil {
-				c.Logger().Warn("Failed to validate JWT role", "function", "ValidateClaims", "error", err)
-				c.Logger().Debug("Failed to validate JWT role", "function", "ValidateClaims", "expression", jwtAuth.ClaimsExpression, "error", err)
+				c.Logger().Warn("Failed to validate Claims Expression", "function", "ValidateClaims", "error", err)
+				c.Logger().Debug("Failed to validate Claims Expression", "function", "ValidateClaims", "expression", jwtAuth.ClaimsExpression, "error", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
 				return c.AbortUnauthorized("Insufficient permissions")
 			}
 		}
@@ -329,6 +350,9 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		if jwtAuth.ValidateRole != nil {
 			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
 				c.Logger().Warn("Failed to validate JWT role", "function", "ValidateRole", "error", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
 				return c.AbortUnauthorized("Insufficient permissions", err)
 			}
 		}

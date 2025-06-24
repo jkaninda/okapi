@@ -367,8 +367,12 @@ auth := okapi.BasicAuth{
 	Password: "password",
 	Realm:    "Restricted",
 }
-
+// Global middleware
 o.Use(auth.Middleware)
+// Attach SingleRouteMiddleware to this route only, without affecting others
+o.Get("/", SingleRouteMiddlewareHandler).Use(SingleRouteMiddleware)
+
+// Group middleware
 o.Get("/admin", adminHandler)
 ```
 ---
@@ -512,13 +516,16 @@ jwtAuth.ValidateClaims = func(c Context, claims jwt.Claims) error {
 Apply the JWT middleware to route groups or individual routes to require authentication.
 
 ```go
+// Apply middleware globally (optional)
+o.Use(jwtAuth.Middleware)
+
 admin := o.Group("/admin", jwtAuth.Middleware). // Protect /admin routes
     WithBearerAuth()                            // Adds Bearer auth to OpenAPI docs
 
 admin.Get("/users", adminGetUsersHandler)       // Secured route
 
-// Apply middleware globally (optional)
-o.Use(jwtAuth.Middleware)
+// Attach SingleRouteMiddleware to this route only, without affecting others
+o.Get("/", SingleRouteMiddlewareHandler).Use(SingleRouteMiddleware)
 ```
 
 ---

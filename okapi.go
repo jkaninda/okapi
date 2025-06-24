@@ -116,8 +116,8 @@ type (
 		responses       map[int]*openapi3.SchemaRef
 		description     string
 		disabled        bool
-		handle          HandleFunc // Original handler
-		handler         HandleFunc // Final handler with middleware chain
+		handle          HandleFunc
+		handler         HandleFunc
 	}
 
 	// Response interface defines the methods for writing HTTP responses.
@@ -896,7 +896,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 			okapi:    o,
 		}
 		if route.disabled {
-			http.Error(w, "404 page not found", http.StatusNotFound)
+			http.Error(w, "404 Not Found", http.StatusNotFound)
 			return
 		}
 		if err := route.handler(ctx); err != nil {
@@ -1283,7 +1283,7 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 //	}
 //	// Create a new Okapi instance
 //	app := okapi.New()
-//	app.Register(app, routes...)
+//	app.Register(routes...)
 func (o *Okapi) Register(routes ...RouteDefinition) {
 	RegisterRoutes(o, routes)
 }

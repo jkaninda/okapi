@@ -86,6 +86,9 @@ func TestJwtMiddleware(t *testing.T) {
 			}
 			return nil
 		},
+		OnUnauthorized: func(c Context) error {
+			return c.ErrorUnauthorized("Unauthorized")
+		},
 	}
 	jwtClaims := jwt.MapClaims{
 		"sub": "12345",

@@ -175,6 +175,12 @@ type (
 		//     return nil
 		//   }
 		ValidateClaims func(c Context, claims jwt.Claims) error
+		// OnUnauthorized defines a custom handler function that is called when JWT validation fails.
+		// This includes scenarios such as missing, expired, malformed, or invalid tokens,
+		// or when claims validation (via ClaimsExpression or ValidateClaims) is unsuccessful.
+		//
+		// Use this to customize the error response sent to unauthorized clients.
+		OnUnauthorized HandleFunc
 
 		// Deprecated: Use ValidateClaims instead.
 		//
@@ -284,14 +290,17 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		if err != nil || tokenStr == "" {
 			c.Logger().Debug("Failed to extract token", "error", err, "ip", c.RealIP())
 			c.Logger().Warn("Failed to extract token", "error", err, "ip", c.RealIP())
-			return c.AbortForbidden("Missing or invalid token", err)
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
+			return c.AbortUnauthorized("Missing or invalid token", err)
 		}
 
 		keyFunc, err := jwtAuth.resolveKeyFunc()
 		if err != nil {
-			c.Logger().Debug("Failed to resolve key function", "error", err, "ip", c.RealIP())
-			c.Logger().Debug("Failed to resolve key function", "error", err, "ip", c.RealIP(), "token", tokenStr)
-			return c.AbortInternalServerError("Failed to resolve key function", err)
+			c.Logger().Warn("Failed to resolve key function", "ip", c.RealIP(), "error", err)
+			c.Logger().Debug("Failed to resolve key function", "ip", c.RealIP(), "token", tokenStr, "error", err)
+			return c.AbortUnauthorized("Invalid token")
 
 		}
 		if jwtAuth.Algo != "" {
@@ -302,6 +311,9 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 			jwt.WithAudience(jwtAuth.Audience),
 			jwt.WithIssuer(jwtAuth.Issuer))
 		if err != nil || !token.Valid {
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
 			return c.AbortUnauthorized("Invalid or expired token", err)
 		}
 
@@ -310,26 +322,38 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 			valid, err := jwtAuth.validateJWTClaims(token)
 			if err != nil {
 				c.Logger().Warn("Failed to validate JWT claims expression", "error", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
 				return c.AbortUnauthorized("failed to validate authentication permissions", err)
 			}
 			if !valid {
 				c.Logger().Warn("JWT claims did not meet required expression ", "error", err)
-				return c.AbortUnauthorized("Insufficient permissions", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
+				return c.AbortForbidden("Insufficient permissions", err)
 			}
 		}
 		// If custom claims validation function is provided, use it
 		if jwtAuth.ValidateClaims != nil {
 			if err = jwtAuth.ValidateClaims(c, token.Claims); err != nil {
-				c.Logger().Warn("Failed to validate JWT role", "function", "ValidateClaims", "error", err)
-				c.Logger().Debug("Failed to validate JWT role", "function", "ValidateClaims", "expression", jwtAuth.ClaimsExpression, "error", err)
-				return c.AbortUnauthorized("Insufficient permissions")
+				c.Logger().Warn("Failed to validate Claims Expression", "function", "ValidateClaims", "error", err)
+				c.Logger().Debug("Failed to validate Claims Expression", "function", "ValidateClaims", "expression", jwtAuth.ClaimsExpression, "error", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
+				return c.AbortForbidden("Insufficient permissions")
 			}
 		}
 		// If ValidateRole is configured, validate the role claim
 		if jwtAuth.ValidateRole != nil {
 			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
 				c.Logger().Warn("Failed to validate JWT role", "function", "ValidateRole", "error", err)
-				return c.AbortUnauthorized("Insufficient permissions", err)
+				if jwtAuth.OnUnauthorized != nil {
+					return jwtAuth.OnUnauthorized(c)
+				}
+				return c.AbortForbidden("Insufficient permissions", err)
 			}
 		}
 		// Store claims in context

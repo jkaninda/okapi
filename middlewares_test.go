@@ -59,7 +59,7 @@ func TestJwtMiddleware(t *testing.T) {
 		Audience:         "okapi.example.com",
 		SigningSecret:    SigningSecret,
 		TokenLookup:      "header:Authorization",
-		ContextKey:       "user",
+		ContextKey:       "claims",
 		ClaimsExpression: "Equals(`email_verified`, `true`) && Equals(`user.role`, `admin`) && Contains(`tags`,`gold`)",
 		ForwardClaims: map[string]string{
 			"email": "user.email",
@@ -85,6 +85,9 @@ func TestJwtMiddleware(t *testing.T) {
 				return fmt.Errorf("unauthorized role")
 			}
 			return nil
+		},
+		OnUnauthorized: func(c Context) error {
+			return c.ErrorUnauthorized("Unauthorized")
 		},
 	}
 	jwtClaims := jwt.MapClaims{
@@ -154,8 +157,8 @@ func TestJwtMiddleware(t *testing.T) {
 	defer o.Stop()
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusForbidden)
-	assertStatus(t, "GET", "http://localhost:8080/admin/protected", nil, nil, "", http.StatusForbidden)
+	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
+	assertStatus(t, "GET", "http://localhost:8080/admin/protected", nil, nil, "", http.StatusUnauthorized)
 
 	headers := map[string]string{
 		"Authorization": "Bearer " + token,
@@ -183,7 +186,7 @@ func TestBasicAuth(t *testing.T) {
 	app.Get("/protected", func(c Context) error {
 		user, exists := c.Get(auth.ContextKey)
 		if !exists {
-			return c.ErrorForbidden(M{"error": "Unauthorized"})
+			return c.ErrorUnauthorized(M{"error": "Unauthorized"})
 		}
 		return c.OK(user)
 	})

@@ -86,6 +86,25 @@ func NewFakeContext(method, target string) *Context {
 		store:    store,
 	}
 }
+func TestServeFile(t *testing.T) {
+	createTemplate(t)
+
+	o := New()
+	o.Get("/", func(c Context) error {
+		c.ServeFileAttachment("public", "hello.html")
+		return nil
+	})
+
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer o.Stop()
+
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
+}
 
 type fakeResponse struct {
 	http.ResponseWriter

@@ -510,6 +510,27 @@ jwtAuth.ValidateClaims = func(c Context, claims jwt.Claims) error {
 }
 ```
 
+#### Custom Error Handling
+
+The `OnUnauthorized` handler lets you customize responses for failed JWT validations, including:
+
+- Missing or malformed tokens
+- Expired tokens
+- Failed claims validation (via either `ClaimsExpression` or `ValidateClaims`)
+
+Example Implementation:
+
+```go
+auth := okapi.JWTAuth{
+    Audience:      "okapi.example.com",
+    SigningSecret: SigningSecret,
+    // ... other configurations
+    OnUnauthorized: func(c okapi.Context) error {
+        // Return custom unauthorized response
+        return c.ErrorUnauthorized("Unauthorized")
+    },
+}
+```
 
 #### Protecting Routes
 

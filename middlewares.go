@@ -293,14 +293,14 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 			if jwtAuth.OnUnauthorized != nil {
 				return jwtAuth.OnUnauthorized(c)
 			}
-			return c.AbortForbidden("Missing or invalid token", err)
+			return c.AbortUnauthorized("Missing or invalid token", err)
 		}
 
 		keyFunc, err := jwtAuth.resolveKeyFunc()
 		if err != nil {
-			c.Logger().Debug("Failed to resolve key function", "error", err, "ip", c.RealIP())
-			c.Logger().Debug("Failed to resolve key function", "error", err, "ip", c.RealIP(), "token", tokenStr)
-			return c.AbortInternalServerError("Failed to resolve key function", err)
+			c.Logger().Warn("Failed to resolve key function", "ip", c.RealIP(), "error", err)
+			c.Logger().Debug("Failed to resolve key function", "ip", c.RealIP(), "token", tokenStr, "error", err)
+			return c.AbortUnauthorized("Invalid token")
 
 		}
 		if jwtAuth.Algo != "" {
@@ -332,7 +332,7 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 				if jwtAuth.OnUnauthorized != nil {
 					return jwtAuth.OnUnauthorized(c)
 				}
-				return c.AbortUnauthorized("Insufficient permissions", err)
+				return c.AbortForbidden("Insufficient permissions", err)
 			}
 		}
 		// If custom claims validation function is provided, use it
@@ -343,7 +343,7 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 				if jwtAuth.OnUnauthorized != nil {
 					return jwtAuth.OnUnauthorized(c)
 				}
-				return c.AbortUnauthorized("Insufficient permissions")
+				return c.AbortForbidden("Insufficient permissions")
 			}
 		}
 		// If ValidateRole is configured, validate the role claim
@@ -353,7 +353,7 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 				if jwtAuth.OnUnauthorized != nil {
 					return jwtAuth.OnUnauthorized(c)
 				}
-				return c.AbortUnauthorized("Insufficient permissions", err)
+				return c.AbortForbidden("Insufficient permissions", err)
 			}
 		}
 		// Store claims in context

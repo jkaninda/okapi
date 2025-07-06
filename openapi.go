@@ -117,7 +117,6 @@ func (s Servers) ToOpenAPI() openapi3.Servers {
 			URL:         srv.URL,
 			Description: srv.Description,
 		}
-		// Copy any extensions to the target server object
 		if len(srv.Extensions) > 0 {
 			for k, v := range srv.Extensions {
 				server.Extensions[k] = v
@@ -150,7 +149,6 @@ func (c Contact) ToOpenAPI() *openapi3.Contact {
 		URL:   c.URL,
 		Email: c.Email,
 	}
-	// Copy any extensions to the target contact object
 	for k, v := range c.Extensions {
 		contact.Extensions[k] = v
 	}
@@ -160,9 +158,9 @@ func (c Contact) ToOpenAPI() *openapi3.Contact {
 // SchemaInfo holds additional information about a schema for better naming.
 // It's used when generating OpenAPI schemas from Go types.
 type SchemaInfo struct {
-	Schema   *openapi3.SchemaRef // Reference to the OpenAPI schema
-	TypeName string              // The original Go type name
-	Package  string              // The package name (optional)
+	Schema   *openapi3.SchemaRef
+	TypeName string
+	Package  string
 }
 
 // Doc creates and returns a new DocBuilder instance for chaining documentation options.
@@ -623,19 +621,19 @@ func (o *Okapi) buildOpenAPISpec() {
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {
-		case "GET":
+		case GET:
 			item.Get = op
-		case "POST":
+		case POST:
 			item.Post = op
-		case "PUT":
+		case PUT:
 			item.Put = op
-		case "DELETE":
+		case DELETE:
 			item.Delete = op
-		case "PATCH":
+		case PATCH:
 			item.Patch = op
-		case "HEAD":
+		case HEAD:
 			item.Head = op
-		case "OPTIONS":
+		case OPTIONS:
 			item.Options = op
 		}
 	}
@@ -740,7 +738,6 @@ func (o *Okapi) generateComponentName(schema *openapi3.SchemaRef) string {
 		return "UnknownSchema"
 	}
 
-	// First priority: use the title if available (this comes from struct name)
 	if schema.Value.Title != "" {
 		return o.sanitizeComponentName(schema.Value.Title)
 	}
@@ -866,18 +863,15 @@ func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 			}
 			return openapi3.NewSchemaRef("", schema)
 		}
-		// For non-string keys, treat as generic object
 		return openapi3.NewSchemaRef("", openapi3.NewObjectSchema())
 
 	case reflect.Struct:
 		return structToSchemaWithInfo(t)
 
 	case reflect.Interface:
-		// For interface{}, return a generic schema
 		return openapi3.NewSchemaRef("", &openapi3.Schema{})
 
 	default:
-		// Fallback for unsupported types
 		return openapi3.NewSchemaRef("", openapi3.NewObjectSchema())
 	}
 }
@@ -916,6 +910,9 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 
 		// Add description from comments or tags
 		if desc := field.Tag.Get("description"); desc != "" {
+			fieldSchema.Value.Description = desc
+		}
+		if desc := field.Tag.Get("doc"); desc != "" {
 			fieldSchema.Value.Description = desc
 		}
 

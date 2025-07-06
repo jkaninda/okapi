@@ -104,8 +104,8 @@ func (p *PrefixExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
 // ContainsExpr checks if claim contains substring or array contains value
 type ContainsExpr struct {
 	ClaimKey string
-	Values   []string // Support for multiple values
-	IsArray  bool     // Whether to check array membership vs substring
+	Values   []string
+	IsArray  bool
 }
 
 func Contains(claimKey string, values ...string) *ContainsExpr {
@@ -125,7 +125,6 @@ func (c *ContainsExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
 	switch v := value.(type) {
 	case string:
 		if c.IsArray {
-			// Check if string value is one of the expected values
 			for _, expected := range c.Values {
 				if v == expected {
 					return true, nil
@@ -133,12 +132,10 @@ func (c *ContainsExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
 			}
 			return false, nil
 		} else {
-			// Original substring behavior for single value
 			return strings.Contains(v, c.Values[0]), nil
 		}
 	case []interface{}:
 		if c.IsArray {
-			// Check if array contains any of the expected values
 			for _, item := range v {
 				if str, ok := item.(string); ok {
 					for _, expected := range c.Values {
@@ -150,7 +147,6 @@ func (c *ContainsExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
 			}
 			return false, nil
 		} else {
-			// Check if any value in array contains the substring
 			for _, item := range v {
 				if str, ok := item.(string); ok && strings.Contains(str, c.Values[0]) {
 					return true, nil
@@ -197,7 +193,6 @@ func (o *OneOfExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
 		}
 		return false, nil
 	case []interface{}:
-		// Check if any value in the claim array matches any of the expected values
 		for _, item := range v {
 			if str, ok := item.(string); ok {
 				for _, expected := range o.Values {

@@ -27,6 +27,7 @@ package okapi
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"net/http"
 	"strings"
 )
@@ -49,7 +50,7 @@ func (m *Message) Send(w http.ResponseWriter) (string, error) {
 	setSSEHeaders(w)
 	// Generate ID if not set
 	if m.ID == "" {
-		m.ID = generateUUID()
+		m.ID = uuid.NewString()
 	}
 	if err := writeID(w, m.ID); err != nil {
 		return "", err

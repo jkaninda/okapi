@@ -43,9 +43,6 @@
 //   - Built-in Auth & Security:
 //     Native support for JWT, OAuth2, Basic Auth, and custom middleware.
 //
-//   - Blazing Fast Routing:
-//     Optimized HTTP router with low overhead for high-performance applications.
-//
 //   - First-Class Documentation:
 //     OpenAPI 3.0 & Swagger UI integrated out of the box—auto-generate API docs with minimal effort.
 //

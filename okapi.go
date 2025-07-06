@@ -1011,7 +1011,6 @@ func (o *Okapi) registerOptionsHandler(path string) {
 				header.Set(AccessControlAllowHeaders, reqHeaders)
 			}
 
-			// Dynamically collect allowed methods for this path
 			var methods []string
 			for _, route := range o.routes {
 				if route.Path == path {

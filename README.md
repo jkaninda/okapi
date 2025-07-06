@@ -33,14 +33,14 @@ The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful m
 
 ✔ Dynamic Route Management – Easily enable or disable individual routes or groups, with automatic Swagger sync and no code commenting.
 
-✔ **Modern Tooling** –
+✔ **Modern Tooling**
 - Route grouping & middleware chaining
 - Static file serving
 - Templating engine support
 - CORS management
 - Fine-grained timeout controls
 
-✔ **Developer Experience** –
+✔ **Developer Experience**
 - Minimal boilerplate
 - Clear error handling
 - Structured logging
@@ -1116,12 +1116,12 @@ Contributions are welcome!
 
 [![Star History Chart](https://api.star-history.com/svg?repos=jkaninda/okapi&type=Date)](https://star-history.com/#jkaninda/okapi&Date)
 
-## 📞 Support & Community
+##  Support & Community
 
-- **🐛 Bug Reports:** [GitHub Issues](https://github.com/jkaninda/okapi/issues)
-- **💡 Feature Requests:** [GitHub Discussions](https://github.com/jkaninda/okapi/discussions)
-- **📧 Contact:** Open an issue for any questions
-- **💼 LinkedIn:** [Jonas Kaninda](https://www.linkedin.com/in/jkaninda/)
+- **Bug Reports:** [GitHub Issues](https://github.com/jkaninda/okapi/issues)
+- **Feature Requests:** [GitHub Discussions](https://github.com/jkaninda/okapi/discussions)
+- **Contact:** Open an issue for any questions
+- **LinkedIn:** [Jonas Kaninda](https://www.linkedin.com/in/jkaninda/)
 
 
 ## License

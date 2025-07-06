@@ -29,11 +29,6 @@ import (
 	"testing"
 )
 
-func TestGenerateUUID(t *testing.T) {
-	id := generateUUID()
-	slog.Info(id)
-
-}
 func TestSecondToDuration(t *testing.T) {
 	duration := secondsToDuration(30)
 	slog.Info(duration.String())

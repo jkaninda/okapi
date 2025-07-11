@@ -82,7 +82,7 @@ var (
 func main() {
 	// Example usage of middlewares handling in Okapi
 	// Create a new Okapi instance
-	o := okapi.New().WithOpenAPIDocs(okapi.OpenAPI{Licence: okapi.License{Name: "MIT License"}, Contact: okapi.Contact{
+	o := okapi.New().WithOpenAPIDocs(okapi.OpenAPI{License: okapi.License{Name: "MIT License"}, Contact: okapi.Contact{
 		Name: "Jonas Kaninda",
 		URL:  "https://jkaninda.dev/",
 	}})

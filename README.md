@@ -950,13 +950,15 @@ func (bc *BookController) Routes() []okapi.RouteDefinition {
 			Method:  http.MethodGet,
 			Path:    "/books",
 			Handler: bc.GetBooks,
-			Group:   apiGroup,
+            Group:   apiGroup,
 		},
 		{
 			Method:  http.MethodPost,
 			Path:    "/books",
 			Handler: bc.CreateBook,
 			Group:   apiGroup,
+            // Use middleware for this Route
+            Middlewares: []okapi.Middleware{customMiddleware}
 			Options: []okapi.RouteOption{
 				okapi.DocSummary("Create Book"), // OpenAPI documentation
 			},

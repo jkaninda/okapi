@@ -505,7 +505,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		if len(config.Servers) > 0 {
 			o.openAPI.Servers = config.Servers
 		}
-		o.openAPI.Licence = config.Licence
+		o.openAPI.License = config.License
 		o.openAPI.Contact = config.Contact
 
 	}
@@ -1267,6 +1267,7 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 //	        Method:  "GET",
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
+//			Middlewares: []okapi.Middleware{customMiddleware}
 //	        Options: []okapi.RouteOption{
 //	            okapi.DocSummary("Example GET request"),
 //	        },

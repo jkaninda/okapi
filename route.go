@@ -35,8 +35,12 @@ type RouteDefinition struct {
 	Path string
 	// Handler is the function that will handle requests to this route
 	Handler HandleFunc
+	// RouteOption registers one or more OpenAPI Doc and middleware functions to the Route. // Optional
 	Options []RouteOption
-	Group   *Group
+	// Middleware registers one or more middleware functions to the Route. // Optional
+	Middlewares []Middleware
+	// Group attach Route to a Group // Optional
+	Group *Group
 }
 
 // RegisterRoutes registers a slice of RouteDefinition with the given Okapi instance.
@@ -70,6 +74,7 @@ type RouteDefinition struct {
 //	        Method:  "POST",
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
+//			Middlewares: []okapi.Middleware{customMiddleware}
 //	        Options: []okapi.RouteOption{
 //	            okapi.DocSummary("Example POST request"),
 //	        },
@@ -81,6 +86,9 @@ type RouteDefinition struct {
 func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 	for _, r := range routes {
 		group := r.Group
+		for _, mid := range r.Middlewares {
+			r.Options = append(r.Options, UseMiddleware(mid))
+		}
 		if group == nil {
 			// Create on root Okapi instance
 			switch strings.ToUpper(r.Method) {

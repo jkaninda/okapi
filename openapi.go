@@ -60,7 +60,7 @@ type OpenAPI struct {
 	// PathPrefix is the URL prefix for accessing the documentation
 	PathPrefix string  // e.g., "/docs" (default)
 	Servers    Servers // List of server URLs where the API is hosted
-	Licence    License // License information for the API
+	License    License // License information for the API
 	Contact    Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
 	SecuritySchemes openapi3.SecuritySchemes
@@ -134,7 +134,7 @@ func (o OpenAPI) ToOpenAPISpec() *openapi3.T {
 		Info: &openapi3.Info{
 			Title:   o.Title,
 			Version: o.Version,
-			License: o.Licence.ToOpenAPI(),
+			License: o.License.ToOpenAPI(),
 			Contact: o.Contact.ToOpenAPI(),
 		},
 		Servers: o.Servers.ToOpenAPI(),
@@ -524,7 +524,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		Info: &openapi3.Info{
 			Title:   o.openAPI.Title,
 			Version: o.openAPI.Version,
-			License: o.openAPI.Licence.ToOpenAPI(),
+			License: o.openAPI.License.ToOpenAPI(),
 			Contact: o.openAPI.Contact.ToOpenAPI(),
 		},
 		Paths:   &openapi3.Paths{},

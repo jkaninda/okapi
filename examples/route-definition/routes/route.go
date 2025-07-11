@@ -50,7 +50,7 @@ func NewRoute(app *okapi.Okapi) *Route {
 	app.WithOpenAPIDocs(okapi.OpenAPI{
 		Title:   "REST API with Okapi Framework",
 		Version: controllers.ApiVersion,
-		Licence: okapi.License{
+		License: okapi.License{
 			Name: "MIT",
 			URL:  "https://opensource.org/license/mit/",
 		},
@@ -141,13 +141,14 @@ func (r *Route) V1BookRoutes() []okapi.RouteDefinition {
 	apiGroup := &okapi.Group{Prefix: "/api"}
 	apiV1Group := apiGroup.Group("/v1").WithTags([]string{"BookController"})
 	// Apply custom middleware
-	apiGroup.Use(middlewares.CustomMiddleware)
+	// apiGroup.Use(middlewares.CustomMiddleware)
 	return []okapi.RouteDefinition{
 		{
-			Method:  http.MethodGet,
-			Path:    "/books",
-			Handler: bookController.GetBooks,
-			Group:   apiV1Group,
+			Method:      http.MethodGet,
+			Path:        "/books",
+			Handler:     bookController.GetBooks,
+			Group:       apiV1Group,
+			Middlewares: []okapi.Middleware{middlewares.CustomMiddleware},
 			Options: []okapi.RouteOption{
 				okapi.DocSummary("Get Books"),
 				okapi.DocDescription("Retrieve a list of books"),

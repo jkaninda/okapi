@@ -50,7 +50,7 @@ func (m *Message) Send(w http.ResponseWriter) (string, error) {
 	setSSEHeaders(w)
 	// Generate ID if not set
 	if m.ID == "" {
-		m.ID = uuid.NewString()
+		m.ID = strings.ReplaceAll(uuid.New().String(), "-", "")
 	}
 	if err := writeID(w, m.ID); err != nil {
 		return "", err

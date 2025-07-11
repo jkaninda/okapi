@@ -25,7 +25,6 @@
 package okapi
 
 import (
-	"crypto/rand"
 	"fmt"
 	"os"
 	"strings"
@@ -37,20 +36,6 @@ func secondsToDuration(sec int) time.Duration {
 		return 0
 	}
 	return time.Duration(sec) * time.Second
-}
-func generateUUID() string {
-	var uuid [16]byte
-	_, _ = rand.Read(uuid[:])
-
-	uuid[6] = (uuid[6] & 0x0f) | 0x40 // Version 4
-	uuid[8] = (uuid[8] & 0x3f) | 0x80 // Variant is 10
-
-	return fmt.Sprintf("%x-%x-%x-%x-%x",
-		uuid[0:4],
-		uuid[4:6],
-		uuid[6:8],
-		uuid[8:10],
-		uuid[10:16])
 }
 func fPrintError(msg string, args ...interface{}) {
 	b := strings.Builder{}

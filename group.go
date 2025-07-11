@@ -322,6 +322,9 @@ func (g *Group) Register(routes ...RouteDefinition) {
 		if len(tags) == 0 {
 			tags = []string{g.Prefix}
 		}
+		for _, mid := range r.Middlewares {
+			r.Options = append(r.Options, UseMiddleware(mid))
+		}
 		g.okapi.addRoute(r.Method, joinPaths(g.Prefix, r.Path), tags, r.Handler, r.Options...).SetDisabled(g.disabled)
 	}
 }

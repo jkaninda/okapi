@@ -498,10 +498,11 @@ func (bc *BookController) Routes() []RouteDefinition {
 			Group:   coreGroup,
 		},
 		{
-			Method:  http.MethodPost,
-			Path:    "/books",
-			Handler: bc.CreateBook,
-			Group:   coreGroup,
+			Method:      http.MethodPost,
+			Path:        "/books",
+			Handler:     bc.CreateBook,
+			Group:       coreGroup,
+			Middlewares: []Middleware{customMiddleware},
 			Options: []RouteOption{
 				DocSummary("Create Book"), // OpenAPI documentation
 			},

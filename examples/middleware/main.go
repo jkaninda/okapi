@@ -303,8 +303,7 @@ func customMiddleware(next okapi.HandleFunc) okapi.HandleFunc {
 			return c.JSON(http.StatusInternalServerError, okapi.M{"error": "Internal Server Error"})
 		}
 		c.Response().StatusCode()
-		bytesSent := c.Response().BodyBytesSent()
-		slog.Info("Response sent", "status", c.Response().StatusCode(), "bytes_sent", bytesSent)
+		slog.Info("Response sent", "status", c.Response().StatusCode())
 
 		return nil
 	}

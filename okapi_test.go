@@ -482,8 +482,7 @@ func customMiddleware(next HandleFunc) HandleFunc {
 			slog.Error("Error in custom middleware", "error", err)
 			return c.JSON(http.StatusInternalServerError, M{"error": "Internal Server Error"})
 		}
-		bytesSent := c.Response().BodyBytesSent()
-		slog.Info("Response sent", "status", c.Response().StatusCode(), "bytes_sent", bytesSent)
+		slog.Info("============= Response sent", "status", c.Response().StatusCode())
 		slog.Info("request took", "duration", time.Since(start))
 		return nil
 	}

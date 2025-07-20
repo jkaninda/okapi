@@ -738,26 +738,28 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	return server.ListenAndServe()
 }
 
-// Stop gracefully shuts down the Okapi server(s)
-func (o *Okapi) Stop() {
-	_, _ = fmt.Fprintf(defaultWriter, "Gracefully shutting down HTTP server at %s\n", o.server.Addr)
-	if err := o.Shutdown(o.server); err != nil {
-		o.logger.Error("Failed to shutdown HTTP server", slog.String("error", err.Error()))
-		panic(err)
+// Stop gracefully shuts down the Okapi HTTP and HTTPS server(s)
+func (o *Okapi) Stop() error {
+	if o.server != nil {
+		_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down HTTP server at %s\n", o.server.Addr)
+		if err := o.Shutdown(o.server); err != nil {
+			return fmt.Errorf("HTTP shutdown error at %s: %w", o.server.Addr, err)
+		}
+		o.server = nil
 	}
-	o.server = nil
 
 	if o.withTlsServer && o.tlsServerConfig != nil && o.tlsServer != nil {
-		_, _ = fmt.Fprintf(defaultWriter, "Gracefully shutting down HTTPS server at %s\n", o.tlsServer.Addr)
+		_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down HTTPS server at %s\n", o.tlsServer.Addr)
 		if err := o.Shutdown(o.tlsServer); err != nil {
-			o.logger.Error("Failed to shutdown HTTPS server", slog.String("error", err.Error()))
-			panic(err)
+			return fmt.Errorf("HTTPS shutdown error at %s: %w", o.tlsServer.Addr, err)
 		}
 		o.tlsServer = nil
 	}
+
+	return nil
 }
 
-// Shutdown wraps graceful server shutdown with context
+// Shutdown performs graceful shutdown of the provided server using a background context
 func (o *Okapi) Shutdown(server *http.Server) error {
 	if server == nil {
 		return nil
@@ -1202,7 +1204,7 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 		duration := goutils.FormatDuration(time.Since(startTime), 2)
 
 		logger := c.okapi.logger
-		args := []any{
+		logFields := []any{
 			"method", c.request.Method,
 			"url", c.request.URL.Path,
 			"ip", c.RealIP(),
@@ -1212,13 +1214,17 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 			"referer", c.request.Referer(),
 			"user_agent", c.request.UserAgent(),
 		}
+		if c.okapi.debug {
+			debugFields := buildDebugFields(c)
+			logFields = append(logFields, debugFields...)
+		}
 		switch {
 		case status >= 500:
-			logger.Error("[okapi] Incoming request", args...)
+			logger.Error("[okapi] Incoming request", logFields...)
 		case status >= 400:
-			logger.Warn("[okapi] Incoming request", args...)
+			logger.Warn("[okapi] Incoming request", logFields...)
 		default:
-			logger.Info("[okapi] Incoming request", args...)
+			logger.Info("[okapi] Incoming request", logFields...)
 		}
 		return err
 	}

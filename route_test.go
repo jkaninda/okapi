@@ -125,7 +125,12 @@ func TestRouteDefinition(t *testing.T) {
 			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
-	defer app.Stop()
+	defer func(app *Okapi) {
+		err := app.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(app)
 
 	waitForServer()
 	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)

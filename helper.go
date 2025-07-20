@@ -26,6 +26,7 @@ package okapi
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -66,4 +67,44 @@ func fPrint(msg string, args ...interface{}) {
 
 	b.WriteByte('\n')
 	_, _ = fmt.Fprint(os.Stdout, b.String())
+}
+
+func buildDebugFields(c Context) []any {
+	fields := []any{
+		"request_content_length", c.request.ContentLength,
+	}
+
+	if len(c.request.Header) > 0 {
+		fields = append(fields, "request_headers", sanitizeHeaders(c.request.Header))
+	}
+	if len(c.request.URL.Query()) > 0 {
+		fields = append(fields, "query_params", c.request.URL.Query())
+	}
+	if len(c.response.Header()) > 0 {
+		fields = append(fields, "response_headers", sanitizeHeaders(c.response.Header()))
+	}
+	return fields
+
+}
+
+// sanitizeHeaders removes sensitive headers from logging
+func sanitizeHeaders(headers http.Header) map[string][]string {
+	sanitized := make(map[string][]string)
+	sensitiveHeaders := map[string]bool{
+		"authorization": true,
+		"cookie":        true,
+		"set-cookie":    true,
+		"x-api-key":     true,
+		"x-auth-token":  true,
+	}
+
+	for key, values := range headers {
+		lowerKey := strings.ToLower(key)
+		if sensitiveHeaders[lowerKey] {
+			sanitized[key] = []string{"[REDACTED]"}
+		} else {
+			sanitized[key] = values
+		}
+	}
+	return sanitized
 }

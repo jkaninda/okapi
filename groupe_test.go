@@ -89,7 +89,13 @@ func TestGroup(t *testing.T) {
 			t.Errorf("Server failed to start: %v", err)
 		}
 	}()
-	defer o.Stop()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+
+		}
+	}(o)
 
 	waitForServer()
 
@@ -127,7 +133,12 @@ func TestRegister(t *testing.T) {
 			t.Errorf("Server failed to start: %v", err)
 		}
 	}()
-	defer app.Stop()
+	defer func(app *Okapi) {
+		err := app.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(app)
 	waitForServer()
 
 	assertStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)

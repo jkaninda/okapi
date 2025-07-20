@@ -4,12 +4,14 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
 [![Go](https://img.shields.io/github/go-mod/go-version/jkaninda/okapi)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jkaninda/okapi.svg)](https://pkg.go.dev/github.com/jkaninda/okapi)
+[![codecov](https://codecov.io/gh/jkaninda/okapi/branch/main/graph/badge.svg?token=JHTW49M1LF)](https://codecov.io/gh/jkaninda/okapi)
 [![GitHub Release](https://img.shields.io/github/v/release/jkaninda/okapi)](https://github.com/jkaninda/okapi/releases)
-
 
 **Okapi** is a modern, minimalist HTTP web framework for Go, inspired by **FastAPI**'s elegance. Designed for simplicity, performance, and developer happiness, it helps you build **fast, scalable, and well-documented APIs** with minimal boilerplate.
 
-The framework is named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to the rainforests of the northeastern Democratic Republic of the Congo. Just like its namesake — which resembles a blend of giraffe and zebra — Okapi blends simplicity and strength in a unique, powerful package.
+The framework is named after the okapi (/oʊˈkɑːpiː/),
+a rare and graceful mammal native to the rainforests of the northeastern Democratic Republic of the Congo.
+Just like its namesake, which resembles a blend of giraffe and zebra. Okapi blends simplicity and strength in a unique, powerful package.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/jkaninda/okapi/main/logo.png" width="150" alt="Okapi logo">
@@ -52,13 +54,13 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 
 ###  Why Choose Okapi?
 
-* **Easy to Learn** – With familiar Go syntax and intuitive APIs, you can be productive in minutes—even on your first project.
-* **Lightweight and Unopinionated** – Okapi is built from the ground up and doesn’t wrap or build on top of another framework. It gives you full control without unnecessary abstraction or bloat.
-* **Highly Flexible** – Designed to adapt to your architecture and workflow—not the other way around.
-* **Built for Production** – Fast, reliable, and efficient under real-world load. Okapi is optimized for performance without sacrificing developer experience.
-* **Standard Library Compatibility** - Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
-* **Automatic OpenAPI Documentation** - Generate comprehensive OpenAPI specs automatically for every route, keeping your API documentation always up to date with your code.
-* **Dynamic Route Management** - Enable or disable routes and route groups at runtime. No need to comment out code—just toggle behavior cleanly and efficiently.
+* **Easy to Learn**: With familiar Go syntax and intuitive APIs, you can be productive in minutes—even on your first project.
+* **Lightweight and Unopinionated**: Okapi is built from the ground up and doesn’t wrap or build on top of another framework. It gives you full control without unnecessary abstraction or bloat.
+* **Highly Flexible**: Designed to adapt to your architecture and workflow—not the other way around.
+* **Built for Production**: Fast, reliable, and efficient under real-world load. Okapi is optimized for performance without sacrificing developer experience.
+* **Standard Library Compatibility**: Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
+* **Automatic OpenAPI Documentation**: Generate comprehensive OpenAPI specs automatically for every route, keeping your API documentation always up to date with your code.
+* **Dynamic Route Management**: Enable or disable routes and route groups at runtime. No need to comment out code—just toggle behavior cleanly and efficiently.
 
 Ideal for:
 

@@ -154,7 +154,12 @@ func TestJwtMiddleware(t *testing.T) {
 			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
-	defer o.Stop()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
 
 	waitForServer()
 	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
@@ -198,7 +203,12 @@ func TestBasicAuth(t *testing.T) {
 			return
 		}
 	}()
-	defer app.Stop()
+	defer func(app *Okapi) {
+		err := app.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(app)
 
 	waitForServer()
 
@@ -257,7 +267,12 @@ func TestStdMiddleware(t *testing.T) {
 			return
 		}
 	}()
-	defer o.Stop()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
 
 	waitForServer()
 

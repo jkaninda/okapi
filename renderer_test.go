@@ -78,7 +78,12 @@ func TestWithRenderer(t *testing.T) {
 			t.Errorf("Server failed to start: %v", err)
 		}
 	}()
-	defer o.Stop()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
 
 	waitForServer()
 

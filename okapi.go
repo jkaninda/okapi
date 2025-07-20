@@ -739,22 +739,21 @@ func (o *Okapi) StartServer(server *http.Server) error {
 }
 
 // Stop gracefully shuts down the Okapi server(s)
-func (o *Okapi) Stop() {
+func (o *Okapi) Stop() error {
 	_, _ = fmt.Fprintf(defaultWriter, "Gracefully shutting down HTTP server at %s\n", o.server.Addr)
 	if err := o.Shutdown(o.server); err != nil {
-		o.logger.Error("Failed to shutdown HTTP server", slog.String("error", err.Error()))
-		panic(err)
+		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
 	}
 	o.server = nil
 
 	if o.withTlsServer && o.tlsServerConfig != nil && o.tlsServer != nil {
 		_, _ = fmt.Fprintf(defaultWriter, "Gracefully shutting down HTTPS server at %s\n", o.tlsServer.Addr)
 		if err := o.Shutdown(o.tlsServer); err != nil {
-			o.logger.Error("Failed to shutdown HTTPS server", slog.String("error", err.Error()))
-			panic(err)
+			return fmt.Errorf("failed to shutdown HTTPS server: %w", err)
 		}
 		o.tlsServer = nil
 	}
+	return nil
 }
 
 // Shutdown wraps graceful server shutdown with context

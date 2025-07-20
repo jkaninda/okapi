@@ -26,6 +26,9 @@ package okapi
 
 import (
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -41,4 +44,60 @@ func TestFPrintError(t *testing.T) {
 func TestFPrint(t *testing.T) {
 	fPrint("Hello World")
 	fPrint("Hello World", "key1", "value1", "key2", "value2")
+}
+
+func TestSanitizeHeaders(t *testing.T) {
+	headers := http.Header{
+		"Authorization":    []string{"Bearer token"},
+		"Content-Type":     []string{"application/json"},
+		"cookie":           []string{"cookie-value"},
+		"X-Another-Header": []string{"AnotherValue"},
+	}
+	sanitizedHeaders := sanitizeHeaders(headers)
+	slog.Info("Sanitized Headers:", "headers", sanitizedHeaders)
+	if authorization, exists := sanitizedHeaders["Authorization"]; exists {
+		for _, value := range authorization {
+			if strings.Contains(value, "Bearer token") {
+				t.Error("Authorization header should be sanitized")
+			}
+		}
+
+	} else {
+		t.Error("Authorization header not found in sanitized headers")
+	}
+
+	if cookie, exists := sanitizedHeaders["cookie"]; exists {
+		for _, value := range cookie {
+			if strings.Contains(value, "cookie-value") {
+				t.Error("Cookie header should be sanitized")
+			}
+		}
+	} else {
+		t.Error("Cookie header not found in sanitized headers")
+	}
+}
+func TestBuildDebugFields(t *testing.T) {
+	o := New().WithDebug()
+	o.Get("/debug", func(c Context) error {
+		fields := buildDebugFields(c)
+		slog.Info("Debug Fields", "fields", fields)
+		return c.JSON(http.StatusOK, fields)
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "/debug", nil)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("Content-Length", "1234")
+	rec := httptest.NewRecorder()
+	o.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status code 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "request_content_length") {
+		t.Error("Expected 'request_content_length' in response body")
+	}
+	if !strings.Contains(rec.Body.String(), "request_headers") {
+		t.Error("Expected 'request_headers' in response body")
+	}
 }

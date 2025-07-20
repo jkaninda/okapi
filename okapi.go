@@ -1204,7 +1204,7 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 		duration := goutils.FormatDuration(time.Since(startTime), 2)
 
 		logger := c.okapi.logger
-		args := []any{
+		logFields := []any{
 			"method", c.request.Method,
 			"url", c.request.URL.Path,
 			"ip", c.RealIP(),
@@ -1214,13 +1214,17 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 			"referer", c.request.Referer(),
 			"user_agent", c.request.UserAgent(),
 		}
+		if c.okapi.debug {
+			debugFields := buildDebugFields(c)
+			logFields = append(logFields, debugFields...)
+		}
 		switch {
 		case status >= 500:
-			logger.Error("[okapi] Incoming request", args...)
+			logger.Error("[okapi] Incoming request", logFields...)
 		case status >= 400:
-			logger.Warn("[okapi] Incoming request", args...)
+			logger.Warn("[okapi] Incoming request", logFields...)
 		default:
-			logger.Info("[okapi] Incoming request", args...)
+			logger.Info("[okapi] Incoming request", logFields...)
 		}
 		return err
 	}

@@ -1082,22 +1082,27 @@ o.HandleStd("GET", "/standard", func(w http.ResponseWriter, r *http.Request) {
 
 ---
 
-###  Explore Another Project: Goma Gateway
+### Explore Another Project: Goma Gateway
 
 Are you building a microservices architecture?
-Do you need a powerful yet lightweight API Gateway to secure and manage your services effortlessly?
+Do you need a powerful yet lightweight API Gateway or a high-performance reverse proxy to secure and manage your services effortlessly?
 
 Check out my other project — **[Goma Gateway](https://github.com/jkaninda/goma-gateway)**.
 
-**Goma Gateway** is a high-performance, declarative API Gateway designed for modern microservices. It includes a rich set of built-in middleware for:
+**Goma Gateway** is a high-performance, declarative API Gateway built for modern microservices. It comes with a rich set of built-in middleware, including:
 
-* Security: ForwardAuth, Basic Auth, JWT, OAuth
+* Basic, JWT, OAuth2, LDAP, and ForwardAuth authentication
 * Caching and rate limiting
-* Simple configuration, minimal overhead
+* Bot detection
+* Built-in load balancing
+* Simple configuration with minimal overhead
+* ...and more!
 
-Whether you're managing internal APIs or exposing public endpoints, Goma Gateway helps you do it cleanly and securely.
+**Protocol support:** REST, GraphQL, gRPC, TCP, and UDP
 
+**Security:** Automatic HTTPS via Let’s Encrypt or use your own TLS certificates
 
+Whether you're managing internal APIs or exposing public endpoints, **Goma Gateway** helps you do it efficiently, securely, and with minimal complexity.
 ---
 
 ## Contributing

@@ -1103,6 +1103,7 @@ Check out my other project — **[Goma Gateway](https://github.com/jkaninda/goma
 **Security:** Automatic HTTPS via Let’s Encrypt or use your own TLS certificates
 
 Whether you're managing internal APIs or exposing public endpoints, **Goma Gateway** helps you do it efficiently, securely, and with minimal complexity.
+
 ---
 
 ## Contributing

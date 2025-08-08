@@ -34,9 +34,14 @@ import (
 
 // ****************** Controllers ******************
 var (
-	bookController   = &controllers.BookController{}
-	commonController = &controllers.CommonController{}
-	authController   = &controllers.AuthController{}
+	bookController     = &controllers.BookController{}
+	commonController   = &controllers.CommonController{}
+	authController     = &controllers.AuthController{}
+	bearerAuthSecurity = []map[string][]string{
+		{
+			"bearerAuth": {},
+		},
+	}
 )
 
 type Route struct {
@@ -48,11 +53,37 @@ type Route struct {
 func NewRoute(app *okapi.Okapi) *Route {
 	// Update OpenAPI documentation with the application title and version
 	app.WithOpenAPIDocs(okapi.OpenAPI{
-		Title:   "REST API with Okapi Framework",
-		Version: controllers.ApiVersion,
+		Title:   "Okapi Web Framework Example",
+		Version: "1.0.0",
 		License: okapi.License{
 			Name: "MIT",
-			URL:  "https://opensource.org/license/mit/",
+		},
+		SecuritySchemes: okapi.SecuritySchemes{
+			{
+				Name:   "basicAuth",
+				Type:   "http",
+				Scheme: "basic",
+			},
+			{
+				Name:         "bearerAuth",
+				Type:         "http",
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
+			},
+			{
+				Name: "OAuth2",
+				Type: "oauth2",
+				Flows: &okapi.OAuthFlows{
+					AuthorizationCode: &okapi.OAuthFlow{
+						AuthorizationURL: "https://auth.example.com/authorize",
+						TokenURL:         "https://auth.example.com/token",
+						Scopes: map[string]string{
+							"read":  "Read access",
+							"write": "Write access",
+						},
+					},
+				},
+			},
 		},
 	})
 	return &Route{
@@ -228,7 +259,8 @@ func (r *Route) AdminRoutes() []okapi.RouteDefinition {
 	// Apply JWT authentication middleware to the admin group
 	apiGroup.Use(middlewares.JWTAuth.Middleware)
 	apiGroup.Use(middlewares.CustomMiddleware)
-	apiGroup.WithBearerAuth() // Enable Bearer token for OpenAPI documentation
+	apiGroup.WithSecurity(bearerAuthSecurity) // Apply Bearer token security to the group
+	// apiGroup.WithBearerAuth() // Or you can use this to enable Bearer token for OpenAPI documentation
 
 	return []okapi.RouteDefinition{
 
@@ -243,6 +275,7 @@ func (r *Route) AdminRoutes() []okapi.RouteDefinition {
 				okapi.DocRequestBody(models.Book{}),
 				okapi.DocResponse(models.Response{}),
 			},
+			// Security: bearerAuthSecurity, // Apply on the route level
 		},
 		{
 			Method:  http.MethodDelete,
@@ -261,4 +294,4 @@ func (r *Route) AdminRoutes() []okapi.RouteDefinition {
 	}
 }
 
-// You can add more controllers here as needed, e.g.:
+// ***************** End of Admin Routes *****************

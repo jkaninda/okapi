@@ -1288,6 +1288,11 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 //	        Options: []okapi.RouteOption{
 //	            okapi.DocSummary("Example POST request"),
 //	        },
+//	    	Security: Security: []map[string][]string{
+//				{
+//					"bearerAuth": {},
+//				},
+//			},
 //	    },
 //	}
 //	// Create a new Okapi instance

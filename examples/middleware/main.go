@@ -76,16 +76,57 @@ var (
 		"tags":           []string{"vip", "premium", "gold"},
 		"exp":            time.Now().Add(2 * time.Hour).Unix(),
 	}
-	signingSecret = "supersecret"
+	signingSecret      = "supersecret"
+	bearerAuthSecurity = []map[string][]string{
+		{
+			"bearerAuth": {},
+		},
+	}
+	basicAuthSecurity = []map[string][]string{
+		{
+			"basicAuth": {},
+		},
+	}
 )
 
 func main() {
 	// Example usage of middlewares handling in Okapi
 	// Create a new Okapi instance
-	o := okapi.New().WithOpenAPIDocs(okapi.OpenAPI{License: okapi.License{Name: "MIT License"}, Contact: okapi.Contact{
-		Name: "Jonas Kaninda",
-		URL:  "https://jkaninda.dev/",
-	}})
+	o := okapi.New()
+	o.WithOpenAPIDocs(okapi.OpenAPI{
+		Title:   "Okapi Web Framework Example",
+		Version: "1.0.0",
+		License: okapi.License{
+			Name: "MIT",
+		},
+		SecuritySchemes: okapi.SecuritySchemes{
+			{
+				Name:   "basicAuth",
+				Type:   "http",
+				Scheme: "basic",
+			},
+			{
+				Name:         "bearerAuth",
+				Type:         "http",
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
+			},
+			{
+				Name: "OAuth2",
+				Type: "oauth2",
+				Flows: &okapi.OAuthFlows{
+					AuthorizationCode: &okapi.OAuthFlow{
+						AuthorizationURL: "https://auth.example.com/authorize",
+						TokenURL:         "https://auth.example.com/token",
+						Scopes: map[string]string{
+							"read":  "Read access",
+							"write": "Write access",
+						},
+					},
+				},
+			},
+		},
+	})
 
 	o.Get("/", func(c okapi.Context) error {
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
@@ -103,7 +144,7 @@ func main() {
 		Realm:    "Restricted Area",
 	}
 	// Create a new group with a base path for admin routes and apply basic auth middleware
-	adminApi := v1.Group("/admin", basicAuth.Middleware) // This group will require basic authentication
+	adminApi := v1.Group("/admin", basicAuth.Middleware).WithSecurity(basicAuthSecurity) // This group will require basic authentication
 	adminApi.Put("/books/:id", adminUpdate, okapi.DocResponse(Book{}), okapi.DocRequestBody(Book{}))
 	adminApi.Post("/books", adminCreateBook,
 		okapi.DocSummary("create book"),
@@ -150,7 +191,7 @@ func main() {
 	}
 
 	// Create a new group with a base path for admin routes and apply jwt auth middleware
-	adminApiV2 := v2.Group("/admin", jwtAuth.Middleware).WithBearerAuth() // This group will require jwt authentication
+	adminApiV2 := v2.Group("/admin", jwtAuth.Middleware).WithSecurity(bearerAuthSecurity) // This group will require jwt authentication
 	adminApiV2.Put("/books/:id", adminUpdate,
 		okapi.DocResponse(Book{}),
 		okapi.DocRequestBody(Book{}),

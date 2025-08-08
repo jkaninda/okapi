@@ -39,6 +39,9 @@ type RouteDefinition struct {
 	Options []RouteOption
 	// Middleware registers one or more middleware functions to the Route. // Optional
 	Middlewares []Middleware
+	// Security defines the security requirements for the route, such as authentication schemes // Optional
+	// It can be also applied at Group level.
+	Security []map[string][]string
 	// Group attach Route to a Group // Optional
 	Group *Group
 }

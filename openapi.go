@@ -28,6 +28,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/getkin/kin-openapi/openapi3"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -63,8 +64,34 @@ type OpenAPI struct {
 	License    License // License information for the API
 	Contact    Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
-	SecuritySchemes openapi3.SecuritySchemes
+	SecuritySchemes SecuritySchemes
 }
+type SecuritySchemes []SecurityScheme
+
+type SecurityScheme struct {
+	Name string
+	// Type string // "http", "oauth2", "apiKey"
+	Type string
+	// Scheme string // "basic", "bearer", etc.
+	Scheme       string
+	BearerFormat string
+	Flows        *OAuthFlows
+	Description  string
+}
+
+type OAuthFlow struct {
+	AuthorizationURL string
+	TokenURL         string
+	RefreshURL       string
+	Scopes           map[string]string
+}
+type OAuthFlows struct {
+	Implicit          *OAuthFlow
+	Password          *OAuthFlow
+	ClientCredentials *OAuthFlow
+	AuthorizationCode *OAuthFlow
+}
+type SecurityRequirement map[string][]string // SchemeName -> Scopes
 
 // License contains license information for the API.
 // It follows the OpenAPI specification format.
@@ -138,6 +165,46 @@ func (o OpenAPI) ToOpenAPISpec() *openapi3.T {
 			Contact: o.Contact.ToOpenAPI(),
 		},
 		Servers: o.Servers.ToOpenAPI(),
+		Components: &openapi3.Components{
+			SecuritySchemes: o.SecuritySchemes.ToOpenAPI(),
+		},
+	}
+}
+func (ss SecuritySchemes) ToOpenAPI() openapi3.SecuritySchemes {
+	result := make(openapi3.SecuritySchemes)
+	for _, s := range ss {
+		result[s.Name] = &openapi3.SecuritySchemeRef{
+			Value: &openapi3.SecurityScheme{
+				Type:         s.Type,
+				Scheme:       s.Scheme,
+				BearerFormat: s.BearerFormat,
+				Flows:        s.Flows.ToOpenAPI(),
+				Description:  s.Description,
+			},
+		}
+	}
+	return result
+}
+func (f *OAuthFlow) ToOpenAPI() *openapi3.OAuthFlow {
+	if f == nil {
+		return nil
+	}
+	return &openapi3.OAuthFlow{
+		AuthorizationURL: f.AuthorizationURL,
+		TokenURL:         f.TokenURL,
+		RefreshURL:       f.RefreshURL,
+		Scopes:           f.Scopes,
+	}
+}
+func (flows *OAuthFlows) ToOpenAPI() *openapi3.OAuthFlows {
+	if flows == nil {
+		return nil
+	}
+	return &openapi3.OAuthFlows{
+		Implicit:          flows.Implicit.ToOpenAPI(),
+		Password:          flows.Password.ToOpenAPI(),
+		ClientCredentials: flows.ClientCredentials.ToOpenAPI(),
+		AuthorizationCode: flows.AuthorizationCode.ToOpenAPI(),
 	}
 }
 
@@ -505,7 +572,14 @@ func DocRequestBody(v any) RouteOption {
 // DocBearerAuth marks the route as requiring Bearer token authentication
 func DocBearerAuth() RouteOption {
 	return func(doc *Route) {
-		doc.requiresAuth = true
+		doc.bearerAuth = true
+	}
+}
+
+// DocBasicAuth marks the route as requiring Basic authentication
+func DocBasicAuth() RouteOption {
+	return func(doc *Route) {
+		doc.basicAuth = true
 	}
 }
 
@@ -513,6 +587,12 @@ func DocBearerAuth() RouteOption {
 func DocDeprecated() RouteOption {
 	return func(doc *Route) {
 		doc.deprecated = true
+	}
+}
+
+func withSecurity(security []map[string][]string) RouteOption {
+	return func(r *Route) {
+		r.security = security
 	}
 }
 
@@ -530,7 +610,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		Paths:   &openapi3.Paths{},
 		Servers: o.openAPI.Servers.ToOpenAPI(),
 		Components: &openapi3.Components{
-			SecuritySchemes: o.openAPI.SecuritySchemes,
+			SecuritySchemes: o.openAPI.SecuritySchemes.ToOpenAPI(),
 			Schemas:         make(openapi3.Schemas),
 		},
 	}
@@ -541,6 +621,16 @@ func (o *Okapi) buildOpenAPISpec() {
 					Type:         "http",
 					Scheme:       "bearer",
 					BearerFormat: "JWT",
+				},
+			},
+		}
+	}
+	if o.openAPI.SecuritySchemes == nil && o.hasBasicAuth() {
+		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
+			"BasicAuth": &openapi3.SecuritySchemeRef{
+				Value: &openapi3.SecurityScheme{
+					Type:   "http",
+					Scheme: "basic",
 				},
 			},
 		}
@@ -574,11 +664,28 @@ func (o *Okapi) buildOpenAPISpec() {
 			Deprecated:  r.deprecated,
 		}
 
-		if r.requiresAuth {
+		if r.basicAuth {
 			op.Security = &openapi3.SecurityRequirements{
 				openapi3.SecurityRequirement{
 					"BearerAuth": {},
 				},
+			}
+		}
+		if len(r.security) != 0 {
+			// Initialize an empty slice for security requirements
+			op.Security = &openapi3.SecurityRequirements{}
+			for _, sec := range r.security {
+				valid := true
+				for scheme := range sec {
+					if _, exists := spec.Components.SecuritySchemes[scheme]; !exists {
+						slog.Warn("Security scheme not defined in OpenAPI spec", "scheme", scheme)
+						valid = false
+						break
+					}
+				}
+				if valid {
+					*op.Security = append(*op.Security, sec)
+				}
 			}
 		}
 
@@ -643,7 +750,16 @@ func (o *Okapi) buildOpenAPISpec() {
 func (o *Okapi) hasBearerAuth() bool {
 	// Check if any route requires Bearer authentication
 	for _, r := range o.routes {
-		if r.requiresAuth {
+		if r.bearerAuth {
+			return true
+		}
+	}
+	return false
+}
+func (o *Okapi) hasBasicAuth() bool {
+	// Check if any route requires Basic authentication
+	for _, r := range o.routes {
+		if r.basicAuth {
 			return true
 		}
 	}

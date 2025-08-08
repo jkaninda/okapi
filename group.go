@@ -33,9 +33,11 @@ type Group struct {
 	Tags        []string
 	disabled    bool
 	bearerAuth  bool
+	basicAuth   bool
 	deprecated  bool
 	middlewares []Middleware
 	okapi       *Okapi
+	security    []map[string][]string
 }
 
 // newGroup creates a new route group with the specified base path, Okapi reference,
@@ -72,6 +74,10 @@ func (g *Group) WithBearerAuth() *Group {
 	g.bearerAuth = true
 	return g
 }
+func (g *Group) WithBasicAuth() *Group {
+	g.basicAuth = true
+	return g
+}
 
 // WithTags sets the tags for the Group, which can be used for documentation purposes.
 func (g *Group) WithTags(tags []string) *Group {
@@ -83,6 +89,12 @@ func (g *Group) WithTags(tags []string) *Group {
 // Returns the Group to allow method chaining.
 func (g *Group) Deprecated() *Group {
 	g.deprecated = true
+	return g
+}
+
+// WithSecurity sets the security requirements for the Group's routes.
+func (g *Group) WithSecurity(security []map[string][]string) *Group {
+	g.security = security
 	return g
 }
 
@@ -142,6 +154,10 @@ func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *
 	if g.bearerAuth {
 		opts = append(opts, DocBearerAuth())
 	}
+	if g.basicAuth {
+		opts = append(opts, DocBasicAuth())
+	
+	}
 	if g.deprecated {
 		opts = append(opts, DocDeprecated())
 	}
@@ -152,6 +168,9 @@ func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *
 			}
 			opts = append(opts, DocTag(tag))
 		}
+	}
+	if len(g.security) > 0 {
+		opts = append(opts, withSecurity(g.security))
 	}
 	return g.add(method, path, h, opts...)
 }

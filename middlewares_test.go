@@ -35,7 +35,18 @@ import (
 	"time"
 )
 
-var SigningSecret = []byte("supersecret")
+var (
+	SigningSecret      = []byte("supersecret")
+	bearerAuthSecurity = []map[string][]string{
+		{
+			"bearerAuth": {},
+		},
+	}
+	basicAuthSecurity = map[string][]string{
+
+		"basicAuth": {},
+	}
+)
 
 const user = "user"
 
@@ -139,8 +150,43 @@ func TestJwtMiddleware(t *testing.T) {
 
 	// Setup server
 	o := New(WithAccessLogDisabled())
+	o.WithOpenAPIDocs(OpenAPI{
+		Title:   "Okapi Web Framework Example",
+		Version: "1.0.0",
+		License: License{
+			Name: "MIT",
+		},
+		SecuritySchemes: SecuritySchemes{
+			{
+				Name:   "basicAuth",
+				Type:   "http",
+				Scheme: "basic",
+			},
+			{
+				Name:         "bearerAuth",
+				Type:         "http",
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
+			},
+			{
+				Name: "OAuth2",
+				Type: "oauth2",
+				Flows: &OAuthFlows{
+					AuthorizationCode: &OAuthFlow{
+						AuthorizationURL: "https://auth.example.com/authorize",
+						TokenURL:         "https://auth.example.com/token",
+						Scopes: map[string]string{
+							"read":  "Read access",
+							"write": "Write access",
+						},
+					},
+				},
+			},
+		},
+	})
+
 	// Create a new group for the main routes
-	admin := o.Group("/admin", adminAuth.Middleware)
+	admin := o.Group("/admin", adminAuth.Middleware).WithSecurity(bearerAuthSecurity)
 	// Use the JWT middleware for the main routes
 	o.Use(auth.Middleware)
 	o.Use(LoggerMiddleware)
@@ -194,7 +240,7 @@ func TestBasicAuth(t *testing.T) {
 			return c.ErrorUnauthorized(M{"error": "Unauthorized"})
 		}
 		return c.OK(user)
-	})
+	}).WithSecurity(basicAuthSecurity)
 
 	// Start server in background
 	go func() {

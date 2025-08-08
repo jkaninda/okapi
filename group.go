@@ -156,7 +156,6 @@ func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *
 	}
 	if g.basicAuth {
 		opts = append(opts, DocBasicAuth())
-	
 	}
 	if g.deprecated {
 		opts = append(opts, DocDeprecated())

@@ -614,7 +614,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			Schemas:         make(openapi3.Schemas),
 		},
 	}
-	if o.openAPI.SecuritySchemes == nil && o.hasBearerAuth() {
+	if len(o.openAPI.SecuritySchemes) == 0 && o.hasBearerAuth() {
 		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
 			"BearerAuth": &openapi3.SecuritySchemeRef{
 				Value: &openapi3.SecurityScheme{
@@ -625,7 +625,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			},
 		}
 	}
-	if o.openAPI.SecuritySchemes == nil && o.hasBasicAuth() {
+	if len(o.openAPI.SecuritySchemes) == 0 && o.hasBasicAuth() {
 		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
 			"BasicAuth": &openapi3.SecuritySchemeRef{
 				Value: &openapi3.SecurityScheme{
@@ -664,12 +664,20 @@ func (o *Okapi) buildOpenAPISpec() {
 			Deprecated:  r.deprecated,
 		}
 
-		if r.basicAuth {
+		if r.bearerAuth {
 			op.Security = &openapi3.SecurityRequirements{
 				openapi3.SecurityRequirement{
 					"BearerAuth": {},
 				},
 			}
+		}
+		if r.basicAuth {
+			if op.Security == nil {
+				op.Security = &openapi3.SecurityRequirements{}
+			}
+			*op.Security = append(*op.Security, openapi3.SecurityRequirement{
+				"BasicAuth": {},
+			})
 		}
 		if len(r.security) != 0 {
 			// Initialize an empty slice for security requirements

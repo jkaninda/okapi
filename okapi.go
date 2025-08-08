@@ -532,7 +532,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	o.buildOpenAPISpec()
 
 	o.router.mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(ContentTypeHeader, "application/json")
 		_ = json.NewEncoder(w).Encode(o.openapiSpec)
 	})
 

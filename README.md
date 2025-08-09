@@ -622,6 +622,69 @@ o := okapi.New().WithOpenAPIDocs(
 		},
 )
 ```
+#### Authentication SecuritySchemes configuration
+
+You can define security schemes for your API, such as Basic Auth, Bearer tokens, and OAuth2 flows. This allows you to document how clients should authenticate with your API.
+
+```go
+	o.WithOpenAPIDocs(okapi.OpenAPI{
+		Title:   "Okapi Web Framework Example",
+		Version: "1.0.0",
+		License: okapi.License{
+			Name: "MIT",
+		},
+		SecuritySchemes: okapi.SecuritySchemes{
+			{
+				Name:   "basicAuth",
+				Type:   "http",
+				Scheme: "basic",
+			},
+			{
+				Name:         "bearerAuth",
+				Type:         "http",
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
+			},
+			{
+				Name: "OAuth2",
+				Type: "oauth2",
+				Flows: &okapi.OAuthFlows{
+					AuthorizationCode: &okapi.OAuthFlow{
+						AuthorizationURL: "https://auth.example.com/authorize",
+						TokenURL:         "https://auth.example.com/token",
+						Scopes: map[string]string{
+							"read":  "Read access",
+							"write": "Write access",
+						},
+					},
+				},
+			},
+		},
+	})
+```
+#### Applying Security Schemes to Routes
+You can apply security schemes to specific routes or groups using the `WithSecurity` method. 
+This allows you to specify which authentication methods are required for accessing those endpoints.
+
+```go
+var bearerAuthSecurity = []map[string][]string{
+		{
+			"bearerAuth": {},
+		},
+	}
+
+o.Get("/books", getBooksHandler).WithSecurity(bearerAuthSecurity...) // Apply Bearer Auth security scheme
+
+// You can also apply security to a group of routes
+api:= o.Group("/api",jwtMiddleware).WithSecurity(bearerAuthSecurity)
+api.Get("/", apiHandler)
+
+```
+
+
+You can also apply directly to the Route with `Security` when using RouteDefinition.
+
+```go
 
 ### Documenting Routes
 
@@ -962,8 +1025,10 @@ func (bc *BookController) Routes() []okapi.RouteDefinition {
 			Middlewares: []okapi.Middleware{customMiddleware}
 			Options: []okapi.RouteOption{
 				okapi.DocSummary("Create Book"), // OpenAPI documentation
-			},
-		},
+			}, 
+			Security: bearerAuthSecurity, // Apply Bearer Auth security scheme
+
+        },
 	}
 }
 ```
@@ -1103,6 +1168,7 @@ Check out my other project — **[Goma Gateway](https://github.com/jkaninda/goma
 **Security:** Automatic HTTPS via Let’s Encrypt or use your own TLS certificates
 
 Whether you're managing internal APIs or exposing public endpoints, **Goma Gateway** helps you do it efficiently, securely, and with minimal complexity.
+
 ---
 
 ## Contributing

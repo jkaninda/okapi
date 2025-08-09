@@ -110,7 +110,9 @@ type (
 		headers         []*openapi3.ParameterRef
 		middlewares     []Middleware
 		responseHeaders map[string]*openapi3.HeaderRef
-		requiresAuth    bool
+		bearerAuth      bool
+		basicAuth       bool
+		security        []map[string][]string
 		deprecated      bool
 		requestExample  map[string]interface{}
 		responses       map[int]*openapi3.SchemaRef
@@ -164,6 +166,15 @@ func (r *Route) SetDisabled(disabled bool) *Route {
 // Returns the Route to allow method chaining.
 func (r *Route) Deprecated() *Route {
 	r.deprecated = true
+	return r
+}
+
+// WithSecurity sets the security requirements for the Route.
+func (r *Route) WithSecurity(security ...map[string][]string) *Route {
+	// Set the security requirements for the route
+	if len(security) > 0 {
+		r.security = security
+	}
 	return r
 }
 
@@ -506,6 +517,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		}
 		o.openAPI.License = config.License
 		o.openAPI.Contact = config.Contact
+		o.openAPI.SecuritySchemes = config.SecuritySchemes
 
 	}
 	if !strings.HasSuffix(o.openAPI.PathPrefix, "/") {
@@ -520,7 +532,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	o.buildOpenAPISpec()
 
 	o.router.mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(ContentTypeHeader, "application/json")
 		_ = json.NewEncoder(w).Encode(o.openapiSpec)
 	})
 
@@ -1276,6 +1288,11 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 //	        Options: []okapi.RouteOption{
 //	            okapi.DocSummary("Example POST request"),
 //	        },
+//	    	Security: Security: []map[string][]string{
+//				{
+//					"bearerAuth": {},
+//				},
+//			},
 //	    },
 //	}
 //	// Create a new Okapi instance

@@ -33,6 +33,17 @@ import (
 
 func TestOpenAPI(t *testing.T) {
 	o := Default()
+	o.Get("/", func(c Context) error {
+		return c.Text(http.StatusOK, "Hello World!")
+	},
+		DocSummary("Root Endpoint"),
+		DocDescription("This is the root endpoint of the API."),
+		DocTags("Root"),
+		DocResponse(200, M{"message": "Hello World!"}),
+		DocResponse(http.StatusInternalServerError, M{"error": "Internal Server Error"}),
+		DocBasicAuth(),
+	)
+
 	// create api group
 	api := o.Group("api").WithBearerAuth()
 	v1 := api.Group("v1")
@@ -131,6 +142,29 @@ func TestOpenAPI(t *testing.T) {
 	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 
 }
+func TestWithOpenAPIDisabled(t *testing.T) {
+	o := New(WithOpenAPIDisabled())
+	o.Get("/", func(c Context) error {
+		return c.Text(http.StatusOK, "Hello World!")
+	})
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
+
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusNotFound)
+	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusNotFound)
+
+}
+
 func anyHandler(c Context) error {
 	slog.Info("Calling route", "path", c.Request().URL.Path, "method", c.request.Method)
 	c.SetHeader("X-RateLimit-Limit", "100")

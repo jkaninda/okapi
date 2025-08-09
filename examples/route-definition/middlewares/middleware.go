@@ -43,6 +43,8 @@ var (
 	JWTAuth = &okapi.JWTAuth{
 		SigningSecret:    []byte(signingSecret),
 		TokenLookup:      "header:Authorization",
+		Audience:         "okapi.example.com",
+		Issuer:           "okapi.example.com",
 		ClaimsExpression: "Equals(`email_verified`, `true`) && Equals(`user.role`, `admin`) && Contains(`permissions`, `create`, `delete`, `update`)",
 		ForwardClaims: map[string]string{
 			"email": "user.email",

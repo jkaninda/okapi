@@ -39,6 +39,9 @@ type RouteDefinition struct {
 	Options []RouteOption
 	// Middleware registers one or more middleware functions to the Route. // Optional
 	Middlewares []Middleware
+	// Security defines the security requirements for the route, such as authentication schemes // Optional
+	// It can be also applied at Group level.
+	Security []map[string][]string
 	// Group attach Route to a Group // Optional
 	Group *Group
 }
@@ -69,6 +72,7 @@ type RouteDefinition struct {
 //	        Options: []okapi.RouteOption{
 //	            okapi.DocSummary("Example GET request"),
 //	        },
+//	        Group:   &okapi.Group{Prefix: "/api/v1", Tags: []string{"Example"}},
 //	    },
 //	    {
 //	        Method:  "POST",
@@ -78,6 +82,11 @@ type RouteDefinition struct {
 //	        Options: []okapi.RouteOption{
 //	            okapi.DocSummary("Example POST request"),
 //	        },
+//	    	Security: Security: []map[string][]string{
+//				{
+//					"bearerAuth": {},
+//				},
+//			},
 //	    },
 //	}
 //	// Create a new Okapi instance
@@ -88,6 +97,9 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 		group := r.Group
 		for _, mid := range r.Middlewares {
 			r.Options = append(r.Options, UseMiddleware(mid))
+		}
+		if len(r.Security) > 0 {
+			r.Options = append(r.Options, withSecurity(r.Security))
 		}
 		if group == nil {
 			// Create on root Okapi instance

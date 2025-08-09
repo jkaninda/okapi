@@ -236,7 +236,6 @@ func (r *Route) SecurityRoutes() []okapi.RouteDefinition {
 	coreGroup.Use(middlewares.JWTAuth.Middleware)
 	// Apply custom middleware
 	coreGroup.Use(middlewares.CustomMiddleware)
-	coreGroup.WithBearerAuth() // Enable Bearer token for OpenAPI documentation
 	return []okapi.RouteDefinition{
 		{
 			Method:  http.MethodPost,
@@ -248,6 +247,7 @@ func (r *Route) SecurityRoutes() []okapi.RouteDefinition {
 				okapi.DocDescription("Get the current user's information"),
 				okapi.DocResponse(models.UserInfo{}),
 			},
+			Security: bearerAuthSecurity,
 		},
 	}
 }

@@ -637,9 +637,6 @@ func (o *Okapi) With(options ...OptionFunc) *Okapi {
 		o.tlsServer.Addr = o.tlsAddr
 		o.applyServerConfig(o.tlsServer)
 	}
-	if o.openApiEnabled {
-		o.WithOpenAPIDocs()
-	}
 	return o
 }
 
@@ -1125,11 +1122,13 @@ func initConfig(options ...OptionFunc) *Okapi {
 		maxMultipartMemory: defaultMaxMemory,
 		cors:               Cors{},
 		openAPI: &OpenAPI{
-			Title:      okapiName,
-			Version:    "1.0.0",
-			PathPrefix: openApiDocPrefix,
-			Servers:    Servers{{}},
+			Title:           okapiName,
+			Version:         "1.0.0",
+			PathPrefix:      openApiDocPrefix,
+			Servers:         Servers{{}},
+			SecuritySchemes: SecuritySchemes{},
 		},
+		openapiSpec: &openapi3.T{},
 	}
 
 	return o.With(options...)

@@ -59,13 +59,13 @@ func main() {
 		return c.HTMLView(http.StatusOK, template, okapi.M{
 			"name":     "OKAPI",
 			"message":  "This is an example of SSE",
-			"eventURL": "http://localhost:8080/events",
+			"eventURL": "/events",
 		})
 	})
 	o.Get("/events", func(c okapi.Context) error {
 		// Simulate sending events (you can replace this with real data)
-		for i := 0; i < 10; i++ {
-			data := okapi.M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
+		for i := 0; i <= 10; i++ {
+			data := okapi.M{"name": "Okapi", "License": "MIT", "event": "SSE example", "count": i}
 			event := "message"
 
 			err := c.SSEvent(event, data)

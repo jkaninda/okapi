@@ -402,17 +402,25 @@ func (c *Context) Text(code int, v any) error {
 	})
 }
 
-// SSEvent writes SSE response.
-func (c *Context) SSEvent(name string, message any) error {
+// sendSSE writes an SSE response with optional ID.
+func (c *Context) sendSSE(id, name string, message any) error {
 	msg := Message{
+		ID:    id,
 		Event: name,
 		Data:  message,
 	}
 	_, err := msg.Send(c.response)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
+}
+
+// SSEvent writes SSE response with optional ID.
+func (c *Context) SSEvent(name string, message any) error {
+	return c.sendSSE("", name, message)
+}
+
+// SendSSEvent writes SSE response with an ID.
+func (c *Context) SendSSEvent(id, name string, message any) error {
+	return c.sendSSE(id, name, message)
 }
 
 // String is an alias for Text for convenience.

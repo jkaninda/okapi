@@ -32,6 +32,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -137,7 +138,20 @@ func TestStart(t *testing.T) {
 		}
 		return nil
 	})
+	o.Get("/events_with_id", func(c Context) error {
+		// Simulate sending events (you can replace this with real data)
+		for i := 0; i < 10; i++ {
+			data := M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
+			event := "message"
 
+			err := c.SendSSEvent(strconv.Itoa(i), event, data)
+			if err != nil {
+				return c.AbortWithError(http.StatusInternalServerError, err)
+			}
+			time.Sleep(2 * time.Second)
+		}
+		return nil
+	})
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)

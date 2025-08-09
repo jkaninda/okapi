@@ -104,7 +104,7 @@ func TestOpenAPI(t *testing.T) {
 			Response(Book{}).
 			RequestBody(Book{}).
 			Tags("Book Tags").
-			ErrorResponse(http.StatusBadRequest, M{"": ""}).AsOption(),
+			Response(http.StatusBadRequest, M{"": ""}).AsOption(),
 	)
 	v2.Get("/books", anyHandler,
 		Doc().Summary("Book Summary").
@@ -122,7 +122,7 @@ func TestOpenAPI(t *testing.T) {
 			PathParam("id", "int", "book id").
 			Response(Book{}).
 			Tags("Book Tags").
-			ErrorResponse(http.StatusBadRequest, M{"": ""}).Build(),
+			Response(http.StatusBadRequest, M{"": ""}).Build(),
 	)
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -143,7 +143,7 @@ func TestOpenAPI(t *testing.T) {
 
 }
 func TestWithOpenAPIDisabled(t *testing.T) {
-	o := New(WithOpenAPIDisabled())
+	o := Default().WithOpenAPIDisabled()
 	o.Get("/", func(c Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	})

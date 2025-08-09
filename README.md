@@ -592,99 +592,113 @@ o.UseMiddleware(func(handler http.Handler) http.Handler {
 
 ---
 
-### OpenAPI/Swagger Integration
+## OpenAPI / Swagger Integration
 
-Okapi provides automatic OpenAPI (Swagger) documentation generation with built-in UI support.
-The documentation is dynamically generated from your route definitions, keeping your API documentation always in sync with your implementation.
+Okapi provides **automatic OpenAPI (Swagger) documentation generation** with a built-in interactive UI.
+The documentation is **dynamically generated** from your route definitions, ensuring it always stays in sync with your API implementation.
 
-#### Quick Start
 
-To enable OpenAPI docs with default settings:
+### Quick Start
+
+* **Using `okapi.Default()`**
+  Documentation is enabled by default and served at `/docs`.
 
 ```go
-o := okapi.Default()  // Docs available at /docs
+o := okapi.Default() // Docs available at /docs
 ```
 
-#### Custom Configuration
+* **Using `okapi.New()` with `WithOpenAPIDocs()`**
+  If you initialize Okapi with `okapi.New()`, documentation is **disabled by default**.
+  You can enable it with `WithOpenAPIDocs()`, this approach also allows you to **dynamically disable the documentation at runtime** (e.g., in production) based on environment variables or configuration.
 
-Configure OpenAPI settings during initialization:
+```go
+o := okapi.New() // Disabled
+if os.Getenv("ENABLE_DOCS") == "true" {
+	o.WithOpenAPIDocs() 
+}
+```
+
+### Enabling with Custom Configuration
+
+You can customize the OpenAPI documentation by passing a configuration object to `WithOpenAPIDocs()`.
 
 ```go
 o := okapi.New().WithOpenAPIDocs(
-        okapi.OpenAPI{
-        PathPrefix: "/swagger",  // Base path for documentation
-        Title:     "Example API",  // Displayed in UI
-        Version:   "1.0.0",         // API version
+    okapi.OpenAPI{
+        PathPrefix: "/swagger", // Base path for docs
+        Title:      "Example API",
+        Version:    "1.0.0",
         Contact: okapi.Contact{
-        Name:  "API Support",
-        Email: "support@example.com",
-		},
-		},
+            Name:  "API Support",
+            Email: "support@example.com",
+        },
+    },
 )
 ```
-#### Authentication SecuritySchemes configuration
 
-You can define security schemes for your API, such as Basic Auth, Bearer tokens, and OAuth2 flows. This allows you to document how clients should authenticate with your API.
+
+### Security Schemes
+
+You can define **authentication mechanisms** for your API, such as **Basic Auth**, **Bearer tokens**, and **OAuth2 flows**.
 
 ```go
-	o.WithOpenAPIDocs(okapi.OpenAPI{
-		Title:   "Okapi Web Framework Example",
-		Version: "1.0.0",
-		License: okapi.License{
-			Name: "MIT",
-		},
-		SecuritySchemes: okapi.SecuritySchemes{
-			{
-				Name:   "basicAuth",
-				Type:   "http",
-				Scheme: "basic",
-			},
-			{
-				Name:         "bearerAuth",
-				Type:         "http",
-				Scheme:       "bearer",
-				BearerFormat: "JWT",
-			},
-			{
-				Name: "OAuth2",
-				Type: "oauth2",
-				Flows: &okapi.OAuthFlows{
-					AuthorizationCode: &okapi.OAuthFlow{
-						AuthorizationURL: "https://auth.example.com/authorize",
-						TokenURL:         "https://auth.example.com/token",
-						Scopes: map[string]string{
-							"read":  "Read access",
-							"write": "Write access",
-						},
-					},
-				},
-			},
-		},
-	})
+o.WithOpenAPIDocs(okapi.OpenAPI{
+    Title:   "Okapi Web Framework Example",
+    Version: "1.0.0",
+    License: okapi.License{Name: "MIT"},
+    SecuritySchemes: okapi.SecuritySchemes{
+        {
+            Name:   "basicAuth",
+            Type:   "http",
+            Scheme: "basic",
+        },
+        {
+            Name:         "bearerAuth",
+            Type:         "http",
+            Scheme:       "bearer",
+            BearerFormat: "JWT",
+        },
+        {
+            Name: "OAuth2",
+            Type: "oauth2",
+            Flows: &okapi.OAuthFlows{
+                AuthorizationCode: &okapi.OAuthFlow{
+                    AuthorizationURL: "https://auth.example.com/authorize",
+                    TokenURL:         "https://auth.example.com/token",
+                    Scopes: map[string]string{
+                        "read":  "Read access",
+                        "write": "Write access",
+                    },
+                },
+            },
+        },
+    },
+})
 ```
-#### Applying Security Schemes to Routes
-You can apply security schemes to specific routes or groups using the `WithSecurity` method. 
-This allows you to specify which authentication methods are required for accessing those endpoints.
+
+### Applying Security Schemes to Routes
+
+You can **apply security schemes** to individual routes or entire route groups.
+
+#### Example – Applying to a Single Route
 
 ```go
 var bearerAuthSecurity = []map[string][]string{
-		{
-			"bearerAuth": {},
-		},
-	}
+    {"bearerAuth": {}},
+}
 
-o.Get("/books", getBooksHandler).WithSecurity(bearerAuthSecurity...) // Apply Bearer Auth security scheme
-
-// You can also apply security to a group of routes
-api:= o.Group("/api",jwtMiddleware).WithSecurity(bearerAuthSecurity)
-api.Get("/", apiHandler)
-
+o.Get("/books", getBooksHandler).WithSecurity(bearerAuthSecurity...)
 ```
 
-
-You can also apply directly to the Route with `Security` when using RouteDefinition.
+#### Example Applying to a Group of Routes
 
 ```go
+api := o.Group("/api", jwtMiddleware).WithSecurity(bearerAuthSecurity)
+api.Get("/", apiHandler)
+```
+
+> **Tip:** If you are defining routes using `RouteDefinition`, you can also set security directly using the `Security` field.
+
 
 ### Documenting Routes
 

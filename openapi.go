@@ -65,6 +65,7 @@ type OpenAPI struct {
 	Contact    Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
 	SecuritySchemes SecuritySchemes
+	ExternalDocs    *ExternalDocs
 }
 type SecuritySchemes []SecurityScheme
 
@@ -77,6 +78,23 @@ type SecurityScheme struct {
 	BearerFormat string
 	Flows        *OAuthFlows
 	Description  string
+}
+type ExternalDocs struct {
+	Extensions map[string]any `json:"-" yaml:"-"`
+	Origin     *Origin        `json:"__origin__,omitempty" yaml:"__origin__,omitempty"`
+
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	URL         string `json:"url,omitempty" yaml:"url,omitempty"`
+}
+
+type Origin struct {
+	Key    *Location           `json:"key,omitempty" yaml:"key,omitempty"`
+	Fields map[string]Location `json:"fields,omitempty" yaml:"fields,omitempty"`
+}
+
+type Location struct {
+	Line   int `json:"line,omitempty" yaml:"line,omitempty"`
+	Column int `json:"column,omitempty" yaml:"column,omitempty"`
 }
 
 type OAuthFlow struct {
@@ -185,6 +203,20 @@ func (ss SecuritySchemes) ToOpenAPI() openapi3.SecuritySchemes {
 	}
 	return result
 }
+func (e *ExternalDocs) ToOpenAPI() *openapi3.ExternalDocs {
+	if e == nil {
+		return nil
+	}
+	doc := &openapi3.ExternalDocs{
+		Description: e.Description,
+		URL:         e.URL,
+	}
+	for k, v := range e.Extensions {
+		doc.Extensions[k] = v
+	}
+	return doc
+}
+
 func (f *OAuthFlow) ToOpenAPI() *openapi3.OAuthFlow {
 	if f == nil {
 		return nil
@@ -277,6 +309,10 @@ func (b *DocBuilder) ErrorResponse(status int, v any) *DocBuilder {
 // Summary adds a short summary description to the route documentation.
 func (b *DocBuilder) Summary(summary string) *DocBuilder {
 	b.options = append(b.options, DocSummary(summary))
+	return b
+}
+func (b *DocBuilder) OperationId(operationId string) *DocBuilder {
+	b.options = append(b.options, DocOperationId(operationId))
 	return b
 }
 
@@ -375,6 +411,11 @@ func ptr[T any](v T) *T { return &v }
 func DocSummary(summary string) RouteOption {
 	return func(r *Route) {
 		r.summary = summary
+	}
+}
+func DocOperationId(operationId string) RouteOption {
+	return func(r *Route) {
+		r.operationId = operationId
 	}
 }
 
@@ -613,6 +654,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			SecuritySchemes: o.openAPI.SecuritySchemes.ToOpenAPI(),
 			Schemas:         make(openapi3.Schemas),
 		},
+		ExternalDocs: o.openAPI.ExternalDocs.ToOpenAPI(),
 	}
 	if len(o.openAPI.SecuritySchemes) == 0 && o.hasBearerAuth() {
 		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
@@ -656,6 +698,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 
 		op := &openapi3.Operation{
+			OperationID: r.operationId,
 			Summary:     r.summary,
 			Description: r.description,
 			Tags:        r.tags,

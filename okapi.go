@@ -103,6 +103,7 @@ type (
 		Method          string
 		chain           chain
 		tags            []string
+		operationId     string
 		summary         string
 		request         *openapi3.SchemaRef
 		pathParams      []*openapi3.ParameterRef

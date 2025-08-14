@@ -645,6 +645,12 @@ func (o *Okapi) Start() error {
 	return o.StartServer(o.server)
 }
 
+// StartOn starts the Okapi server with custom port
+func (o *Okapi) StartOn(port int) error {
+	o.WithPort(port)
+	return o.Start()
+}
+
 // Use registers one or more middleware functions to the Okapi instance.
 // These middleware will be executed in the order they are added for every request
 // before reaching the route handler. Middleware added here will apply to all routes
@@ -871,9 +877,6 @@ func (o *Okapi) StaticFS(prefix string, fs http.FileSystem) {
 func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts ...RouteOption) *Route {
 	if path == "" {
 		panic("Path cannot be empty")
-	}
-	if len(tags) == 0 {
-		tags = []string{"default"}
 	}
 	path = normalizeRoutePath(path)
 	route := &Route{

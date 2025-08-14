@@ -28,6 +28,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/getkin/kin-openapi/openapi3"
+	goutils "github.com/jkaninda/go-utils"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -689,6 +690,11 @@ func (o *Okapi) buildOpenAPISpec() {
 		// Auto-extract path parameters if none are defined
 		if len(r.pathParams) == 0 {
 			DocAutoPathParams()(r)
+		}
+		if len(r.operationId) == 0 {
+			if len(r.summary) != 0 {
+				r.operationId = goutils.Slug(r.summary)
+			}
 		}
 
 		item := spec.Paths.Value(r.Path)

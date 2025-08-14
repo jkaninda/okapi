@@ -41,8 +41,8 @@ func main() {
 		return c.OK(response)
 	},
 		// OpenAPI Documentation
-		okapi.DocOperationId("NewBook"),
-		okapi.DocSummary("New Book"),
+		//okapi.DocOperationId("NewBook"),
+		okapi.DocSummary("Create a Book"),
 		okapi.DocDescription("Create a new Book"),
 		okapi.DocRequestBody(Book{}),
 		okapi.DocResponse(Response{}),                             // Success Response body

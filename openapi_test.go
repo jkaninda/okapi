@@ -33,9 +33,11 @@ import (
 
 func TestOpenAPI(t *testing.T) {
 	o := Default()
+
 	o.Get("/", func(c Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	},
+		DocOperationId("getBook"),
 		DocSummary("Root Endpoint"),
 		DocDescription("This is the root endpoint of the API."),
 		DocTags("Root"),
@@ -114,7 +116,7 @@ func TestOpenAPI(t *testing.T) {
 			Response(200, Book{}).
 			Tags("Book Tags").
 			ErrorResponse(http.StatusBadRequest, M{"": ""}).Build(),
-	)
+	).Hide()
 	v2.Delete("/books/:id", anyHandler,
 		Doc().Summary("Delete Book").
 			Description("Delete a book by ID").
@@ -142,11 +144,76 @@ func TestOpenAPI(t *testing.T) {
 	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 
 }
+func TestNew(t *testing.T) {
+	o := New()
+	o.WithOpenAPIDocs(OpenAPI{
+		Title:   "Okapi Web Framework Example",
+		Version: "1.0.0",
+		License: License{
+			Name: "MIT",
+		},
+		SecuritySchemes: SecuritySchemes{
+			{
+				Name:   "basicAuth",
+				Type:   "http",
+				Scheme: "basic",
+			},
+			{
+				Name:         "bearerAuth",
+				Type:         "http",
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
+			},
+			{
+				Name: "OAuth2",
+				Type: "oauth2",
+				Flows: &OAuthFlows{
+					AuthorizationCode: &OAuthFlow{
+						AuthorizationURL: "https://auth.example.com/authorize",
+						TokenURL:         "https://auth.example.com/token",
+						Scopes: map[string]string{
+							"read":  "Read access",
+							"write": "Write access",
+						},
+					},
+				},
+			},
+		},
+		Servers: Servers{
+			{
+				URL: "http://localhost:8080",
+			},
+		},
+		ExternalDocs: &ExternalDocs{
+			URL:         "http://localhost:8080/openapi.json",
+			Description: "OpenAPI 2",
+			Extensions:  map[string]interface{}{},
+			Origin: &Origin{
+				Key: &Location{},
+			},
+		},
+	})
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
+
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
+}
 func TestWithOpenAPIDisabled(t *testing.T) {
 	o := Default().WithOpenAPIDisabled()
 	o.Get("/", func(c Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
-	})
+	}).Hide()
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)

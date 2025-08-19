@@ -28,6 +28,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/getkin/kin-openapi/openapi3"
+	goutils "github.com/jkaninda/go-utils"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -58,13 +59,14 @@ type RouteOption func(*Route)
 type OpenAPI struct {
 	Title   string // Title of the API
 	Version string // Version of the API
-	// PathPrefix is the URL prefix for accessing the documentation
+	// Deprecated: This field is deprecated.
 	PathPrefix string  // e.g., "/docs" (default)
 	Servers    Servers // List of server URLs where the API is hosted
 	License    License // License information for the API
 	Contact    Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
 	SecuritySchemes SecuritySchemes
+	ExternalDocs    *ExternalDocs
 }
 type SecuritySchemes []SecurityScheme
 
@@ -77,6 +79,23 @@ type SecurityScheme struct {
 	BearerFormat string
 	Flows        *OAuthFlows
 	Description  string
+}
+type ExternalDocs struct {
+	Extensions map[string]any `json:"-" yaml:"-"`
+	Origin     *Origin        `json:"__origin__,omitempty" yaml:"__origin__,omitempty"`
+
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	URL         string `json:"url,omitempty" yaml:"url,omitempty"`
+}
+
+type Origin struct {
+	Key    *Location           `json:"key,omitempty" yaml:"key,omitempty"`
+	Fields map[string]Location `json:"fields,omitempty" yaml:"fields,omitempty"`
+}
+
+type Location struct {
+	Line   int `json:"line,omitempty" yaml:"line,omitempty"`
+	Column int `json:"column,omitempty" yaml:"column,omitempty"`
 }
 
 type OAuthFlow struct {
@@ -185,6 +204,20 @@ func (ss SecuritySchemes) ToOpenAPI() openapi3.SecuritySchemes {
 	}
 	return result
 }
+func (e *ExternalDocs) ToOpenAPI() *openapi3.ExternalDocs {
+	if e == nil {
+		return nil
+	}
+	doc := &openapi3.ExternalDocs{
+		Description: e.Description,
+		URL:         e.URL,
+	}
+	for k, v := range e.Extensions {
+		doc.Extensions[k] = v
+	}
+	return doc
+}
+
 func (f *OAuthFlow) ToOpenAPI() *openapi3.OAuthFlow {
 	if f == nil {
 		return nil
@@ -280,6 +313,12 @@ func (b *DocBuilder) Summary(summary string) *DocBuilder {
 	return b
 }
 
+// OperationId sets a unique identifier for the operation in the OpenAPI documentation.
+func (b *DocBuilder) OperationId(operationId string) *DocBuilder {
+	b.options = append(b.options, DocOperationId(operationId))
+	return b
+}
+
 // Description adds a description to the route documentation.
 func (b *DocBuilder) Description(description string) *DocBuilder {
 	b.options = append(b.options, DocDescription(description))
@@ -342,6 +381,12 @@ func (b *DocBuilder) ResponseHeader(name, typ string, desc ...string) *DocBuilde
 	return b
 }
 
+// Hide marks the route to be excluded from OpenAPI documentation.
+func (b *DocBuilder) Hide() *DocBuilder {
+	b.options = append(b.options, DocHide())
+	return b
+}
+
 // Build returns a single RouteOption composed of all accumulated documentation options.
 // This method is intended to be passed directly to route registration functions.
 //
@@ -375,6 +420,18 @@ func ptr[T any](v T) *T { return &v }
 func DocSummary(summary string) RouteOption {
 	return func(r *Route) {
 		r.summary = summary
+	}
+}
+
+// DocHide marks the route to be excluded from OpenAPI documentation.
+func DocHide() RouteOption {
+	return func(r *Route) {
+		r.hide = true
+	}
+}
+func DocOperationId(operationId string) RouteOption {
+	return func(r *Route) {
+		r.operationId = operationId
 	}
 }
 
@@ -613,6 +670,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			SecuritySchemes: o.openAPI.SecuritySchemes.ToOpenAPI(),
 			Schemas:         make(openapi3.Schemas),
 		},
+		ExternalDocs: o.openAPI.ExternalDocs.ToOpenAPI(),
 	}
 	if len(o.openAPI.SecuritySchemes) == 0 && o.hasBearerAuth() {
 		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
@@ -640,13 +698,18 @@ func (o *Okapi) buildOpenAPISpec() {
 
 	// Process all registered routes
 	for _, r := range o.routes {
-		// If route is disabled ignore it
-		if r.disabled {
+		// If route is unregistered ignore it
+		if r.unregistered || r.hide {
 			continue
 		}
 		// Auto-extract path parameters if none are defined
 		if len(r.pathParams) == 0 {
 			DocAutoPathParams()(r)
+		}
+		if len(r.operationId) == 0 {
+			if len(r.summary) != 0 {
+				r.operationId = goutils.Slug(r.summary)
+			}
 		}
 
 		item := spec.Paths.Value(r.Path)
@@ -656,6 +719,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 
 		op := &openapi3.Operation{
+			OperationID: r.operationId,
 			Summary:     r.summary,
 			Description: r.description,
 			Tags:        r.tags,
@@ -664,39 +728,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			Deprecated:  r.deprecated,
 		}
 
-		if r.bearerAuth {
-			op.Security = &openapi3.SecurityRequirements{
-				openapi3.SecurityRequirement{
-					"BearerAuth": {},
-				},
-			}
-		}
-		if r.basicAuth {
-			if op.Security == nil {
-				op.Security = &openapi3.SecurityRequirements{}
-			}
-			*op.Security = append(*op.Security, openapi3.SecurityRequirement{
-				"BasicAuth": {},
-			})
-		}
-		if len(r.security) != 0 {
-			// Initialize an empty slice for security requirements
-			op.Security = &openapi3.SecurityRequirements{}
-			for _, sec := range r.security {
-				valid := true
-				for scheme := range sec {
-					if _, exists := spec.Components.SecuritySchemes[scheme]; !exists {
-						slog.Warn("Security scheme not defined in OpenAPI spec", "scheme", scheme)
-						valid = false
-						break
-					}
-				}
-				if valid {
-					*op.Security = append(*op.Security, sec)
-				}
-			}
-		}
-
+		addSecurity(spec, op, r)
 		// Handle request body
 		if r.request != nil {
 			// Generate reusable schema component if it's a complex type
@@ -1233,4 +1265,39 @@ func getSchemaForType(typ string) *openapi3.SchemaRef {
 	default:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())
 	}
+}
+func addSecurity(spec *openapi3.T, op *openapi3.Operation, r *Route) {
+	if r.bearerAuth {
+		op.Security = &openapi3.SecurityRequirements{
+			openapi3.SecurityRequirement{
+				"BearerAuth": {},
+			},
+		}
+	}
+	if r.basicAuth {
+		if op.Security == nil {
+			op.Security = &openapi3.SecurityRequirements{}
+		}
+		*op.Security = append(*op.Security, openapi3.SecurityRequirement{
+			"BasicAuth": {},
+		})
+	}
+	if len(r.security) != 0 {
+		// Initialize an empty slice for security requirements
+		op.Security = &openapi3.SecurityRequirements{}
+		for _, sec := range r.security {
+			valid := true
+			for scheme := range sec {
+				if _, exists := spec.Components.SecuritySchemes[scheme]; !exists {
+					slog.Warn("Security scheme not defined in OpenAPI spec", "scheme", scheme)
+					valid = false
+					break
+				}
+			}
+			if valid {
+				*op.Security = append(*op.Security, sec)
+			}
+		}
+	}
+
 }

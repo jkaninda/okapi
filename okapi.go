@@ -34,7 +34,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	goutils "github.com/jkaninda/go-utils"
-	httpSwagger "github.com/swaggo/http-swagger"
 	"io"
 	"log"
 	"log/slog"
@@ -103,6 +102,7 @@ type (
 		Method          string
 		chain           chain
 		tags            []string
+		operationId     string
 		summary         string
 		request         *openapi3.SchemaRef
 		pathParams      []*openapi3.ParameterRef
@@ -117,7 +117,9 @@ type (
 		requestExample  map[string]interface{}
 		responses       map[int]*openapi3.SchemaRef
 		description     string
-		disabled        bool
+		unregistered    bool
+		hide            bool
+		internal        bool
 		handle          HandleFunc
 		handler         HandleFunc
 	}
@@ -140,25 +142,51 @@ type chain interface {
 	next(hf HandleFunc) HandleFunc
 }
 
-// Disable marks the Route as disabled, causing it to return 404 Not Found.
+// Disable marks the Route as unregistered, causing it to return 404 Not Found.
 // Returns the Route to allow method chaining.
+// Deprecated: Use Unregister() instead.
 func (r *Route) Disable() *Route {
-	r.disabled = true
+	return r.Unregister()
+}
+
+// Unregister marks the Route as unregistered, causing it to return 404 Not Found.
+func (r *Route) Unregister() *Route {
+	r.unregistered = true
 	return r
 }
 
 // Enable marks the Route as enabled, allowing it to handle requests normally.
 // Returns the Route to allow method chaining.
+// Deprecated: Use Unregister() instead.
 func (r *Route) Enable() *Route {
-	r.disabled = false
+	r.unregistered = false
 	return r
 }
 
-// SetDisabled sets the disabled state of the Route.
-// When disabled is true, the route returns 404 Not Found.
+// Hide marks the Route as hidden, preventing it from being listed in OpenAPI documentation.
+func (r *Route) Hide() *Route {
+	r.hide = true
+	return r
+}
+
+// internalRoute marks the Route as an internal route.
+func (r *Route) internalRoute() *Route {
+	r.internal = true
+	return r
+}
+
+// SetDisabled sets the unregistered state of the Route.
+// When unregistered is true, the route returns 404 Not Found.
 // Returns the Route to allow method chaining.
+// Deprecated: Use Unregister()
 func (r *Route) SetDisabled(disabled bool) *Route {
-	r.disabled = disabled
+	r.unregistered = disabled
+	return r
+}
+
+// setUnRegistered marks the Route as unregistered.
+func (r *Route) setUnRegistered(unregistered bool) *Route {
+	r.unregistered = unregistered
 	return r
 }
 
@@ -506,9 +534,6 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		if config.Title != "" {
 			o.openAPI.Title = config.Title
 		}
-		if config.PathPrefix != "" {
-			o.openAPI.PathPrefix = config.PathPrefix
-		}
 		if config.Version != "" {
 			o.openAPI.Version = config.Version
 		}
@@ -520,26 +545,18 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		o.openAPI.SecuritySchemes = config.SecuritySchemes
 
 	}
-	if !strings.HasSuffix(o.openAPI.PathPrefix, "/") {
-		o.openAPI.PathPrefix += "/"
-	}
-
-	// Ensure /docs redirects to /docs/
-	o.router.mux.HandleFunc(strings.TrimSuffix(o.openAPI.PathPrefix, "/"), func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, o.openAPI.PathPrefix, http.StatusMovedPermanently)
-	})
 
 	o.buildOpenAPISpec()
 
-	o.router.mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+	o.router.mux.HandleFunc(openApiDocPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(ContentTypeHeader, "application/json")
 		_ = json.NewEncoder(w).Encode(o.openapiSpec)
 	})
-
-	o.router.mux.PathPrefix(o.openAPI.PathPrefix).Handler(httpSwagger.Handler(
-		httpSwagger.URL("/openapi.json"),
-	))
-
+	// Register the Swagger UI handler
+	o.registerDocUIHandler(&docHandler{
+		Title: o.openAPI.Title,
+		URL:   openApiDocPath,
+	})
 	return o
 }
 
@@ -643,6 +660,12 @@ func (o *Okapi) With(options ...OptionFunc) *Okapi {
 // Start starts the Okapi server
 func (o *Okapi) Start() error {
 	return o.StartServer(o.server)
+}
+
+// StartOn starts the Okapi server with custom port
+func (o *Okapi) StartOn(port int) error {
+	o.WithPort(port)
+	return o.Start()
 }
 
 // Use registers one or more middleware functions to the Okapi instance.
@@ -872,9 +895,6 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 	if path == "" {
 		panic("Path cannot be empty")
 	}
-	if len(tags) == 0 {
-		tags = []string{"default"}
-	}
 	path = normalizeRoutePath(path)
 	route := &Route{
 		Name:      handleName(h),
@@ -897,7 +917,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 			response: &response{writer: w},
 			okapi:    o,
 		}
-		if route.disabled {
+		if route.unregistered {
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 			return
 		}
@@ -1071,6 +1091,9 @@ func (r *Route) next(h HandleFunc) HandleFunc {
 func (o *Okapi) Routes() []Route {
 	routes := make([]Route, 0, len(o.routes))
 	for _, route := range o.routes {
+		if route.internal {
+			continue // Skip internal routes
+		}
 		routes = append(routes, *route)
 	}
 	return routes
@@ -1124,7 +1147,6 @@ func initConfig(options ...OptionFunc) *Okapi {
 		openAPI: &OpenAPI{
 			Title:           okapiName,
 			Version:         "1.0.0",
-			PathPrefix:      openApiDocPrefix,
 			Servers:         Servers{{}},
 			SecuritySchemes: SecuritySchemes{},
 		},

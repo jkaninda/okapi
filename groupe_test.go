@@ -42,7 +42,7 @@ func TestGroup(t *testing.T) {
 			return next(c)
 		}
 	})
-	test := o.Group("/test").Enable().Deprecated()
+	test := o.Group("/test").Unregister().Deprecated()
 	_okapi := test.Okapi()
 	_okapi.With(WithDebug())
 	// Go's standard HTTP middleware function

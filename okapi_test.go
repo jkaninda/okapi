@@ -153,7 +153,7 @@ func TestStart(t *testing.T) {
 		return nil
 	})
 	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := o.StartOn(8080); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)
 		}
 	}()

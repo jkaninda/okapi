@@ -1,4 +1,4 @@
-# OKAPI - Lightweight Go Web Framework with OpenAPI 3.0 & Swagger UI
+# OKAPI - Lightweight Go Web Framework with OpenAPI 3 & Swagger UI
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
@@ -625,7 +625,6 @@ You can customize the OpenAPI documentation by passing a configuration object to
 ```go
 o := okapi.New().WithOpenAPIDocs(
     okapi.OpenAPI{
-        PathPrefix: "/swagger", // Base path for docs
         Title:      "Example API",
         Version:    "1.0.0",
         Contact: okapi.Contact{

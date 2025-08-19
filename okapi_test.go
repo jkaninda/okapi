@@ -530,10 +530,11 @@ func (bc *BookController) Routes() []RouteDefinition {
 	coreGroup := &Group{Prefix: "/core", Tags: []string{"CoreGroup"}}
 	return []RouteDefinition{
 		{
-			Method:  http.MethodGet,
-			Path:    "/books",
-			Handler: bc.GetBooks,
-			Group:   coreGroup,
+			Method:      http.MethodGet,
+			Path:        "/books",
+			OperationId: "GetBooks",
+			Handler:     bc.GetBooks,
+			Group:       coreGroup,
 		},
 		{
 			Method:      http.MethodPost,

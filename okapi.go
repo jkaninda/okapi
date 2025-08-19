@@ -553,10 +553,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		_ = json.NewEncoder(w).Encode(o.openapiSpec)
 	})
 	// Register the Swagger UI handler
-	o.registerDocUIHandler(&docHandler{
-		Title: o.openAPI.Title,
-		URL:   openApiDocPath,
-	})
+	o.registerDocUIHandler(o.openAPI.Title)
 	return o
 }
 

@@ -29,6 +29,7 @@ import (
 )
 
 type RouteDefinition struct {
+	OperationId string // Optional, used for OpenAPI documentation
 	// Method is the HTTP method for the route (e.g., GET, POST, PUT, DELETE, etc.)
 	Method string
 	// Path is the URL path for the route, relative to the base path of the Okapi instance or group
@@ -100,6 +101,9 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 		}
 		if len(r.Security) > 0 {
 			r.Options = append(r.Options, withSecurity(r.Security))
+		}
+		if r.OperationId != "" {
+			r.Options = append(r.Options, DocOperationId(r.OperationId))
 		}
 		if group == nil {
 			// Create on root Okapi instance

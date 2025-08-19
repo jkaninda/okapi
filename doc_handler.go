@@ -35,12 +35,11 @@ const (
 <!DOCTYPE html>
 <html>
   <head>
-    <Title> {{.Title }}</Title>
+    <title> {{.Title }}</title>
     <!-- needed for adaptive design -->
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
-
     <!--
     Redoc doesn't change outer page styles
     -->
@@ -64,8 +63,10 @@ const (
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="SwaggerUI" />
-    <Title> {{.Title }}</Title>
+    <title> {{.Title }}</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+<link rel="icon" type="image/png" sizes="32x32" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-16x16.png">
 </head>
 <body>
 <div id="swagger-ui"></div>
@@ -93,18 +94,20 @@ type docHandler struct {
 	URL   string
 }
 
-func (d *docHandler) swaggerHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	d.renderTemplate(w, swaggerTemplate, d)
-}
-
-func (d *docHandler) redocHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	d.renderTemplate(w, redocTemplate, d)
-}
-
-func (d *docHandler) renderTemplate(w http.ResponseWriter, tmpl *template.Template, data interface{}) {
-	if err := tmpl.Execute(w, data); err != nil {
-		http.Error(w, "Template execution failed", http.StatusInternalServerError)
-	}
+func (o *Okapi) registerDocUIHandler(d *docHandler) {
+	// Register the swagger route
+	o.Get(openApiDocPrefix, func(c Context) error {
+		return c.renderHTML(http.StatusOK, swaggerTemplate, d)
+	},
+	).internalRoute()
+	// TODO: remove this route in the next major release
+	o.Get("/docs/index.html", func(c Context) error {
+		return c.renderHTML(http.StatusOK, swaggerTemplate, d)
+	},
+	).internalRoute()
+	// Register the Redoc route
+	o.Get("/redoc", func(c Context) error {
+		return c.renderHTML(http.StatusOK, redocTemplate, d)
+	},
+	).internalRoute()
 }

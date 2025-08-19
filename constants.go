@@ -36,6 +36,7 @@ const (
 
 	openApiVersion                = "3.0.0"
 	openApiDocPrefix              = "/docs"
+	openApiDocPath                = "/openapi.json"
 	AccessControlAllowOrigin      = "Access-Control-Allow-Origin"
 	AccessControlAllowHeaders     = "Access-Control-Allow-Headers"
 	AccessControlExposeHeaders    = "Access-Control-Expose-Headers"
@@ -71,4 +72,4 @@ const banner = `
  | | | | |/ / _` + "`" + ` | '_ \| |
  | |_| |   < (_| | |_) | |
   \___/|_|\_\__,_| .__/|_|
-   🦒 		 	 |_|`
+    		 	 |_|`

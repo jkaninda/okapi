@@ -116,7 +116,7 @@ func TestOpenAPI(t *testing.T) {
 			Response(200, Book{}).
 			Tags("Book Tags").
 			ErrorResponse(http.StatusBadRequest, M{"": ""}).Build(),
-	)
+	).Hide()
 	v2.Delete("/books/:id", anyHandler,
 		Doc().Summary("Delete Book").
 			Description("Delete a book by ID").
@@ -213,7 +213,7 @@ func TestWithOpenAPIDisabled(t *testing.T) {
 	o := Default().WithOpenAPIDisabled()
 	o.Get("/", func(c Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
-	})
+	}).Hide()
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)

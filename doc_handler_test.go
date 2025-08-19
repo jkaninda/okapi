@@ -23,3 +23,38 @@
  */
 
 package okapi
+
+import (
+	"errors"
+	"net/http"
+	"testing"
+)
+
+func TestRegisterDocUI(t *testing.T) {
+	o := New()
+	o.Get("/", func(c Context) error {
+		return c.Text(http.StatusOK, "Hello World!")
+	})
+
+	o.registerDocUIHandler(&docHandler{
+		Title: o.openAPI.Title,
+		URL:   openApiDocPath,
+	})
+
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
+
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/redoc", nil, nil, "", http.StatusOK)
+
+}

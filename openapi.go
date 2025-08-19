@@ -59,7 +59,7 @@ type RouteOption func(*Route)
 type OpenAPI struct {
 	Title   string // Title of the API
 	Version string // Version of the API
-	// PathPrefix is the URL prefix for accessing the documentation
+	// Deprecated: This field is deprecated.
 	PathPrefix string  // e.g., "/docs" (default)
 	Servers    Servers // List of server URLs where the API is hosted
 	License    License // License information for the API
@@ -312,6 +312,8 @@ func (b *DocBuilder) Summary(summary string) *DocBuilder {
 	b.options = append(b.options, DocSummary(summary))
 	return b
 }
+
+// OperationId sets a unique identifier for the operation in the OpenAPI documentation.
 func (b *DocBuilder) OperationId(operationId string) *DocBuilder {
 	b.options = append(b.options, DocOperationId(operationId))
 	return b
@@ -379,6 +381,12 @@ func (b *DocBuilder) ResponseHeader(name, typ string, desc ...string) *DocBuilde
 	return b
 }
 
+// Hide marks the route to be excluded from OpenAPI documentation.
+func (b *DocBuilder) Hide() *DocBuilder {
+	b.options = append(b.options, DocHide())
+	return b
+}
+
 // Build returns a single RouteOption composed of all accumulated documentation options.
 // This method is intended to be passed directly to route registration functions.
 //
@@ -412,6 +420,13 @@ func ptr[T any](v T) *T { return &v }
 func DocSummary(summary string) RouteOption {
 	return func(r *Route) {
 		r.summary = summary
+	}
+}
+
+// DocHide marks the route to be excluded from OpenAPI documentation.
+func DocHide() RouteOption {
+	return func(r *Route) {
+		r.hide = true
 	}
 }
 func DocOperationId(operationId string) RouteOption {
@@ -683,8 +698,8 @@ func (o *Okapi) buildOpenAPISpec() {
 
 	// Process all registered routes
 	for _, r := range o.routes {
-		// If route is disabled ignore it
-		if r.disabled {
+		// If route is unregistered ignore it
+		if r.unregistered || r.hide {
 			continue
 		}
 		// Auto-extract path parameters if none are defined

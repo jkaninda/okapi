@@ -30,25 +30,25 @@ type Group struct {
 	// Prefix is the base path for all routes in this group.
 	Prefix string
 	// Tags is an optional tag for the group, used for documentation purposes.
-	Tags        []string
-	disabled    bool
-	bearerAuth  bool
-	basicAuth   bool
-	deprecated  bool
-	middlewares []Middleware
-	okapi       *Okapi
-	security    []map[string][]string
+	Tags         []string
+	unregistered bool
+	bearerAuth   bool
+	basicAuth    bool
+	deprecated   bool
+	middlewares  []Middleware
+	okapi        *Okapi
+	security     []map[string][]string
 }
 
 // newGroup creates a new route group with the specified base path, Okapi reference,
 // and optional middlewares.
-func newGroup(basePath string, disabled bool, okapi *Okapi, middlewares ...Middleware) *Group {
+func newGroup(basePath string, unregistered bool, okapi *Okapi, middlewares ...Middleware) *Group {
 	mws := append([]Middleware{}, middlewares...)
 	return &Group{
-		Prefix:      basePath,
-		middlewares: mws,
-		okapi:       okapi,
-		disabled:    disabled,
+		Prefix:       basePath,
+		middlewares:  mws,
+		okapi:        okapi,
+		unregistered: unregistered,
 	}
 }
 func NewGroup(basePath string, okapi *Okapi, middlewares ...Middleware) *Group {
@@ -63,8 +63,14 @@ func NewGroup(basePath string, okapi *Okapi, middlewares ...Middleware) *Group {
 
 // Disable marks the Group as disabled, causing all routes within it to return 404 Not Found.
 // Returns the Group to allow method chaining.
+// Deprecated: use Unregister() instead.
 func (g *Group) Disable() *Group {
-	g.disabled = true
+	return g.Unregister()
+}
+
+// Unregister marks the Group as unregistered, causing all routes within it to return 404 Not Found.
+func (g *Group) Unregister() *Group {
+	g.unregistered = true
 	return g
 }
 
@@ -100,16 +106,18 @@ func (g *Group) WithSecurity(security []map[string][]string) *Group {
 
 // Enable marks the Group as enabled, allowing all routes within it to handle requests normally.
 // Returns the Group to allow method chaining.
+// Deprecated: use Unregister() instead.
 func (g *Group) Enable() *Group {
-	g.disabled = false
+	g.unregistered = false
 	return g
 }
 
-// SetDisabled sets the disabled state of the Group.
-// When disabled is true, all routes in the group return 404 Not Found.
+// SetDisabled sets the unregistered state of the Group.
+// When unregistered is true, all routes in the group return 404 Not Found.
 // Returns the Group to allow method chaining.
+// Deprecated: use Unregister() instead.
 func (g *Group) SetDisabled(disabled bool) *Group {
-	g.disabled = disabled
+	g.unregistered = disabled
 	return g
 }
 
@@ -146,7 +154,7 @@ func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Rou
 		tags = []string{g.Prefix}
 	}
 	// Register the route with the joined base path and route path
-	return g.okapi.addRoute(method, fullPath, tags, finalHandler, opts...).SetDisabled(g.disabled)
+	return g.okapi.addRoute(method, fullPath, tags, finalHandler, opts...).setUnRegistered(g.unregistered)
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
@@ -225,7 +233,7 @@ func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 	return newGroup(
 		// Combine paths
 		joinPaths(g.Prefix, path),
-		g.disabled,
+		g.unregistered,
 		// Share the same Okapi instance
 		g.okapi,
 		// Combine middlewares
@@ -248,7 +256,7 @@ func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http
 		tags = []string{g.Prefix}
 	}
 	// Register route
-	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).SetDisabled(g.disabled)
+	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).setUnRegistered(g.unregistered)
 }
 
 // HandleHTTP registers a standard http.Handler and wraps it with the group's middleware chain.
@@ -264,7 +272,7 @@ func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 		tags = []string{g.Prefix}
 	}
 	// Register route
-	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).SetDisabled(g.disabled)
+	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).setUnRegistered(g.unregistered)
 }
 
 // UseMiddleware registers a standard HTTP middleware function and integrates
@@ -343,6 +351,6 @@ func (g *Group) Register(routes ...RouteDefinition) {
 		for _, mid := range r.Middlewares {
 			r.Options = append(r.Options, UseMiddleware(mid))
 		}
-		g.okapi.addRoute(r.Method, joinPaths(g.Prefix, r.Path), tags, r.Handler, r.Options...).SetDisabled(g.disabled)
+		g.okapi.addRoute(r.Method, joinPaths(g.Prefix, r.Path), tags, r.Handler, r.Options...).setUnRegistered(g.unregistered)
 	}
 }

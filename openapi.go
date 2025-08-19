@@ -728,39 +728,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			Deprecated:  r.deprecated,
 		}
 
-		if r.bearerAuth {
-			op.Security = &openapi3.SecurityRequirements{
-				openapi3.SecurityRequirement{
-					"BearerAuth": {},
-				},
-			}
-		}
-		if r.basicAuth {
-			if op.Security == nil {
-				op.Security = &openapi3.SecurityRequirements{}
-			}
-			*op.Security = append(*op.Security, openapi3.SecurityRequirement{
-				"BasicAuth": {},
-			})
-		}
-		if len(r.security) != 0 {
-			// Initialize an empty slice for security requirements
-			op.Security = &openapi3.SecurityRequirements{}
-			for _, sec := range r.security {
-				valid := true
-				for scheme := range sec {
-					if _, exists := spec.Components.SecuritySchemes[scheme]; !exists {
-						slog.Warn("Security scheme not defined in OpenAPI spec", "scheme", scheme)
-						valid = false
-						break
-					}
-				}
-				if valid {
-					*op.Security = append(*op.Security, sec)
-				}
-			}
-		}
-
+		addSecurity(spec, op, r)
 		// Handle request body
 		if r.request != nil {
 			// Generate reusable schema component if it's a complex type
@@ -1297,4 +1265,39 @@ func getSchemaForType(typ string) *openapi3.SchemaRef {
 	default:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())
 	}
+}
+func addSecurity(spec *openapi3.T, op *openapi3.Operation, r *Route) {
+	if r.bearerAuth {
+		op.Security = &openapi3.SecurityRequirements{
+			openapi3.SecurityRequirement{
+				"BearerAuth": {},
+			},
+		}
+	}
+	if r.basicAuth {
+		if op.Security == nil {
+			op.Security = &openapi3.SecurityRequirements{}
+		}
+		*op.Security = append(*op.Security, openapi3.SecurityRequirement{
+			"BasicAuth": {},
+		})
+	}
+	if len(r.security) != 0 {
+		// Initialize an empty slice for security requirements
+		op.Security = &openapi3.SecurityRequirements{}
+		for _, sec := range r.security {
+			valid := true
+			for scheme := range sec {
+				if _, exists := spec.Components.SecuritySchemes[scheme]; !exists {
+					slog.Warn("Security scheme not defined in OpenAPI spec", "scheme", scheme)
+					valid = false
+					break
+				}
+			}
+			if valid {
+				*op.Security = append(*op.Security, sec)
+			}
+		}
+	}
+
 }

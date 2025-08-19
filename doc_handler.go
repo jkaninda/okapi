@@ -99,15 +99,15 @@ func (o *Okapi) registerDocUIHandler(d *docHandler) {
 	o.Get(openApiDocPrefix, func(c Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, d)
 	},
-	).internalRoute()
+	).internalRoute().Hide()
 	// TODO: remove this route in the next major release
 	o.Get("/docs/index.html", func(c Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, d)
 	},
-	).internalRoute()
+	).internalRoute().Hide()
 	// Register the Redoc route
 	o.Get("/redoc", func(c Context) error {
 		return c.renderHTML(http.StatusOK, redocTemplate, d)
 	},
-	).internalRoute()
+	).internalRoute().Hide()
 }

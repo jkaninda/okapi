@@ -149,6 +149,7 @@ func (r *Route) Disable() *Route {
 	return r.Unregister()
 }
 
+// Unregister marks the Route as unregistered, causing it to return 404 Not Found.
 func (r *Route) Unregister() *Route {
 	r.unregistered = true
 	return r
@@ -171,7 +172,6 @@ func (r *Route) Hide() *Route {
 // internalRoute marks the Route as an internal route.
 func (r *Route) internalRoute() *Route {
 	r.internal = true
-	r.Hide()
 	return r
 }
 

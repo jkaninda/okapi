@@ -36,10 +36,7 @@ func TestRegisterDocUI(t *testing.T) {
 		return c.Text(http.StatusOK, "Hello World!")
 	})
 
-	o.registerDocUIHandler(&docHandler{
-		Title: o.openAPI.Title,
-		URL:   openApiDocPath,
-	})
+	o.registerDocUIHandler(o.openAPI.Title)
 
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {

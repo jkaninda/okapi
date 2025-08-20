@@ -117,7 +117,7 @@ type (
 		requestExample  map[string]interface{}
 		responses       map[int]*openapi3.SchemaRef
 		description     string
-		unregistered    bool
+		disabled        bool
 		hide            bool
 		internal        bool
 		handle          HandleFunc
@@ -142,27 +142,6 @@ type chain interface {
 	next(hf HandleFunc) HandleFunc
 }
 
-// Disable marks the Route as unregistered, causing it to return 404 Not Found.
-// Returns the Route to allow method chaining.
-// Deprecated: Use Unregister() instead.
-func (r *Route) Disable() *Route {
-	return r.Unregister()
-}
-
-// Unregister marks the Route as unregistered, causing it to return 404 Not Found.
-func (r *Route) Unregister() *Route {
-	r.unregistered = true
-	return r
-}
-
-// Enable marks the Route as enabled, allowing it to handle requests normally.
-// Returns the Route to allow method chaining.
-// Deprecated: Use Unregister() instead.
-func (r *Route) Enable() *Route {
-	r.unregistered = false
-	return r
-}
-
 // Hide marks the Route as hidden, preventing it from being listed in OpenAPI documentation.
 func (r *Route) Hide() *Route {
 	r.hide = true
@@ -175,18 +154,25 @@ func (r *Route) internalRoute() *Route {
 	return r
 }
 
-// SetDisabled sets the unregistered state of the Route.
-// When unregistered is true, the route returns 404 Not Found.
+// Disable marks the Route as disabled, causing it to return 404 Not Found.
 // Returns the Route to allow method chaining.
-// Deprecated: Use Unregister()
-func (r *Route) SetDisabled(disabled bool) *Route {
-	r.unregistered = disabled
+func (r *Route) Disable() *Route {
+	r.disabled = true
 	return r
 }
 
-// setUnRegistered marks the Route as unregistered.
-func (r *Route) setUnRegistered(unregistered bool) *Route {
-	r.unregistered = unregistered
+// Enable marks the Route as enabled, allowing it to handle requests normally.
+// Returns the Route to allow method chaining.
+func (r *Route) Enable() *Route {
+	r.disabled = false
+	return r
+}
+
+// setDisabled sets the disabled state of the Route.
+// When disabled is true, the route returns 404 Not Found.
+// Returns the Route to allow method chaining.
+func (r *Route) setDisabled(disabled bool) *Route {
+	r.disabled = disabled
 	return r
 }
 
@@ -553,10 +539,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		_ = json.NewEncoder(w).Encode(o.openapiSpec)
 	})
 	// Register the Swagger UI handler
-	o.registerDocUIHandler(&docHandler{
-		Title: o.openAPI.Title,
-		URL:   openApiDocPath,
-	})
+	o.registerDocUIHandler(o.openAPI.Title)
 	return o
 }
 
@@ -917,7 +900,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 			response: &response{writer: w},
 			okapi:    o,
 		}
-		if route.unregistered {
+		if route.disabled {
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 			return
 		}

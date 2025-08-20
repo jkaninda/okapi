@@ -51,7 +51,7 @@ const (
     </style>
   </head>
   <body>
-    <redoc spec-URL='{{.URL }}'></redoc>
+    <redoc spec-URL='/openapi.json'></redoc>
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"> </script>
   </body>
 </html>
@@ -64,18 +64,21 @@ const (
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="SwaggerUI" />
     <title> {{.Title }}</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
-<link rel="icon" type="image/png" sizes="32x32" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-16x16.png">
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.27.1/swagger-ui.css" />
+<link rel="icon" type="image/png" sizes="32x32" href="https://unpkg.com/swagger-ui-dist@5.27.1/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="https://unpkg.com/swagger-ui-dist@5.27.1/favicon-16x16.png">
 </head>
 <body>
 <div id="swagger-ui"></div>
-<script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" crossorigin></script>
+<script src="https://unpkg.com/swagger-ui-dist@5.27.1/swagger-ui-bundle.js" charset="UTF-8"></script>
+<script src="https://unpkg.com/swagger-ui-dist@5.27.1/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+<script src="https://unpkg.com/swagger-ui-dist@5.27.1/swagger-initializer.js" charset="UTF-8"></script>
 <script>
   window.onload = () => {
     window.ui = SwaggerUIBundle({
-      url: '{{.URL }}',
+      url: '/openapi.json',
       dom_id: '#swagger-ui',
+      deepLinking: true,
     });
   };
 </script>
@@ -89,25 +92,20 @@ var (
 	swaggerTemplate = template.Must(template.New("swagger").Parse(swagger))
 )
 
-type docHandler struct {
-	Title string
-	URL   string
-}
-
-func (o *Okapi) registerDocUIHandler(d *docHandler) {
+func (o *Okapi) registerDocUIHandler(title string) {
 	// Register the swagger route
 	o.Get(openApiDocPrefix, func(c Context) error {
-		return c.renderHTML(http.StatusOK, swaggerTemplate, d)
+		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide()
 	// TODO: remove this route in the next major release
 	o.Get("/docs/index.html", func(c Context) error {
-		return c.renderHTML(http.StatusOK, swaggerTemplate, d)
+		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide()
 	// Register the Redoc route
 	o.Get("/redoc", func(c Context) error {
-		return c.renderHTML(http.StatusOK, redocTemplate, d)
+		return c.renderHTML(http.StatusOK, redocTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide()
 }

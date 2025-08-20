@@ -698,8 +698,8 @@ func (o *Okapi) buildOpenAPISpec() {
 
 	// Process all registered routes
 	for _, r := range o.routes {
-		// If route is unregistered ignore it
-		if r.unregistered || r.hide {
+		// If route is disabled ignore it
+		if r.disabled || r.hide {
 			continue
 		}
 		// Auto-extract path parameters if none are defined

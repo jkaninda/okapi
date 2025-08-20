@@ -34,7 +34,7 @@ import (
 func TestGroup(t *testing.T) {
 	o := Default()
 	// create api group
-	api := o.Group("/api").SetDisabled(false)
+	api := o.Group("/api").setDisabled(false)
 	// Okapi's Group Middleware
 	api.Use(func(next HandleFunc) HandleFunc {
 		return func(c Context) (err error) {
@@ -42,7 +42,7 @@ func TestGroup(t *testing.T) {
 			return next(c)
 		}
 	})
-	test := o.Group("/test").Unregister().Deprecated()
+	test := o.Group("/test").Disable().Deprecated()
 	_okapi := test.Okapi()
 	_okapi.With(WithDebug())
 	// Go's standard HTTP middleware function
@@ -115,7 +115,7 @@ func TestGroup(t *testing.T) {
 }
 func TestRegister(t *testing.T) {
 	app := New()
-	coreGroup := app.Group("/core").SetDisabled(false).WithTags([]string{"CoreGroup"})
+	coreGroup := app.Group("/core").setDisabled(false).WithTags([]string{"CoreGroup"})
 
 	coreGroup.Use(func(next HandleFunc) HandleFunc {
 		return func(c Context) (err error) {

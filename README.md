@@ -114,6 +114,21 @@ func main() {
 	}
 }
 ```
+Run your server:
+
+```bash
+go run main.go
+```
+
+Visit [`http://localhost:8080`](http://localhost:8080) to see the response.
+
+```json
+{
+  "License": "MIT",
+  "message": "Hello from Okapi Web Framework!"
+}
+```
+
 ####  Simple HTTP POST
 ```go
 package main
@@ -168,14 +183,6 @@ func main() {
   }
 }
 ```
-
-Run your server:
-
-```bash
-go run main.go
-```
-
-Visit [`http://localhost:8080`](http://localhost:8080) to see the response.
 
 #### Interactive API docs
 

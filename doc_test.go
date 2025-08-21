@@ -30,13 +30,13 @@ import (
 	"testing"
 )
 
-func TestRegisterDocUI(t *testing.T) {
+func TestRegisterDocRoutes(t *testing.T) {
 	o := New()
 	o.Get("/", func(c Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	})
 
-	o.registerDocUIHandler(o.openAPI.Title)
+	o.registerDocRoutes(o.openAPI.Title)
 
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -51,6 +51,7 @@ func TestRegisterDocUI(t *testing.T) {
 	}(o)
 
 	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/redoc", nil, nil, "", http.StatusOK)
 

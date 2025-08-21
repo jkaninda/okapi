@@ -763,12 +763,16 @@ o.Post("/books", createBookHandler,
 | `DocDeprecated()`/`Doc().Deprecated()`         | Mark route deprecated               |
 
 
-### Swagger UI Preview
+#### Swagger UI Preview
 
 Okapi automatically generates Swagger UI for all routes:
 
 
 ![Okapi Swagger Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
+
+#### Redoc Preview
+
+![Okapi Redoc Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png)
 
 ---
 

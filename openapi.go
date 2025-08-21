@@ -722,7 +722,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			OperationID: r.operationId,
 			Summary:     r.summary,
 			Description: r.description,
-			Tags:        r.tags,
+			Tags:        goutils.RemoveDuplicates(r.tags), // Remove duplicates in tags
 			Parameters:  append(append(r.pathParams, r.queryParams...), r.headers...),
 			Responses:   &openapi3.Responses{},
 			Deprecated:  r.deprecated,
@@ -741,7 +741,7 @@ func (o *Okapi) buildOpenAPISpec() {
 
 			// Add example if available
 			if r.requestExample != nil {
-				requestBody.Content["application/json"].Example = r.requestExample
+				requestBody.Content[JSON].Example = r.requestExample
 			}
 
 			op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}

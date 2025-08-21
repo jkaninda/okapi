@@ -28,7 +28,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -533,13 +532,8 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	}
 
 	o.buildOpenAPISpec()
-
-	o.router.mux.HandleFunc(openApiDocPath, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(ContentTypeHeader, "application/json")
-		_ = json.NewEncoder(w).Encode(o.openapiSpec)
-	})
-	// Register the Swagger UI handler
-	o.registerDocUIHandler(o.openAPI.Title)
+	// Register the OpenAPI JSON and Swagger UI routes
+	o.registerDocRoutes(o.openAPI.Title)
 	return o
 }
 
@@ -883,11 +877,12 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 		Name:      handleName(h),
 		Path:      path,
 		Method:    method,
-		tags:      tags,
+		tags:      goutils.RemoveDuplicates(tags),
 		handle:    h,
 		chain:     o,
 		responses: make(map[int]*openapi3.SchemaRef),
 	}
+	// Register all route options
 	for _, opt := range opts {
 		opt(route)
 	}
@@ -900,10 +895,12 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 			response: &response{writer: w},
 			okapi:    o,
 		}
+		// if the route is disabled, return 404 Not Found
 		if route.disabled {
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 			return
 		}
+		// Any error returned by the route will result in a 500 Internal Server Error
 		if err := route.handler(ctx); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

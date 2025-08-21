@@ -372,6 +372,8 @@ auth := okapi.BasicAuth{
 	Username: "admin",
 	Password: "password",
 	Realm:    "Restricted",
+    ContextKey: "user",// where to store the username e.g. "user", default(username)
+
 }
 // Global middleware
 o.Use(auth.Middleware)
@@ -498,7 +500,7 @@ Example:
 ```go
 jwtAuth.ValidateClaims = func(c Context, claims jwt.Claims) error {
     method := c.Request().Method
-    fPrint("Request method,", "method", method)
+    slog.Info("Request method,", "method", method)
     mapClaims, ok := claims.(jwt.MapClaims)
     if !ok {
         return errors.New("invalid claims type")

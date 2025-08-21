@@ -66,10 +66,6 @@ const (
 	CONNECT = http.MethodConnect
 	TRACE   = http.MethodTrace
 )
-const banner = `
-   ___  _               _ 
-  / _ \| | ____ _ _ __ (_)
- | | | | |/ / _` + "`" + ` | '_ \| |
- | |_| |   < (_| | |_) | |
-  \___/|_|\_\__,_| .__/|_|
-   🦒 			 |_|`
+const banner = `:::::::::::::: 🦒 ::::::::::::::
+    The Okapi Web Framework 
+::::::::::::::::::::::::::::::::`

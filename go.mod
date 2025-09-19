@@ -5,7 +5,7 @@ go 1.24.5
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/gorilla/mux v1.8.1
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.9
 	gopkg.in/yaml.v3 v3.0.1
 )
 

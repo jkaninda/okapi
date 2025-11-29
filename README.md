@@ -144,8 +144,8 @@ type Response struct {
   Data    Book   `json:"data"`
 }
 type Book struct {
-  Name  string `json:"name" form:"name"  max:"50" required:"true" description:"Book name"`
-  Price int    `json:"price" form:"price" query:"price" yaml:"price" required:"true" description:"Book price"`
+  Name  string `json:"name"  maxLength:"50" minLength:"5" required:"true" description:"Book name"`
+  Price int    `json:"price" min:"1" max:"100" required:"true" description:"Book price"`
 }
 type ErrorResponse struct {
   Success bool        `json:"success"`
@@ -310,17 +310,27 @@ o.Post("/books", func(c okapi.Context) error {
 })
 ```
 ---
+
 ## Struct Binding
 
-Bind request data directly into a struct from multiple sources:
+Okapi provides powerful and flexible request binding that automatically maps incoming request data into Go structs.
+It supports two complementary binding styles:
+
+---
+
+### 1. **Flat Binding**
+
+In `Flat Binding`, you define a single struct where each field can be sourced from any part of the request.
+
+This style allows you to mix request body fields (JSON, XML, YAML, Protobuf, Form) with query parameters, headers, cookies, and path parameters — all within a single struct.
 
 ```go
 type Book struct {
-	ID    int    `json:"id" param:"id" query:"id" form:"id"`
-	Name  string `json:"name" xml:"name" form:"name" min:"4" max:"50" required:"true"`
-	Price int    `json:"price" form:"price" required:"true"`
-	Logo *multipart.FileHeader `form:"logo" required:"true"`
-    Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
+	ID     int    `json:"id" path:"id" query:"id" form:"id"`
+	Name   string `json:"name" xml:"name" form:"name" minLength:"4" maxLength:"50" required:"true"`
+	Price  int    `json:"price" form:"price" required:"true"`
+	Logo   *multipart.FileHeader `form:"logo" required:"true"`
+	Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
 	// Supports both ?tags=a&tags=b and ?tags=a,b
 	Tags []string `form:"tags" query:"tags" default:"a,b"`
 }
@@ -334,32 +344,120 @@ o.Post("/books", func(c okapi.Context) error {
 })
 ```
 
-### Supported Sources
+---
 
-* **Path parameters**: `param`
-* **Query parameters**: `query`
-* **Form fields**: `form`
-* **JSON body**: `json`
-* **XML body**: `xml`
-* **Headers**: `header`
-* **Description**: `description` - OpenAPI description
+### 2. **Body Field Binding (Recommended)**
+
+In `Body Field Binding`, your struct defines a dedicated `Body` field (or a field tagged as `body`) that represents the main request payload.
+Other fields in the struct represent `query params`, `headers`, `cookies`, or `path parameters`.
+
+This pattern promotes a clean separation between metadata and the request content, making it ideal for larger APIs and OpenAPI generation.
+
+```go
+type BookRequest struct {
+	Body struct {
+		Name  string `json:"name" minLength:"4" maxLength:"50" required:"true"`
+		Price int    `json:"price" required:"true"`
+		Logo  *multipart.FileHeader `form:"logo" required:"true"`
+	} `json:"body"` // Request body
+
+	ID        int      `json:"id" param:"id" query:"id"`        // from path or query
+	Tags      []string `query:"tags" default:"a,b"`             // supports ?tags=a&tags=b and ?tags=a,b
+	APIKey    string   `header:"X-API-Key" required:"true"`     // from header
+	SessionID string   `cookie:"session_id" json:"session_id"`  // from cookie
+}
+
+o.Post("/books", func(c okapi.Context) error {
+	bookReq := &BookRequest{}
+	if err := c.Bind(bookReq); err != nil {
+		return c.ErrorBadRequest(err)
+	}
+	return c.Respond(bookReq)
+})
+```
 
 ---
 
-## Validation and Defaults
+## Supported Sources
 
-Okapi supports simple, declarative validation using struct tags.
+| Source           | Tag(s)               | Notes                                                                 |
+|------------------|----------------------|-----------------------------------------------------------------------|
+| Path parameters  | `path`, `param`      | Extracted from URL path variables (e.g. `/books/:id`, `/books/{id}`). |
+| Query parameters | `query`              | Automatically parses arrays (`?tags=a&tags=b` or `?tags=a,b`).        |
+| Headers          | `header`             | Reads values from HTTP headers.                                       |
+| Cookies          | `cookie`             | Reads cookie values.                                                  |
+| Form fields      | `form`               | Supports both standard and multipart forms (file uploads).            |
+| JSON body        | `json`               | Automatically decoded if `Content-Type: application/json`.            |
+| XML body         | `xml`                | Automatically decoded if `Content-Type: application/xml`.             |
+| OpenAPI metadata | `description`, `doc` | Used for generated OpenAPI documentation.                             |
 
-### Semantics
+---
 
-| Field Type | Tag               | Meaning                |
-|------------|-------------------|------------------------|
-| `string`   | `min:"10"`        | Minimum length = 10    |
-| `string`   | `max:"50"`        | Maximum length = 50    |
-| `number`   | `min:"5"`         | Minimum value = 5      |
-| `number`   | `max:"100"`       | Maximum value = 100    |
-| `any`      | `default:"..."`   | Default value if empty |
-| `any`      | `required:"true"` | Field must be provided |
+## Validation and Default Values
+
+Okapi supports declarative validation and default value assignment through struct tags.
+
+### Validation Semantics
+
+| Field Type | Tag               | Description                       |
+|------------|-------------------|-----------------------------------|
+| `string`   | `minLength:"10"`  | Minimum string length (10 chars). |
+| `string`   | `maxLength:"50"`  | Maximum string length (50 chars). |
+| `number`   | `min:"5"`         | Minimum numeric value.            |
+| `number`   | `max:"100"`       | Maximum numeric value.            |
+| `any`      | `default:"..."`   | Default value if field is empty.  |
+| `any`      | `required:"true"` | Field must be provided.           |
+
+---
+
+## Response Struct Binding
+
+When using `c.Respond()`, Okapi automatically serializes the response struct into the HTTP response.
+
+It inspects struct tags to determine:
+
+* the **HTTP status code**
+* **response headers**
+* **cookies**
+* and the **response body** (encoded according to the `Accept` header).
+
+```go
+type BookResponse struct {
+	// HTTP status code (default: 200)
+	Status int `status:"true" json:"status"`
+
+	// Response body
+	Body struct {
+		ID    int    `json:"id"`
+		Name  string `json:"name"`
+		Price int    `json:"price"`
+	} `json:"body"`
+
+	// Custom headers
+	XRequestID string `header:"X-Request-ID" json:"x-request-id"`
+
+	// Cookies
+	SessionID string `cookie:"session_id" json:"session_id"`
+}
+
+o.Get("/books/:id", func(c okapi.Context) error {
+	book := BookResponse{
+		Status: http.StatusOK,
+		Body: struct {
+			ID    int    `json:"id"`
+			Name  string `json:"name"`
+			Price int    `json:"price"`
+		}{
+			ID:    1,
+			Name:  "The Great Go Book",
+			Price: 20,
+		},
+		XRequestID: "req-12345",
+		SessionID:  "sess-67890",
+	}
+	return c.Respond(book)
+})
+```
 
 ---
 
@@ -704,63 +802,170 @@ api.Get("/", apiHandler)
 
 > **Tip:** If you are defining routes using `RouteDefinition`, you can also set security directly using the `Security` field.
 
+---
 
-### Documenting Routes
+## Documenting Routes in Okapi
 
-Okapi provides two ways to attach OpenAPI documentation to your routes:
+Okapi makes it simple to attach **OpenAPI documentation** to your routes.
+You can choose between **composable functions** for concise definitions or a **fluent builder** for more flexibility.
 
-#### 1. Composable Functions (Direct Style)
+---
 
-This approach uses individual `okapi.Doc*` functions for each aspect of your route documentation. It’s concise and works well for simple routes.
+### 1. Composable Functions (Direct Style)
+
+This is the simplest and most readable approach — ideal for small or medium routes.
+Each `okapi.Doc*` function documents a specific part of your endpoint.
 
 ```go
 o.Get("/books", getBooksHandler,
     okapi.DocSummary("List all available books"),
     okapi.DocTags("Books"),
     okapi.DocQueryParam("author", "string", "Filter by author name", false),
-    okapi.DocQueryParam("limit", "int", "Maximum results to return (default 20)", false), 
+    okapi.DocQueryParam("limit", "int", "Maximum results to return (default 20)", false),
     okapi.DocResponseHeader("X-Client-Id", "string", "Client ID of the request"),
-    okapi.DocResponse([]Book{}), // Response for OpenAPI docs, Shorthand for DocResponse(200, value)
-    okapi.DocResponse(400, ErrorResponse{}),// Response error for OpenAPI docs
-    okapi.DocResponse(401, ErrorResponse{}),// Response error for OpenAPI docs
-
+    okapi.DocResponse([]Book{}), // Shorthand for DocResponse(200, value)
+    okapi.DocResponse(400, ErrorResponse{}),
+    okapi.DocResponse(401, ErrorResponse{}),
 )
 ```
 
-#### 2. Fluent Builder Style `okapi.Doc()` + .`Build()`
+**When to use:**
+Use this style for routes with straightforward request/response documentation.
 
-For more complex or dynamic documentation setup, Okapi offers a fluent builder API.
-Use `okapi.Doc()` to begin building, chain options, and call `.Build()` or `.AsOption()` to finalize.
+---
+
+### 2. Fluent Builder Style
+
+For more complex or dynamic documentation setups, use the **builder pattern** via `okapi.Doc()`.
+
+This approach allows chaining multiple configuration methods and calling `.Build()` (or `.AsOption()`) at the end.
 
 ```go
 o.Post("/books", createBookHandler,
     okapi.Doc().
-    Summary("Add a new book to inventory").
-    Tags("Books").
-    BearerAuth().
-	ResponseHeader("X-Client-Id", "string", "Client ID of the request").
-    RequestBody(BookRequest{}).
-    Response(201,Book{}).
-    Response(400,ErrorResponse{}).
-    Response(401,ErrorResponse{}).
-    Build(),
+        Summary("Add a new book to the inventory").
+        Tags("Books").
+        BearerAuth().
+        ResponseHeader("X-Client-Id", "string", "Client ID of the request").
+        RequestBody(BookRequest{}).
+        Response(201, Book{}).
+        Response(400, ErrorResponse{}).
+        Response(401, ErrorResponse{}).
+        Build(),
 )
 ```
 
-### Available Documentation Options
+**When to use:**
+Use this style for advanced or reusable route documentation — for example, when generating parts dynamically or reusing shared doc definitions.
 
-| Method                                         | Description                         |
-|------------------------------------------------|-------------------------------------|
-| `DocSummary()`/`Doc().Summary()`               | Short endpoint description          |
-| `DocTag()/DocTags()`/`Doc().Tags()`            | Groups related endpoints            |
-| `DocBearerAuth()`                              | Enables Bearer token authentication |
-| `DocRequestBody()`/`Doc().RequestBody()`       | Documents request body structure    |
-| `DocResponse()`/`Doc().Response()`             | Documents response structure        |
-| `DocPathParam()`/`Doc().PathParam()`           | Documents path parameters           |
-| `DocQueryParam()`/`Doc().QueryParam()`         | Documents query parameters          |
-| `DocHeader()`/ `Doc().Header()`                | Documents header parameters         |
-| `DocResponseHeader()`/`Doc().ResponseHeader()` | Documents response header           |
-| `DocDeprecated()`/`Doc().Deprecated()`         | Mark route deprecated               |
+---
+
+### 3. Available Documentation Options
+
+| Method                                           | Description                              |
+|--------------------------------------------------|------------------------------------------|
+| `DocSummary()` / `Doc().Summary()`               | Short endpoint summary                   |
+| `DocTags()` / `Doc().Tags()`                     | Group endpoints under tags               |
+| `DocBearerAuth()` / `Doc().BearerAuth()`         | Enable Bearer token authentication       |
+| `DocRequestBody()` / `Doc().RequestBody()`       | Document request body schema             |
+| `DocResponse()` / `Doc().Response()`             | Document response schema or status codes |
+| `DocPathParam()` / `Doc().PathParam()`           | Document path parameters                 |
+| `DocQueryParam()` / `Doc().QueryParam()`         | Document query parameters                |
+| `DocHeader()` / `Doc().Header()`                 | Document request headers                 |
+| `DocResponseHeader()` / `Doc().ResponseHeader()` | Document response headers                |
+| `DocDeprecated()` / `Doc().Deprecated()`         | Mark route as deprecated                 |
+
+---
+
+### 4. Body Field Style (Advanced Struct Binding)
+
+The **Body Field Style** allows you to define a struct where a dedicated `Body` field (or a field tagged as `body`) represents the main request payload.
+Other fields in the same struct can represent query parameters, headers, cookies, or path parameters.
+
+```go
+// BookRequest defines a request with structured fields and validations.
+type BookRequest struct {
+  Body struct {
+    Name  string                `json:"name" minLength:"4" maxLength:"50" required:"true"`
+    Price int                   `json:"price" required:"true"`
+    Logo  *multipart.FileHeader `form:"logo" required:"true"`
+  } `json:"body"` // Request body section
+
+  ID        int      `param:"id" query:"id"`             // from path or query
+  Tags      []string `query:"tags" default:"a,b"`        // supports ?tags=a&tags=b and ?tags=a,b
+  APIKey    string   `header:"X-API-Key" required:"true"`// from header
+  SessionID string   `cookie:"session_id"`               // from cookie
+}
+```
+
+---
+
+### 5. Registering Routes with Body Field Style
+
+#### Using `okapi.Request()` and `okapi.Response()`
+
+```go
+o.Post("/books", func(c okapi.Context) error {
+    req := &BookRequest{}
+    if err := c.Bind(req); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.Respond(req)
+},
+    okapi.Request(&BookRequest{}),  // Request body
+    okapi.Response(&BookRequest{}), // Response body
+)
+```
+
+#### Using `.WithIO()` for request and response
+
+```go
+o.Post("/books", func(c okapi.Context) error {
+    req := &BookRequest{}
+    if err := c.Bind(req); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.Respond(req)
+}).WithIO(&BookRequest{}, &BookRequest{}) // Both request & response
+```
+
+#### Using `.WithInput()` for request only
+
+```go
+o.Post("/books", func(c okapi.Context) error {
+    req := &BookRequest{}
+    if err := c.Bind(req); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.Respond(req)
+}).WithInput(&BookRequest{}) // Request only
+```
+
+#### Using `.WithOutput()` for response only
+
+```go
+o.Post("/books", func(c okapi.Context) error {
+    req := &BookRequest{}
+    if err := c.Bind(req); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.Respond(req)
+}).WithOutput(&BookRequest{}) // Response only
+```
+
+---
+
+###  Summary
+
+| Style                               | Best For                               |
+|-------------------------------------|----------------------------------------|
+| **Composable Functions**            | Simple, direct, quick to write         |
+| **Fluent Builder (`Doc()`)**        | Complex or reusable route docs         |
+| **Body Field Style**                | Declarative binding & validation       |
+| **WithIO / WithInput / WithOutput** | Auto-document request/response schemas |
+
+---
+
 
 
 #### Swagger UI Preview

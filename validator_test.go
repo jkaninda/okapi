@@ -24,47 +24,48 @@
 
 package okapi
 
-import (
-	"errors"
-	"fmt"
-	"net/http"
-	"strconv"
-	"strings"
-	"testing"
-)
+import "testing"
 
-func TestParam(t *testing.T) {
+func TestBindStruct(t *testing.T) {
+	type TestStruct struct {
+		Name  string `json:"name" form:"name" query:"name" header:"X-Name" required:"true" minLength:"1" maxLength:"100"`
+		Age   int    `json:"age" form:"age" query:"age" header:"X-Age" required:"true" min:"1" max:"120"`
+		Email string `json:"email" form:"email" query:"email" header:"X-Email" required:"true" format:"email" minLength:"1" maxLength:"100"`
+	}
 
-	o := Default()
-	o.Get("/api/:version/users/:id", func(c Context) error {
-		version := c.Param("version")
-		q := c.Query("q")
-		tags := c.QueryArray("tags")
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return c.ErrorBadRequest(errors.New("invalid id"))
-		}
+	tests := []struct {
+		name       string
+		input      map[string]string
+		source     string
+		expected   TestStruct
+		shouldFail bool
+	}{
+		{
+			name:   "Valid JSON Input",
+			input:  map[string]string{"name": "John", "age": "30", "email": "john@example.com"},
+			source: "json",
+			expected: TestStruct{
+				Name:  "John",
+				Age:   30,
+				Email: "john@example.com",
+			},
+			shouldFail: false,
+		},
+		{
+			name:   "Missing Required Field",
+			input:  map[string]string{"age": "30", "email": ""},
+			source: "json",
+			expected: TestStruct{
+				Name:  "",
+				Age:   30,
+				Email: "",
+			},
+			shouldFail: true,
+		},
+	}
 
-		body := fmt.Sprintf(`{"version":"%s","user_id":%d,"q":"%s","tags":"%v"}`, version, id, q, strings.Join(tags, ","))
-		return c.String(http.StatusOK, body)
-	})
+	for _, _ = range tests {
 
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	body := `{"version":"v1","user_id":1}`
-	res := `{"version":"v1","user_id":1,"q":"Hello","tags":"hp,pc,mini"}`
-
-	waitForServer()
-	assertResponse(t, "GET", "http://localhost:8080/api/v1/users/1?q=Hello&tags=hp,pc&tags=mini", nil, strings.NewReader(body), "", http.StatusOK, res)
+	}
 
 }

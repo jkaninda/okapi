@@ -33,7 +33,6 @@ import (
 	"mime/multipart"
 	"net/url"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -42,7 +41,7 @@ import (
 
 // ShouldBind is a convenience method that binds request data to a struct and returns a boolean indicating success.
 func (c *Context) ShouldBind(v any) (bool, error) {
-	if err := c.Bind(v); err != nil {
+	if err := c.bindRequest(v); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -56,8 +55,58 @@ func (c *Context) B(v any) error {
 	return nil
 }
 
-// Bind binds the request data to the provided struct based on the content type and tags.
+// Bind populates the given struct with request data by inspecting tags and content type.
+// It supports two binding styles:
+//
+//  1. **Flat binding (legacy style)**
+//     Request body fields (JSON, XML, YAML, Protobuf, Form) can be mixed directly with
+//     query parameters, headers, cookies, and path params in a single struct.
+//
+//  2. **Body field binding (recommended style)**
+//     A struct may contain a dedicated `Body` field (or tagged as `body`) that represents
+//     the request payload, while sibling fields represent query params, headers, cookies,
+//     and path params. This style enforces a clear separation between metadata and body.
+//
+// Validation tags such as `required`, `min`, `max`, `minLength`, and `maxLength` are supported,
+// along with descriptive metadata (`description`) that can be used for documentation.
+//
+// Example (Body field binding):
+//
+//	type BookInput struct {
+//	  // Query parameter
+//	  Tags []string `query:"tags" description:"List of book tags"`
+//
+//	  // Header parameter
+//	  Accept string `header:"Accept" required:"true" description:"Accept header"`
+//
+//	  // Cookie parameter
+//	  SessionID string `cookie:"SessionID" required:"true" description:"Session ID cookie"`
+//	  // Path parameter
+//	  BookID string `path:"bookId" required:"true" description:"Book ID"`
+//
+//	  // Request body
+//	  Body struct {
+//	    Name  string `json:"name" required:"true" minLength:"2" maxLength:"100" description:"Book name"`
+//	    Price int    `json:"price" required:"true" min:"5" max:"100" yaml:"price" description:"Book price"`
+//	  }
+//	}
+//
+//	okapi.Put("/books/:bookId", func(c okapi.Context) error {
+//	  book := &BookInput{}
+//	  if err := c.Bind(book); err != nil {
+//	    return c.AbortBadRequest("Invalid input", err)
+//	  }
+//	  return c.Respond(book)
+//	})
 func (c *Context) Bind(out any) error {
+	if hasBodyField(out) {
+		return c.bindStruct(out)
+	}
+	return c.bindRequest(out)
+}
+
+// Bind binds the request data to the provided struct based on the content type and tags.
+func (c *Context) bindRequest(out any) error {
 	v := reflect.ValueOf(out)
 	if v.Kind() != reflect.Ptr || v.IsNil() {
 		return errors.New("bind target must be a non-nil pointer to a struct")
@@ -124,19 +173,8 @@ func (c *Context) bindMultipartField(field reflect.StructField, valField reflect
 	var wasSet bool
 	var err error
 
-	// Handle file uploads (legacy form-file tag)
-	if formFileTag := field.Tag.Get("form-file"); formFileTag != "" {
-		wasSet, err = c.bindFileFieldWithStatus(formFileTag, valField, field)
-		if err != nil {
-			return err
-		}
-		if wasSet {
-			return nil
-		}
-	}
-
 	// Handle headers
-	if headerTag := field.Tag.Get("header"); headerTag != "" {
+	if headerTag := field.Tag.Get(tagHeader); headerTag != "" {
 		wasSet, err = c.bindHeaderFieldWithStatus(headerTag, valField, field)
 		if err != nil {
 			return err
@@ -147,7 +185,7 @@ func (c *Context) bindMultipartField(field reflect.StructField, valField reflect
 	}
 
 	// Handle form values (including files and arrays)
-	if formTag := field.Tag.Get("form"); formTag != "" {
+	if formTag := field.Tag.Get(tagForm); formTag != "" {
 		// Check if this is a file field based on type
 		if c.isFileField(valField) {
 			wasSet, err = c.bindFileFieldWithStatus(formTag, valField, field)
@@ -169,7 +207,7 @@ func (c *Context) bindMultipartField(field reflect.StructField, valField reflect
 	}
 
 	// Handle query parameters (including arrays)
-	if queryTag := field.Tag.Get("query"); queryTag != "" {
+	if queryTag := field.Tag.Get(tagQuery); queryTag != "" {
 		wasSet, err = c.bindQueryFieldWithStatus(queryTag, valField, field)
 		if err != nil {
 			return err
@@ -180,7 +218,16 @@ func (c *Context) bindMultipartField(field reflect.StructField, valField reflect
 	}
 
 	// Handle path parameters
-	if paramTag := field.Tag.Get("param"); paramTag != "" {
+	if paramTag := field.Tag.Get(tagParam); paramTag != "" {
+		wasSet, err = c.bindParamFieldWithStatus(paramTag, valField, field)
+		if err != nil {
+			return err
+		}
+		if wasSet {
+			return nil
+		}
+	}
+	if paramTag := field.Tag.Get(tagPath); paramTag != "" {
 		wasSet, err = c.bindParamFieldWithStatus(paramTag, valField, field)
 		if err != nil {
 			return err
@@ -394,14 +441,14 @@ func (c *Context) bindParamFieldWithStatus(tag string, vf reflect.Value, fld ref
 
 func (c *Context) applyDefaultAndValidate(valField reflect.Value, field reflect.StructField, wasSet bool) error {
 	// Only apply default if no value was set and field is currently zero
-	if !wasSet && isZero(valField) {
+	if !wasSet && isEmptyValue(valField) {
 		if def := field.Tag.Get("default"); def != "" {
 			return setValueWithValidation(valField, def, field)
 		}
 	}
 
 	// Only check required if no value was set and field is still zero after potential default application
-	if !wasSet && field.Tag.Get("required") == TRUE && isZero(valField) {
+	if !wasSet && field.Tag.Get("required") == TRUE && isEmptyValue(valField) {
 		return fmt.Errorf("field %s is required", field.Name)
 	}
 
@@ -463,6 +510,16 @@ func (c *Context) bindFromFields(out any) error {
 				}
 			}
 		}
+		// Cookie
+		if key := field.Tag.Get("cookie"); key != "" {
+			if value, err := c.Cookie(key); err == nil {
+				err = setValueWithValidation(valField, value, field)
+				if err != nil {
+					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
+				}
+				wasSet = true
+			}
+		}
 
 		if !wasSet {
 			if tag := field.Tag.Get("header"); tag != "" {
@@ -478,7 +535,7 @@ func (c *Context) bindFromFields(out any) error {
 
 		// Apply defaults and validate only if no value was set
 		if !wasSet {
-			if def := field.Tag.Get("default"); def != "" && isZero(valField) {
+			if def := field.Tag.Get("default"); def != "" && isEmptyValue(valField) {
 				err = setValueWithValidation(valField, def, field)
 				if err != nil {
 					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
@@ -488,7 +545,7 @@ func (c *Context) bindFromFields(out any) error {
 		}
 
 		// Check required only if no value was set and field is still zero
-		if !wasSet && field.Tag.Get("required") == TRUE && isZero(valField) {
+		if !wasSet && field.Tag.Get("required") == TRUE && isEmptyValue(valField) {
 			return fmt.Errorf("field %s is required", field.Name)
 		}
 	}
@@ -497,173 +554,15 @@ func (c *Context) bindFromFields(out any) error {
 }
 
 func setValueWithValidation(field reflect.Value, value string, sf reflect.StructField) error {
-	switch field.Kind() {
-	case reflect.String:
-		return setStringValue(field, value, sf)
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return setIntValue(field, value, sf)
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return setUintValue(field, value, sf)
-
-	case reflect.Float32, reflect.Float64:
-		return setFloatValue(field, value, sf)
-
-	case reflect.Bool:
-		return setBoolValue(field, value)
-
-	case reflect.Ptr:
-		if field.IsNil() {
-			field.Set(reflect.New(field.Type().Elem()))
-		}
-		return setValueWithValidation(field.Elem(), value, sf)
-
-	case reflect.Slice:
-		return setSliceValue(field, value)
-
-	default:
-		return fmt.Errorf("unsupported field type %s", field.Kind())
-	}
-}
-
-func setStringValue(field reflect.Value, value string, sf reflect.StructField) error {
-	if err := checkStringLength(value, sf); err != nil {
-		return err
-	}
-	field.SetString(value)
-	return nil
-}
-
-func setIntValue(field reflect.Value, value string, sf reflect.StructField) error {
-	i, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return err
-	}
-	if err = validateMinMaxInt(i, sf); err != nil {
-		return err
-	}
-	field.SetInt(i)
-	return nil
-}
-
-func validateMinMaxInt(i int64, sf reflect.StructField) error {
-	if minStr := sf.Tag.Get("min"); minStr != "" {
-		if m, err := strconv.ParseInt(minStr, 10, 64); err == nil && i < m {
-			return fmt.Errorf("value must be at least %d", m)
+	if field.CanSet() {
+		if value != "" {
+			if err := setWithType(field, value); err != nil {
+				return fmt.Errorf("cannot set field %s: %w", sf.Name, err)
+			}
+			return nil
 		}
 	}
-	if maxStr := sf.Tag.Get("max"); maxStr != "" {
-		if mx, err := strconv.ParseInt(maxStr, 10, 64); err == nil && i > mx {
-			return fmt.Errorf("value must be at most %d", mx)
-		}
-	}
-	return nil
-}
-
-func setUintValue(field reflect.Value, value string, sf reflect.StructField) error {
-	u, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return err
-	}
-	if err = validateMinMaxUint(u, sf); err != nil {
-		return err
-	}
-	field.SetUint(u)
-	return nil
-}
-
-func validateMinMaxUint(u uint64, sf reflect.StructField) error {
-	if minStr := sf.Tag.Get("min"); minStr != "" {
-		if m, err := strconv.ParseUint(minStr, 10, 64); err == nil && u < m {
-			return fmt.Errorf("value must be at least %d", m)
-		}
-	}
-	if maxStr := sf.Tag.Get("max"); maxStr != "" {
-		if mx, err := strconv.ParseUint(maxStr, 10, 64); err == nil && u > mx {
-			return fmt.Errorf("value must be at most %d", mx)
-		}
-	}
-	return nil
-}
-
-func setFloatValue(field reflect.Value, value string, sf reflect.StructField) error {
-	f, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return err
-	}
-	if err = validateMinMaxFloat(f, sf); err != nil {
-		return err
-	}
-	field.SetFloat(f)
-	return nil
-}
-
-func validateMinMaxFloat(f float64, sf reflect.StructField) error {
-	if minStr := sf.Tag.Get("min"); minStr != "" {
-		if m, err := strconv.ParseFloat(minStr, 64); err == nil && f < m {
-			return fmt.Errorf("value must be at least %f", m)
-		}
-	}
-	if maxStr := sf.Tag.Get("max"); maxStr != "" {
-		if mx, err := strconv.ParseFloat(maxStr, 64); err == nil && f > mx {
-			return fmt.Errorf("value must be at most %f", mx)
-		}
-	}
-	return nil
-}
-
-func setBoolValue(field reflect.Value, value string) error {
-	b, err := strconv.ParseBool(value)
-	if err != nil {
-		return err
-	}
-	field.SetBool(b)
-	return nil
-}
-
-func setSliceValue(field reflect.Value, value string) error {
-	if field.Type().Elem().Kind() == reflect.String {
-		values := strings.Split(value, ",")
-		slice := reflect.MakeSlice(field.Type(), len(values), len(values))
-		for i, val := range values {
-			slice.Index(i).SetString(strings.TrimSpace(val))
-		}
-		field.Set(slice)
-		return nil
-	}
-	return fmt.Errorf("unsupported slice type %s", field.Type().Elem().Kind())
-}
-
-func checkStringLength(s string, sf reflect.StructField) error {
-	if minStr := sf.Tag.Get("min"); minStr != "" {
-		if m, err := strconv.Atoi(minStr); err == nil && len(s) < m {
-			return fmt.Errorf("string too short: length %d < min %d", len(s), m)
-		}
-	}
-	if maxStr := sf.Tag.Get("max"); maxStr != "" {
-		if mx, err := strconv.Atoi(maxStr); err == nil && len(s) > mx {
-			return fmt.Errorf("string too long: length %d > max %d", len(s), mx)
-		}
-	}
-	return nil
-}
-
-func isZero(v reflect.Value) bool {
-	if !v.IsValid() {
-		return true
-	}
-
-	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface:
-		return v.IsNil()
-	case reflect.Array, reflect.Slice, reflect.Map, reflect.String:
-		return v.Len() == 0
-	default:
-		zero := reflect.Zero(v.Type()).Interface()
-		current := v.Interface()
-		return reflect.DeepEqual(current, zero)
-	}
+	return fmt.Errorf("unsupported field type %s", field.Kind())
 }
 
 func (c *Context) BindJSON(v any) error {
@@ -748,8 +647,33 @@ func validateStruct(v any) error {
 				}
 			}
 		}
-		if sf.Tag.Get("required") == TRUE && isZero(field) {
+		// Required validation
+		if sf.Tag.Get("required") == "true" && isEmptyValue(field) {
 			return fmt.Errorf("field %s is required", sf.Name)
+		}
+
+		// Numeric min/max
+		if minTag := sf.Tag.Get("min"); minTag != "" {
+			if err := checkMin(field, minTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+		if maxTag := sf.Tag.Get("max"); maxTag != "" {
+			if err := checkMax(field, maxTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+
+		// String minLength/maxLength
+		if minLenTag := sf.Tag.Get("minLength"); minLenTag != "" {
+			if err := checkMinLength(field, minLenTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+		if maxLenTag := sf.Tag.Get("maxLength"); maxLenTag != "" {
+			if err := checkMaxLength(field, maxLenTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
 		}
 	}
 	return nil

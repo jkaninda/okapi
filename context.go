@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -47,7 +48,7 @@ type (
 		// request is the http.Request object
 		request *http.Request
 		// response http.ResponseWriter
-		response Response
+		response ResponseWriter
 		// store is a key/value store for storing data in the context
 		store *Store
 		// params *Params
@@ -65,7 +66,6 @@ const (
 	HTML           = "text/html"
 	FORM           = "application/x-www-form-urlencoded"
 	FormData       = "multipart/form-data"
-	PLAIN          = "text/plain"
 	PLAINTEXT      = "text/plain"
 	CSV            = "text/csv"
 	JAVASCRIPT     = "application/javascript"
@@ -100,7 +100,7 @@ func (c *Context) Request() *http.Request {
 
 // Response returns the http.ResponseWriter for writing responses.
 // This is an alias for ResponseWriter for convenience.
-func (c *Context) Response() Response {
+func (c *Context) Response() ResponseWriter {
 	return c.response // Return the response writer
 }
 
@@ -220,6 +220,25 @@ func (c *Context) Param(key string) string {
 // Returns empty string if parameter doesn't exist.
 func (c *Context) Query(key string) string {
 	return c.request.URL.Query().Get(key) // Get from URL query string
+}
+
+// QueryArray retrieves all values for a query parameter.
+// Supports both repeated params (?tags=a&tags=b) and comma-separated (?tags=a,b).
+func (c *Context) QueryArray(key string) []string {
+	values, ok := c.request.URL.Query()[key]
+	if !ok {
+		return nil
+	}
+	var result []string
+	for _, v := range values {
+		parts := strings.Split(v, ",")
+		for _, p := range parts {
+			if trimmed := strings.TrimSpace(p); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+	}
+	return result
 }
 
 // QueryMap returns all query parameters as a map.
@@ -396,7 +415,7 @@ func (c *Context) YAML(code int, data any) error {
 
 // Text writes a plain text response with the given status code.
 func (c *Context) Text(code int, v any) error {
-	return c.writeResponse(code, PLAIN, func() error {
+	return c.writeResponse(code, PLAINTEXT, func() error {
 		_, err := fmt.Fprint(c.response, v)
 		return err
 	})
@@ -532,6 +551,115 @@ func (c *Context) MaxMultipartMemory() int64 {
 func (c *Context) SetMaxMultipartMemory(max int64) {
 	if max > 0 {
 		c.okapi.maxMultipartMemory = max
+	}
+}
+
+// ******************* Output ********************
+
+// Return is an alias for Respond to improve readability when sending output.
+func (c *Context) Return(output any) error {
+	return c.Respond(output)
+}
+
+// Respond serializes the output struct into the HTTP response.
+// It inspects struct tags to automatically set headers, cookies, and status code,
+// and encodes the response body in the format requested by the `Accept` header.
+//
+// Supported formats: JSON, XML, YAML, plain text, HTML.
+//
+// Example:
+//
+//	type BookResponse struct {
+//	  Status  int                           // HTTP status code
+//	  Version string `header:"Version"`     // Response header
+//	  Session string `cookie:"SessionID"`   // Response cookie
+//	  Body    struct {
+//	    ID    int    `json:"id"`
+//	    Name  string `json:"name"`
+//	    Price int    `json:"price"`
+//	  }
+//	}
+//
+//	okapi.Get("/books/:id", func(c okapi.Context) error {
+//	  return c.Respond(BookResponse{
+//	    Version: "v1",
+//	    Session: "abc123",
+//	    Status:  200,
+//	    Body: struct {
+//	      ID    int    `json:"id"`
+//	      Name  string `json:"name"`
+//	      Price int    `json:"price"`
+//	    }{
+//	      ID: 1, Name: "Okapi Guide", Price: 50,
+//	    },
+//	  })
+//	})
+func (c *Context) Respond(output any) error {
+	v := reflect.ValueOf(output)
+	if !v.IsValid() {
+		return c.AbortInternalServerError("Internal Server Error", fmt.Errorf("output is nil"))
+	}
+
+	// Dereference pointer if needed
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return c.AbortInternalServerError("Internal Server Error", fmt.Errorf("output is nil pointer"))
+		}
+		v = v.Elem()
+	}
+	t := v.Type()
+
+	if t.Kind() != reflect.Struct {
+		return c.AbortInternalServerError("Internal Server Error", fmt.Errorf("output must be a struct"))
+	}
+
+	status := getResponseStatus(v)
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		val := v.Field(i).Interface()
+
+		// Header tag
+		if header := field.Tag.Get(tagHeader); header != "" {
+			c.Response().Header().Set(header, fmt.Sprint(val))
+			continue
+		}
+		// Cookie tag
+		if cookie := field.Tag.Get(tagCookie); cookie != "" {
+			http.SetCookie(c.Response(), &http.Cookie{
+				Name:  cookie,
+				Value: fmt.Sprint(val),
+				Path:  "/",
+			})
+			continue
+		}
+		// Fallback: expose non-status, non-body fields as headers
+		if field.Name != "Status" && field.Name != bodyField {
+			key := field.Name
+			if jsonTag := field.Tag.Get(tagJSON); jsonTag != "" && jsonTag != "-" {
+				key = strings.Split(jsonTag, ",")[0]
+			}
+			c.Response().Header().Set(key, fmt.Sprint(val))
+		}
+	}
+
+	var body any
+	if f := v.FieldByName(bodyField); f.IsValid() {
+		body = f.Interface()
+	}
+
+	accept := c.request.Header.Get("Accept")
+	switch {
+	case strings.Contains(accept, XML):
+		return c.XML(status, body)
+	case strings.Contains(accept, YAML), strings.Contains(accept, YamlText), strings.Contains(accept, YamlX):
+		return c.YAML(status, body)
+	case strings.Contains(accept, JSON):
+		return c.JSON(status, body)
+	case strings.Contains(accept, PLAINTEXT), strings.Contains(accept, HTML):
+		return c.String(status, body)
+	default:
+		return c.JSON(status, body)
 	}
 }
 

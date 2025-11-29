@@ -121,10 +121,11 @@ type (
 		internal        bool
 		handle          HandleFunc
 		handler         HandleFunc
+		cookies         []*openapi3.ParameterRef
 	}
 
-	// Response interface defines the methods for writing HTTP responses.
-	Response interface {
+	// ResponseWriter interface defines the methods for writing HTTP responses.
+	ResponseWriter interface {
 		http.ResponseWriter
 		StatusCode() int
 		Close()
@@ -187,6 +188,48 @@ func (r *Route) WithSecurity(security ...map[string][]string) *Route {
 	// Set the security requirements for the route
 	if len(security) > 0 {
 		r.security = security
+	}
+	return r
+}
+
+// WithIO sets both the input (request) and output (response) schemas
+// for the route. This is a convenience method that combines WithInput
+// and WithOutput in a single call.
+// Both parameters are optional: pass nil if you only want one side.
+//
+// Example:
+//
+//	route.WithIO(CreateBookInput{}, BookResponse{})
+func (r *Route) WithIO(req any, res any) *Route {
+	if req != nil {
+		r.generateRequestSchema(req)
+	}
+	if res != nil {
+		r.generateResponseSchema(res)
+	}
+	return r
+}
+
+// WithInput sets the input (request) schema for the route.
+// The value should be a struct or pointer to a struct with binding tags
+// (query, path, header, cookie, form, body). If provided, Okapi will:
+//   - Bind incoming request data to the struct
+//   - Validate based on struct tags
+//   - Generate OpenAPI documentation for the request schema
+func (r *Route) WithInput(req any) *Route {
+	if req != nil {
+		r.generateRequestSchema(req)
+	}
+	return r
+}
+
+// WithOutput sets the output (response) schema for the route.
+// The value can be any type (struct, slice, map, etc.). If provided, Okapi will:
+//   - Serialize the value into the response body
+//   - Generate OpenAPI documentation for the response schema
+func (r *Route) WithOutput(res any) *Route {
+	if res != nil {
+		r.generateResponseSchema(res)
 	}
 	return r
 }

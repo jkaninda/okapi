@@ -37,18 +37,18 @@ import (
 )
 
 type Book struct {
-	ID     int    `json:"id" param:"id" query:"id" form:"id" xml:"id" max:"50" `
-	Name   string `json:"name" form:"name"  max:"50" default:"anonymous" description:"Book name"`
-	Price  int    `json:"price" form:"price" query:"price" yaml:"price" description:"Book price"`
-	Qty    int    `json:"qty" form:"qty" query:"qty" yaml:"qty"`
-	Author Author `json:"author" form:"author" yaml:"author" description:"Author"`
+	ID     int    `json:"id" param:"id" max:"50" `
+	Name   string `json:"name" minLength:"5"  maxLength:"50" default:"anonymous" description:"Book name"`
+	Price  int    `json:"price"  description:"Book price"`
+	Qty    int    `json:"qty" yaml:"qty"`
+	Author Author `json:"author" description:"Author"`
 }
 type Author struct {
-	Name string `json:"name" form:"name"  max:"50" default:"anonymous" description:"Author name"`
+	Name string `json:"name"  max:"50" default:"anonymous" description:"Author name"`
 }
 type LoginRequest struct {
-	Username string `json:"username" form:"username" query:"username" required:"true"`
-	Password string `json:"password" form:"password" query:"password" required:"true"`
+	Username string `json:"username" required:"true"`
+	Password string `json:"password" query:"password" required:"true"`
 }
 type LoginResponse struct {
 	Token    string `json:"token"`
@@ -65,8 +65,7 @@ var (
 	}
 	jwtClaims = jwt.MapClaims{
 		"sub": "12345",
-		"iss": "okapi.example.com",
-		"aud": "okapi.example.com",
+		"aud": "okapi.jkaninda.dev",
 		"user": map[string]string{
 			"name":  "",
 			"role":  "",
@@ -167,6 +166,7 @@ func main() {
 	jwtAuth := okapi.JWTAuth{
 		SigningSecret:    []byte(signingSecret),
 		TokenLookup:      "header:Authorization",
+		Audience:         "okapi.jkaninda.dev",
 		ClaimsExpression: "Equals(`email_verified`, `true`) && OneOf(`user.role`, `admin`, `owner`) && Contains(`tags`, `vip`, `premium`, `gold`)",
 		ForwardClaims: map[string]string{
 			"email": "user.email",

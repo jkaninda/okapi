@@ -29,20 +29,70 @@ import (
 )
 
 type RouteDefinition struct {
-	OperationId string // Optional, used for OpenAPI documentation
 	// Method is the HTTP method for the route (e.g., GET, POST, PUT, DELETE, etc.)
 	Method string
 	// Path is the URL path for the route, relative to the base path of the Okapi instance or group
 	Path string
 	// Handler is the function that will handle requests to this route
 	Handler HandleFunc
+	// OperationId is an optional unique identifier for the route, primarily
+	// used in OpenAPI documentation to distinguish operations.
+	OperationId string
+	// Summary is an optional short description of the route,
+	// used for OpenAPI documentation.
+	// Example: "Create a new book"
+	Summary string
+	// Description is an optional detailed description of the route,
+	// used for OpenAPI documentation.
+	// Example:  "This endpoint allows clients to create a new book in the system by providing the necessary details."
+	Description string
+
+	// Request optionally defines the expected input schema for the route.
+	// It can be a struct or pointer to a struct with binding tags (query, path, header, cookie, form, body).
+	// If provided, Okapi will:
+	//   - Bind incoming request data to the struct
+	//   - Perform validations based on struct tags (e.g., required, minLength, maxLength, default)
+	//   - Generate OpenAPI documentation for the request schema
+	//
+	// Example:
+	//	type CreateBookInput struct {
+	// 		 Tags []string `query:"tags"`
+	//		 Body struct {
+	// 		 	Title string `json:"title" required:"true" minLength:"5"  maxLength:"100" description:"Book title"`
+	// 		 	Price int    `json:"price" max:"5" min:"2"  yaml:"price" required:"true" description:"Book price"`
+	// 		}
+	//		}
+	//   RouteDefinition{
+	//       Method:  "POST",
+	//       Path:    "/books",
+	//       Request: &CreateBookInput{},
+	//   }
+	Request any
+
+	// Response optionally defines the output schema for the route.
+	// It can be any type (struct, slice, map, etc.). If provided, Okapi will:
+	//   - Serialize the value into the response body (e.g., JSON)
+	//   - Generate OpenAPI documentation for the response schema
+	//
+	// Example:
+	//   type BookResponse struct {
+	//       ID    string `json:"id"`
+	//       Title string `json:"title"`
+	//   }
+	//   RouteDefinition{
+	//       Method:   "POST",
+	//       Path:     "/books",
+	//       Request:  &CreateBookInput{},
+	//       Response: &BookResponse{},
+	//   }
+	Response any
+	// Security defines the security requirements for the route, such as authentication schemes // Optional
+	// It can be also applied at Group level.
+	Security []map[string][]string
 	// RouteOption registers one or more OpenAPI Doc and middleware functions to the Route. // Optional
 	Options []RouteOption
 	// Middleware registers one or more middleware functions to the Route. // Optional
 	Middlewares []Middleware
-	// Security defines the security requirements for the route, such as authentication schemes // Optional
-	// It can be also applied at Group level.
-	Security []map[string][]string
 	// Group attach Route to a Group // Optional
 	Group *Group
 }
@@ -95,6 +145,12 @@ type RouteDefinition struct {
 //	okapi.RegisterRoutes(app, routes)
 func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 	for _, r := range routes {
+		if r.Path == "" || r.Method == "" {
+			panic("invalid route definition: path and method must ve specified")
+		}
+		if r.Handler == nil {
+			panic("invalid route definition: handler must be specified")
+		}
 		group := r.Group
 		for _, mid := range r.Middlewares {
 			r.Options = append(r.Options, UseMiddleware(mid))
@@ -103,7 +159,19 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 			r.Options = append(r.Options, withSecurity(r.Security))
 		}
 		if r.OperationId != "" {
-			r.Options = append(r.Options, DocOperationId(r.OperationId))
+			r.Options = append(r.Options, OperationId(r.OperationId))
+		}
+		if r.Request != nil {
+			r.Options = append(r.Options, Request(r.Request))
+		}
+		if r.Response != nil {
+			r.Options = append(r.Options, Response(r.Response))
+		}
+		if r.Summary != "" {
+			r.Options = append(r.Options, Summary(r.Summary))
+		}
+		if r.Description != "" {
+			r.Options = append(r.Options, Description(r.Description))
 		}
 		if group == nil {
 			// Create on root Okapi instance

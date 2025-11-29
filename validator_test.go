@@ -27,45 +27,5 @@ package okapi
 import "testing"
 
 func TestBindStruct(t *testing.T) {
-	type TestStruct struct {
-		Name  string `json:"name" form:"name" query:"name" header:"X-Name" required:"true" minLength:"1" maxLength:"100"`
-		Age   int    `json:"age" form:"age" query:"age" header:"X-Age" required:"true" min:"1" max:"120"`
-		Email string `json:"email" form:"email" query:"email" header:"X-Email" required:"true" format:"email" minLength:"1" maxLength:"100"`
-	}
-
-	tests := []struct {
-		name       string
-		input      map[string]string
-		source     string
-		expected   TestStruct
-		shouldFail bool
-	}{
-		{
-			name:   "Valid JSON Input",
-			input:  map[string]string{"name": "John", "age": "30", "email": "john@example.com"},
-			source: "json",
-			expected: TestStruct{
-				Name:  "John",
-				Age:   30,
-				Email: "john@example.com",
-			},
-			shouldFail: false,
-		},
-		{
-			name:   "Missing Required Field",
-			input:  map[string]string{"age": "30", "email": ""},
-			source: "json",
-			expected: TestStruct{
-				Name:  "",
-				Age:   30,
-				Email: "",
-			},
-			shouldFail: true,
-		},
-	}
-
-	for _, _ = range tests {
-
-	}
 
 }

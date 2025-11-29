@@ -155,24 +155,7 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 		for _, mid := range r.Middlewares {
 			r.Options = append(r.Options, UseMiddleware(mid))
 		}
-		if len(r.Security) > 0 {
-			r.Options = append(r.Options, withSecurity(r.Security))
-		}
-		if r.OperationId != "" {
-			r.Options = append(r.Options, OperationId(r.OperationId))
-		}
-		if r.Request != nil {
-			r.Options = append(r.Options, Request(r.Request))
-		}
-		if r.Response != nil {
-			r.Options = append(r.Options, Response(r.Response))
-		}
-		if r.Summary != "" {
-			r.Options = append(r.Options, Summary(r.Summary))
-		}
-		if r.Description != "" {
-			r.Options = append(r.Options, Description(r.Description))
-		}
+		r.attachDocOptions()
 		if group == nil {
 			// Create on root Okapi instance
 			switch strings.ToUpper(r.Method) {
@@ -224,5 +207,27 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 		default:
 			panic("unsupported method: " + r.Method)
 		}
+	}
+}
+
+// attachDocOptions appends documentation-related RouteOptions to the RouteDefinition
+func (r *RouteDefinition) attachDocOptions() {
+	if len(r.Security) > 0 {
+		r.Options = append(r.Options, withSecurity(r.Security))
+	}
+	if r.OperationId != "" {
+		r.Options = append(r.Options, OperationId(r.OperationId))
+	}
+	if r.Request != nil {
+		r.Options = append(r.Options, Request(r.Request))
+	}
+	if r.Response != nil {
+		r.Options = append(r.Options, Response(r.Response))
+	}
+	if r.Summary != "" {
+		r.Options = append(r.Options, Summary(r.Summary))
+	}
+	if r.Description != "" {
+		r.Options = append(r.Options, Description(r.Description))
 	}
 }

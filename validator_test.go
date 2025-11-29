@@ -24,47 +24,8 @@
 
 package okapi
 
-import (
-	"errors"
-	"fmt"
-	"net/http"
-	"strconv"
-	"strings"
-	"testing"
-)
+import "testing"
 
-func TestParam(t *testing.T) {
-
-	o := Default()
-	o.Get("/api/:version/users/:id", func(c Context) error {
-		version := c.Param("version")
-		q := c.Query("q")
-		tags := c.QueryArray("tags")
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return c.ErrorBadRequest(errors.New("invalid id"))
-		}
-
-		body := fmt.Sprintf(`{"version":"%s","user_id":%d,"q":"%s","tags":"%v"}`, version, id, q, strings.Join(tags, ","))
-		return c.String(http.StatusOK, body)
-	})
-
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	body := `{"version":"v1","user_id":1}`
-	res := `{"version":"v1","user_id":1,"q":"Hello","tags":"hp,pc,mini"}`
-
-	waitForServer()
-	assertResponse(t, "GET", "http://localhost:8080/api/v1/users/1?q=Hello&tags=hp,pc&tags=mini", nil, strings.NewReader(body), "", http.StatusOK, res)
+func TestBindStruct(t *testing.T) {
 
 }

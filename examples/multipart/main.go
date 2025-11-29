@@ -73,10 +73,10 @@ const (
 )
 
 type MultipartBody struct {
-	Name string `form:"name" json:"name" xml:"name" required:"true"`
-	Age  int    `form:"age" json:"age" xml:"age" required:"true"`
+	Name string `form:"name" json:"name" required:"true"`
+	Age  int    `form:"age" json:"age" required:"true"`
 	// Content-Type header for the multipart request
-	Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
+	Content string `header:"Content-Type" json:"content-type" required:"true"`
 	// FileHeader for the uploaded file
 	Avatar *multipart.FileHeader `form:"avatar"  required:"true"`
 	// supports ?tags=a&tags=b or ?tags=a,b
@@ -113,7 +113,10 @@ func main() {
 		// Read the file content (for example, you can save it or process it)
 		fileContent, err := file.Open()
 		if err != nil {
-			return c.JSON(400, okapi.M{"error": "Failed to open file"})
+			return c.ErrorBadRequest(okapi.M{
+				"error":   "Failed to parse form data",
+				"details": "avatar field is required",
+			})
 		}
 		defer func(fileContent multipart.File) {
 			err = fileContent.Close()

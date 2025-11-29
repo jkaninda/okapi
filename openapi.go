@@ -140,6 +140,13 @@ type Contact struct {
 	Email      string         `json:"email,omitempty" yaml:"email,omitempty"` // Optional contact email
 }
 
+// fieldInfo holds information about a struct field
+type fieldInfo struct {
+	field       reflect.StructField
+	required    bool
+	description string
+}
+
 // ToOpenAPI converts License to openapi3.License.
 // It transforms the custom License type to the format expected by the openapi3 package.
 func (l License) ToOpenAPI() *openapi3.License {
@@ -309,25 +316,25 @@ func (b *DocBuilder) ErrorResponse(status int, v any) *DocBuilder {
 
 // Summary adds a short summary description to the route documentation.
 func (b *DocBuilder) Summary(summary string) *DocBuilder {
-	b.options = append(b.options, DocSummary(summary))
+	b.options = append(b.options, Summary(summary))
 	return b
 }
 
 // OperationId sets a unique identifier for the operation in the OpenAPI documentation.
 func (b *DocBuilder) OperationId(operationId string) *DocBuilder {
-	b.options = append(b.options, DocOperationId(operationId))
+	b.options = append(b.options, OperationId(operationId))
 	return b
 }
 
 // Description adds a description to the route documentation.
 func (b *DocBuilder) Description(description string) *DocBuilder {
-	b.options = append(b.options, DocDescription(description))
+	b.options = append(b.options, Description(description))
 	return b
 }
 
 // Tags adds one or more tags to the route documentation for categorization.
 func (b *DocBuilder) Tags(tags ...string) *DocBuilder {
-	b.options = append(b.options, DocTags(tags...))
+	b.options = append(b.options, Tags(tags...))
 	return b
 }
 
@@ -339,7 +346,7 @@ func (b *DocBuilder) BearerAuth() *DocBuilder {
 
 // Deprecated marks the route as deprecated
 func (b *DocBuilder) Deprecated() *DocBuilder {
-	b.options = append(b.options, DocDeprecated())
+	b.options = append(b.options, Deprecated())
 	return b
 }
 
@@ -405,7 +412,7 @@ func (b *DocBuilder) ResponseHeader(name, typ string, desc ...string) *DocBuilde
 
 // Hide marks the route to be excluded from OpenAPI documentation.
 func (b *DocBuilder) Hide() *DocBuilder {
-	b.options = append(b.options, DocHide())
+	b.options = append(b.options, Hide())
 	return b
 }
 
@@ -440,25 +447,45 @@ func ptr[T any](v T) *T { return &v }
 
 // DocSummary sets a short summary description for the route
 func DocSummary(summary string) RouteOption {
-	return func(r *Route) {
-		r.summary = summary
-	}
+	return Summary(summary)
 }
 
 // DocHide marks the route to be excluded from OpenAPI documentation.
 func DocHide() RouteOption {
+	return Hide()
+}
+func DocOperationId(operationId string) RouteOption {
+	return OperationId(operationId)
+}
+
+// DocDescription sets a description for the route
+func DocDescription(description string) RouteOption {
+	return Description(description)
+}
+
+// Hide marks the route to be excluded from OpenAPI documentation.
+func Hide() RouteOption {
 	return func(r *Route) {
 		r.hide = true
 	}
 }
-func DocOperationId(operationId string) RouteOption {
+
+// OperationId sets a unique identifier for the operation in the OpenAPI documentation.
+func OperationId(operationId string) RouteOption {
 	return func(r *Route) {
 		r.operationId = operationId
 	}
 }
 
-// DocDescription sets a description for the route
-func DocDescription(description string) RouteOption {
+// Summary sets a short summary description for the route
+func Summary(summary string) RouteOption {
+	return func(r *Route) {
+		r.summary = summary
+	}
+}
+
+// Description adds a description to the route documentation.
+func Description(description string) RouteOption {
 	return func(route *Route) {
 		route.description = description
 	}
@@ -573,16 +600,12 @@ func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) R
 
 // DocTag adds a single tag to categorize the route
 func DocTag(tag string) RouteOption {
-	return func(r *Route) {
-		r.tags = append(r.tags, tag)
-	}
+	return Tag(tag)
 }
 
 // DocTags adds multiple tags to categorize the route
 func DocTags(tags ...string) RouteOption {
-	return func(doc *Route) {
-		doc.tags = append(doc.tags, tags...)
-	}
+	return Tags(tags...)
 }
 
 // DocResponseHeader adds a response header to the route documentation
@@ -674,6 +697,81 @@ func DocRequestBody(v any) RouteOption {
 	}
 }
 
+// Tag adds a single tag to categorize the route
+func Tag(tag string) RouteOption {
+	return func(r *Route) {
+		r.tags = append(r.tags, tag)
+	}
+}
+
+// Tags adds multiple tags to categorize the route
+func Tags(tags ...string) RouteOption {
+	return func(doc *Route) {
+		doc.tags = append(doc.tags, tags...)
+	}
+}
+
+// Request registers the request schema for a route.
+// The provided value must be a struct or a pointer to a struct.
+//
+// This schema is used for both OpenAPI documentation and request validation.
+//
+// Field mapping rules:
+//   - Request body: A field named `Body`, or a field tagged with `json:"body"`, is treated as the request body.
+//   - Path parameters: Fields tagged with `path:"name"` or `param:"name"` are treated as path parameters.
+//   - Query parameters: Fields tagged with `query:"name"` are treated as query parameters.
+//   - Headers: Fields tagged with `header:"name"` are treated as HTTP headers.
+//   - Cookies: Fields tagged with `cookie:"name"` are treated as HTTP cookies.
+//   - Any remaining fields are treated as general request metadata or ignored if not applicable.
+func Request(v any) RouteOption {
+	return func(r *Route) {
+		if v != nil {
+			r.generateRequestSchema(v)
+		}
+	}
+}
+
+// Response registers the response schema for a route.
+// The provided value must be a struct or a pointer to a struct.
+//
+// This schema is used for OpenAPI documentation and response representation.
+//
+// Field mapping rules:
+//   - Status code: A field named `Status` is interpreted as the HTTP status code (default: 200 if omitted).
+//   - Response body: A field named `Body`, or a field tagged with `json:",inline"`, is treated as the response body.
+//   - Headers: Fields tagged with `header:"name"` are treated as HTTP response headers.
+//   - Cookies: Fields tagged with `cookie:"name"` are treated as HTTP cookies.
+//   - Any remaining fields are treated as general response metadata or ignored if not applicable.
+//
+// Example:
+//
+//	type CreateUserResponse struct {
+//	    Status int 			`json:"status"`
+//	    Body User 			`json:"body"`
+//	    Trace string 		`header:"X-Trace-ID"`
+//	    SessionId string 	`cookie:"session_id"`
+//	}
+func Response(v any) RouteOption {
+	return func(r *Route) {
+		if v != nil {
+			r.generateResponseSchema(v)
+		}
+	}
+}
+
+// WithIO registers both request and response schemas for a route in one call.
+// It is a convenience helper that combines Request and Response.
+func WithIO(req any, res any) RouteOption {
+	return func(r *Route) {
+		if req != nil {
+			r.generateRequestSchema(req)
+		}
+		if res != nil {
+			r.generateResponseSchema(res)
+		}
+	}
+}
+
 // DocBearerAuth marks the route as requiring Bearer token authentication
 func DocBearerAuth() RouteOption {
 	return func(doc *Route) {
@@ -690,6 +788,11 @@ func DocBasicAuth() RouteOption {
 
 // DocDeprecated marks the route as deprecated
 func DocDeprecated() RouteOption {
+	return Deprecated()
+}
+
+// Deprecated marks the route as deprecated
+func Deprecated() RouteOption {
 	return func(doc *Route) {
 		doc.deprecated = true
 	}
@@ -1348,4 +1451,164 @@ func addSecurity(spec *openapi3.T, op *openapi3.Operation, r *Route) {
 		}
 	}
 
+}
+
+// normalizeToStructPointer ensures the input is a pointer to a struct.
+// It accepts both struct values and struct pointers, auto-converting
+// structs to pointers when needed.
+func normalizeToStructPointer(input any, inputType string) reflect.Value {
+	v := reflect.ValueOf(input)
+
+	// If a struct was passed, wrap it into a pointer
+	if v.Kind() == reflect.Struct {
+		_ptr := reflect.New(v.Type())
+		_ptr.Elem().Set(v)
+		v = _ptr
+	}
+
+	// Must now be a non-nil pointer
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		panic(fmt.Sprintf(
+			"Invalid %s: expected struct or non-nil pointer to struct, but got %T. "+
+				"Example: My%s{} or &My%s{}",
+			inputType, input, capitalize(inputType), capitalize(inputType),
+		))
+	}
+
+	elem := v.Elem()
+	if elem.Kind() != reflect.Struct {
+		panic(fmt.Sprintf(
+			"Invalid %s: expected struct or non-nil pointer to struct, but got %T",
+			inputType, input,
+		))
+	}
+
+	return elem
+}
+
+// extractFieldInfo extracts common field information
+func extractFieldInfo(field reflect.StructField) fieldInfo {
+	description := field.Tag.Get(tagDescription)
+	if description == "" {
+		description = field.Tag.Get(tagDoc)
+	}
+	return fieldInfo{
+		field:       field,
+		required:    field.Tag.Get(tagRequired) == TRUE,
+		description: description,
+	}
+}
+
+// createParameter creates an OpenAPI parameter
+func createParameter(name, location string, info fieldInfo) *openapi3.ParameterRef {
+	return &openapi3.ParameterRef{
+		Value: &openapi3.Parameter{
+			Name:        name,
+			In:          location,
+			Required:    info.required,
+			Schema:      getSchemaForType(info.field.Type.Name()),
+			Description: info.description,
+		},
+	}
+}
+
+// processField processes a single struct field for parameter extraction
+func (r *Route) processField(info fieldInfo, isRequest bool) bool {
+	sf := info.field
+
+	// Header parameter
+	if key := sf.Tag.Get(tagHeader); key != "" {
+		param := createParameter(key, paramHeader, info)
+		r.headers = append(r.headers, param)
+		return true
+	}
+
+	// Cookie parameter
+	if key := sf.Tag.Get(tagCookie); key != "" {
+		param := createParameter(key, paramCookie, info)
+		r.cookies = append(r.cookies, param)
+		return true
+	}
+
+	// Query parameter (request only)
+	if isRequest {
+		if key := sf.Tag.Get(tagQuery); key != "" {
+			param := createParameter(key, paramQuery, info)
+			r.queryParams = append(r.queryParams, param)
+			return true
+		}
+
+		// Path parameter (request only)
+		if key := sf.Tag.Get(tagPath); key != "" {
+			// Path params are handled elsewhere
+			return true
+		}
+	}
+
+	// Body field
+	if sf.Tag.Get(tagJSON) == bodyValue || sf.Name == bodyField {
+		r.processBodyField(sf, isRequest)
+		return true
+	}
+
+	return false
+}
+
+// processBodyField processes a body field
+func (r *Route) processBodyField(field reflect.StructField, isRequest bool) {
+	bodyPtr := reflect.New(field.Type)
+	schema := reflectToSchemaWithInfo(bodyPtr.Interface()).Schema
+
+	if isRequest {
+		r.request = schema
+	} else {
+		r.responses[defaultStatus] = schema
+	}
+}
+
+// processFields processes all fields in a struct
+func (r *Route) processFields(v reflect.Value, t reflect.Type, isRequest bool) bool {
+	hasExplicitBinding := false
+
+	for i := 0; i < v.NumField(); i++ {
+		fInfo := extractFieldInfo(t.Field(i))
+		if r.processField(fInfo, isRequest) {
+			hasExplicitBinding = true
+		}
+	}
+
+	return hasExplicitBinding
+}
+
+// getResponseStatus extracts the HTTP status code from response struct
+func getResponseStatus(v reflect.Value) int {
+	if statusField := v.FieldByName("Status"); statusField.IsValid() && statusField.Kind() == reflect.Int && int(statusField.Int()) > 0 {
+		return int(statusField.Int())
+	}
+	return defaultStatus
+}
+
+func (r *Route) generateResponseSchema(input any) {
+	v := normalizeToStructPointer(input, "response")
+	t := v.Type()
+	status := getResponseStatus(v)
+
+	hasExplicitBinding := r.processFields(v, t, false)
+
+	// Fallback: if no explicit binding, use whole struct as body
+	if !hasExplicitBinding {
+		r.responses[status] = reflectToSchemaWithInfo(input).Schema
+	}
+}
+
+func (r *Route) generateRequestSchema(input any) {
+	v := normalizeToStructPointer(input, "request")
+	t := v.Type()
+
+	hasExplicitBinding := r.processFields(v, t, true)
+
+	// Fallback: if no explicit binding, use whole struct as body
+	if !hasExplicitBinding {
+		r.request = reflectToSchemaWithInfo(input).Schema
+	}
 }

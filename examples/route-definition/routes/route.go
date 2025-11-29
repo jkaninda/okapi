@@ -282,14 +282,6 @@ func (r *Route) AdminRoutes() []okapi.RouteDefinition {
 			Path:    "/books/:id",
 			Handler: bookController.DeleteBook,
 			Group:   apiGroup,
-			Options: []okapi.RouteOption{
-				okapi.DocSummary("Delete Book by ID"),
-				okapi.DocDescription("Delete a book by its ID"),
-				okapi.DocPathParam("id", "int", "The ID of the book"),
-				okapi.DocResponse(models.Response{}),
-				okapi.DocResponse(http.StatusNotFound, models.ErrorResponse{}),
-				okapi.DocResponse(http.StatusUnauthorized, models.ErrorResponse{}),
-			},
 		},
 	}
 }

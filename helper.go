@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -107,4 +108,33 @@ func sanitizeHeaders(headers http.Header) map[string][]string {
 		}
 	}
 	return sanitized
+}
+
+// capitalize capitalizes the first letter of a string
+func capitalize(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	return string(s[0]-32) + s[1:]
+}
+
+// hasBodyField reports whether the struct has a field explicitly marked as body
+// (either with name "Body" or a tag containing or `json:"body"`).
+func hasBodyField(v any) bool {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return false
+	}
+
+	rt := rv.Type()
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		if field.Tag.Get(tagJSON) == bodyValue || field.Name == bodyField {
+			return true
+		}
+	}
+	return false
 }

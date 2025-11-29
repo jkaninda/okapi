@@ -66,6 +66,36 @@ const (
 	CONNECT = http.MethodConnect
 	TRACE   = http.MethodTrace
 )
+const (
+	// Tag names
+	tagRequired    = "required"
+	tagDescription = "description"
+	tagDoc         = "doc"
+	tagHeader      = "header"
+	tagForm        = "form"
+	tagQuery       = "query"
+	tagCookie      = "cookie"
+	tagPath        = "path"
+	tagParam       = "param"
+	tagJSON        = "json"
+	tagMin         = "min"
+	tagMax         = "max"
+	tagMinLength   = "minLength"
+	tagMaxLength   = "maxLength"
+	tagDefault     = "default"
+
+	// Special values
+	bodyValue = "body"
+	bodyField = "Body"
+
+	// Parameter locations
+	paramHeader = "header"
+	paramQuery  = "query"
+	paramCookie = "cookie"
+
+	// Default HTTP status
+	defaultStatus = 200
+)
 const banner = `:::::::::::::: 🦒 ::::::::::::::
-    The Okapi Web Framework 
+    	Okapi Web Framework 
 ::::::::::::::::::::::::::::::::`

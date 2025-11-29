@@ -31,9 +31,9 @@ import (
 )
 
 type User struct {
-	ID       int    `param:"id" query:"id" form:"id" json:"id" xml:"id" max:"10" `
-	Name     string `json:"name" form:"name"  max:"15"`
-	IsActive bool   `json:"is_active" query:"is_active" yaml:"isActive"`
+	ID       int    `json:"id" param:"id" xml:"id" max:"10" `
+	Name     string `json:"name" max:"25"`
+	IsActive bool   `json:"is_active"`
 }
 type Users []User
 type ErrorResponse struct {

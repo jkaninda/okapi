@@ -368,7 +368,7 @@ func (b *DocBuilder) QueryParam(name, typ, desc string, required bool) *DocBuild
 // desc: parameter description
 // required: whether the parameter is required
 // defvalue: default value to use
-func (b *DocBuilder) QueryParam(name, typ, desc string, required bool, defvalue any) *DocBuilder {
+func (b *DocBuilder) QueryParamWithDefault(name, typ, desc string, required bool, defvalue any) *DocBuilder {
 	b.options = append(b.options, DocQueryParamWithDefault(name, typ, desc, required, defvalue))
 	return b
 }
@@ -389,7 +389,7 @@ func (b *DocBuilder) Header(name, typ, desc string, required bool) *DocBuilder {
 // desc: header description
 // required: whether the header is required
 // defvalue: default value to use
-func (b *DocBuilder) Header(name, typ, desc string, required bool, defvalue any) *DocBuilder {
+func (b *DocBuilder) HeaderWithDefault(name, typ, desc string, required bool, defvalue any) *DocBuilder {
 	b.options = append(b.options, DocHeaderWithDefault(name, typ, desc, required, defvalue))
 	return b
 }
@@ -520,7 +520,7 @@ func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 // desc: parameter description
 // required: whether the parameter is required
 // defvalue: default value to use
-func DocQueryParam(name, typ, desc string, required bool, defvalue any) RouteOption {
+func DocQueryParamWithDefault(name, typ, desc string, required bool, defvalue any) RouteOption {
 	return func(r *Route) {
 		schema := getSchemaForType(typ)
 		if defvalue != nil {

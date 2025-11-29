@@ -362,6 +362,17 @@ func (b *DocBuilder) QueryParam(name, typ, desc string, required bool) *DocBuild
 	return b
 }
 
+// QueryParamWithDefault adds a documented query parameter to the route with default.
+// name: parameter name
+// typ: parameter type (e.g., "string", "int")
+// desc: parameter description
+// required: whether the parameter is required
+// defvalue: default value to use
+func (b *DocBuilder) QueryParamWithDefault(name, typ, desc string, required bool, defvalue any) *DocBuilder {
+	b.options = append(b.options, DocQueryParamWithDefault(name, typ, desc, required, defvalue))
+	return b
+}
+
 // Header adds a documented header to the route.
 // name: header name
 // typ: header value type (e.g., "string", "int")
@@ -369,6 +380,17 @@ func (b *DocBuilder) QueryParam(name, typ, desc string, required bool) *DocBuild
 // required: whether the header is required
 func (b *DocBuilder) Header(name, typ, desc string, required bool) *DocBuilder {
 	b.options = append(b.options, DocHeader(name, typ, desc, required))
+	return b
+}
+
+// HeaderWithDefault adds a documented header to the route with default.
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description
+// required: whether the header is required
+// defvalue: default value to use
+func (b *DocBuilder) HeaderWithDefault(name, typ, desc string, required bool, defvalue any) *DocBuilder {
+	b.options = append(b.options, DocHeaderWithDefault(name, typ, desc, required, defvalue))
 	return b
 }
 
@@ -489,8 +511,21 @@ func DocAutoPathParams() RouteOption {
 // desc: parameter description
 // required: whether the parameter is required
 func DocQueryParam(name, typ, desc string, required bool) RouteOption {
+	return DocQueryParamWithDefault(name, typ, desc, required, nil)
+}
+
+// DocQueryParamWithDefault adds a query parameter to the route documentation (with default if provided)
+// name: parameter name
+// typ: parameter type (e.g., "string", "int")
+// desc: parameter description
+// required: whether the parameter is required
+// defvalue: default value to use
+func DocQueryParamWithDefault(name, typ, desc string, required bool, defvalue any) RouteOption {
 	return func(r *Route) {
 		schema := getSchemaForType(typ)
+		if defvalue != nil {
+			schema.Value.Default = defvalue
+		}
 		r.queryParams = append(r.queryParams, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
@@ -509,8 +544,21 @@ func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 // desc: header description
 // required: whether the header is required
 func DocHeader(name, typ, desc string, required bool) RouteOption {
+	return DocHeaderWithDefault(name, typ, desc, required, nil)
+}
+
+// DocHeaderWithDefault adds a header parameter to the route documentation with default (if provided)
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description
+// required: whether the header is required
+// defvalue: default value to use
+func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) RouteOption {
 	return func(r *Route) {
 		schema := getSchemaForType(typ)
+		if defvalue != nil {
+			schema.Value.Default = defvalue
+		}
 		r.headers = append(r.headers, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,

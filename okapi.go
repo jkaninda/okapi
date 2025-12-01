@@ -1321,9 +1321,11 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
 //			Middlewares: []okapi.Middleware{customMiddleware}
-//	        Options: []okapi.RouteOption{
-//	            okapi.DocSummary("Example GET request"),
-//	        },
+//			OperationId: "GetExample",
+//			Summary: "Example GET request",
+//			Description: "This endpoint handles example GET requests.",
+//			Request: &RequestExample{},
+//			Response: &ResponseExample{}
 //	    },
 //	    {
 //	        Method:  "POST",

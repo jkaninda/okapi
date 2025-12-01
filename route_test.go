@@ -43,10 +43,15 @@ func (ec *ExampleController) Routes() []RouteDefinition {
 	group := &Group{Prefix: "/api"}
 	return []RouteDefinition{
 		{
-			Method:  http.MethodGet,
-			Path:    "/hello",
-			Handler: ec.Hello,
-			Group:   group,
+			Method:      http.MethodGet,
+			Path:        "/hello",
+			Handler:     ec.Hello,
+			Group:       group,
+			Summary:     "Hello, World!",
+			Description: `Hello, World!`,
+			Response:    &Book{},
+			Request:     &Book{},
+			Security:    bearerAuthSecurity,
 		},
 		{
 			Method:  http.MethodPut,

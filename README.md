@@ -1244,6 +1244,10 @@ func (bc *BookController) Routes() []okapi.RouteDefinition {
 			Path:    "/books",
 			Handler: bc.GetBooks,
 			Group:   apiGroup,
+            Summary:     "List Books",
+            Description: `Retrieve a list of all books in the inventory.`,
+            Request:     &BookRequest{}, // OpenAPI documentation
+			Response:    &BooksResponse{}, // OpenAPI documentation
 		},
 		{
 			Method:  http.MethodPost,
@@ -1251,10 +1255,10 @@ func (bc *BookController) Routes() []okapi.RouteDefinition {
 			Handler: bc.CreateBook,
 			Group:   apiGroup,
 			Middlewares: []okapi.Middleware{customMiddleware}
-			Options: []okapi.RouteOption{
-				okapi.DocSummary("Create Book"), // OpenAPI documentation
-			}, 
 			Security: bearerAuthSecurity, // Apply Bearer Auth security scheme
+            Options: []okapi.RouteOption{
+            okapi.DocSummary("Create Book"), // OpenAPI documentation
+        },
 
         },
 	}

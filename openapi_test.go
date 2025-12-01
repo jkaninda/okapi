@@ -31,6 +31,16 @@ import (
 	"testing"
 )
 
+type input struct {
+	SessionId string `header:"Session-Id"`
+	Body      string `json:"body"`
+}
+type output struct {
+	Status   int    `json:"status"`
+	ClientId string `header:"Client-Id"`
+	Body     Book   `json:"body"`
+}
+
 func TestOpenAPI(t *testing.T) {
 	o := Default()
 
@@ -53,7 +63,8 @@ func TestOpenAPI(t *testing.T) {
 	v1.Post("/books", anyHandler,
 		DocSummary("Book Summary"),
 		DocAutoPathParams(),
-		DocQueryParam("auth", "string", "auth name", true),
+		DocQueryParamWithDefault("auth", "string", "auth name", true, "defaultAuth"),
+		DocHeaderWithDefault("X-Custom-Header", "string", "A custom header", false, "defaultHeaderValue"),
 		DocBearerAuth(),
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
@@ -80,6 +91,16 @@ func TestOpenAPI(t *testing.T) {
 		DocDeprecated(),
 	)
 	v1.Delete("/books/{id}", anyHandler,
+		DocSummary("Book Summary"),
+		DocQueryParamWithDefault("id", "int", "book id", true, 1),
+		DocResponse(Book{}),
+		DocRequestBody(Book{}),
+		DocTags("Book Tags"),
+		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
+		DocDeprecated(),
+	)
+
+	v1.Get("/books/{id}/comments", anyHandler,
 		DocSummary("Book Summary"),
 		DocPathParam("id", "int", "book id"),
 		DocResponse(Book{}),
@@ -126,6 +147,12 @@ func TestOpenAPI(t *testing.T) {
 			Tags("Book Tags").
 			Response(http.StatusBadRequest, M{"": ""}).Build(),
 	)
+	// New Style
+	apiV3 := api.Group("v3")
+	apiV3.Post("/books", anyHandler).WithIO(&input{}, &output{})
+	apiV3.Put("/books", anyHandler).WithInput(&input{})
+	apiV3.Get("/books/:id", anyHandler).WithOutput(&output{})
+
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)

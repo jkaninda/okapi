@@ -96,27 +96,25 @@ func NewRoute(app *okapi.Okapi) *Route {
 // Home returns the route definition for the Home endpoint
 func (r *Route) Home() okapi.RouteDefinition {
 	return okapi.RouteDefinition{
-		Path:    "/",
-		Method:  http.MethodGet,
-		Handler: commonController.Home,
-		Group:   &okapi.Group{Prefix: "/", Tags: []string{"CommonController"}},
-		Options: []okapi.RouteOption{
-			okapi.DocSummary("Home"),
-			okapi.DocDescription("Welcome to the Okapi Web Framework!"),
-		},
+		Path:        "/",
+		Method:      http.MethodGet,
+		Handler:     commonController.Home,
+		Group:       &okapi.Group{Prefix: "/", Tags: []string{"CommonController"}},
+		Summary:     "Home Endpoint",
+		Description: "This is the home endpoint of the Okapi Web Framework example application.",
 	}
 }
 
 // Version returns the route definition for the Version endpoint
 func (r *Route) Version() okapi.RouteDefinition {
 	return okapi.RouteDefinition{
-		Path:    "/version",
-		Method:  http.MethodGet,
-		Handler: commonController.Version,
-		Group:   &okapi.Group{Prefix: "/api/v1", Tags: []string{"CommonController"}},
+		Path:        "/version",
+		Method:      http.MethodGet,
+		Handler:     commonController.Version,
+		Group:       &okapi.Group{Prefix: "/api/v1", Tags: []string{"CommonController"}},
+		Summary:     "Version Endpoint",
+		Description: "This endpoint returns the current version of the API.",
 		Options: []okapi.RouteOption{
-			okapi.DocSummary("API Version"),
-			okapi.DocDescription("Get the API version"),
 			okapi.DocResponse(okapi.M{"version": "v1"}),
 		},
 	}
@@ -135,16 +133,16 @@ func (r *Route) BookRoutes() []okapi.RouteDefinition {
 	apiGroup.Use(middlewares.CustomMiddleware)
 	return []okapi.RouteDefinition{
 		{
-			Method:  http.MethodGet,
-			Path:    "/books",
-			Handler: bookController.GetBooks,
-			Group:   apiGroup,
+			Method:      http.MethodGet,
+			Path:        "/books",
+			Handler:     bookController.GetBooks,
+			Group:       apiGroup,
+			Summary:     "Get Books",
+			Description: "Retrieve a list of books",
 			Options: []okapi.RouteOption{
-				okapi.DocSummary("Get Books"),
-				okapi.DocDescription("Retrieve a list of books"),
-				okapi.DocResponse([]models.Book{}),
 				okapi.DocResponse(http.StatusBadRequest, models.ErrorResponse{}),
 				okapi.DocResponse(http.StatusNotFound, models.ErrorResponse{}),
+				okapi.DocResponse([]models.Book{}),
 			},
 		},
 		{
@@ -153,6 +151,7 @@ func (r *Route) BookRoutes() []okapi.RouteDefinition {
 			Handler: bookController.GetBook,
 			Group:   apiGroup,
 			Options: []okapi.RouteOption{
+				// OpenAPI Documentation can be added here or using the RouteDefinition fields directly
 				okapi.DocSummary("Get Book by ID"),
 				okapi.DocDescription("Retrieve a book by its ID"),
 				okapi.DocPathParam("id", "int", "The ID of the book"),

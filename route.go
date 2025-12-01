@@ -54,9 +54,12 @@ type RouteDefinition struct {
 	//   - Perform validations based on struct tags (e.g., required, minLength, maxLength, default)
 	//   - Generate OpenAPI documentation for the request schema
 	//
+	// Note: To generate OpenAPI documentation, it is recommended to use a struct or pointer to a struct.
+	//
 	// Example:
 	//	type CreateBookInput struct {
 	// 		 Tags []string `query:"tags"`
+	//		 XApiKey string `header:"X-API-KEY" required:"true" description:"API Key"`
 	//		 Body struct {
 	// 		 	Title string `json:"title" required:"true" minLength:"5"  maxLength:"100" description:"Book title"`
 	// 		 	Price int    `json:"price" max:"5" min:"2"  yaml:"price" required:"true" description:"Book price"`
@@ -73,6 +76,8 @@ type RouteDefinition struct {
 	// It can be any type (struct, slice, map, etc.). If provided, Okapi will:
 	//   - Serialize the value into the response body (e.g., JSON)
 	//   - Generate OpenAPI documentation for the response schema
+	//
+	// Note: To generate OpenAPI documentation, it is recommended to use a struct or pointer to a struct.
 	//
 	// Example:
 	//   type BookResponse struct {

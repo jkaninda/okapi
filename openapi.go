@@ -549,18 +549,24 @@ func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 // defvalue: default value to use
 func DocQueryParamWithDefault(name, typ, desc string, required bool, defvalue any) RouteOption {
 	return func(r *Route) {
-		schema := getSchemaForType(typ)
-		if defvalue != nil {
-			// special handling for enum default
-			dv := reflect.ValueOf(defvalue)
-			if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
-				enumvals := make([]any, dv.Len())
-				for i := 0; i < dv.Len(); i++ {
-					enumvals[i] = dv.Index(i).Interface()
+		var schema *openapi3.SchemaRef
+		// accept custom schema
+		if sch, ok := defvalue.(*openapi3.SchemaRef); ok {
+			schema = sch
+		} else {
+			schema = getSchemaForType(typ)
+			if defvalue != nil {
+				// special handling for enum default
+				dv := reflect.ValueOf(defvalue)
+				if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
+					enumvals := make([]any, dv.Len())
+					for i := 0; i < dv.Len(); i++ {
+						enumvals[i] = dv.Index(i).Interface()
+					}
+					schema.Value.Enum = enumvals
+				} else {
+					schema.Value.Default = defvalue
 				}
-				schema.Value.Enum = enumvals
-			} else {
-				schema.Value.Default = defvalue
 			}
 		}
 		r.queryParams = append(r.queryParams, &openapi3.ParameterRef{
@@ -592,18 +598,24 @@ func DocHeader(name, typ, desc string, required bool) RouteOption {
 // defvalue: default value to use
 func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) RouteOption {
 	return func(r *Route) {
-		schema := getSchemaForType(typ)
-		if defvalue != nil {
-			// special handling for enum default
-			dv := reflect.ValueOf(defvalue)
-			if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
-				enumvals := make([]any, dv.Len())
-				for i := 0; i < dv.Len(); i++ {
-					enumvals[i] = dv.Index(i).Interface()
+		var schema *openapi3.SchemaRef
+		// accept custom schema
+		if sch, ok := defvalue.(*openapi3.SchemaRef); ok {
+			schema = sch
+		} else {
+			schema = getSchemaForType(typ)
+			if defvalue != nil {
+				// special handling for enum default
+				dv := reflect.ValueOf(defvalue)
+				if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
+					enumvals := make([]any, dv.Len())
+					for i := 0; i < dv.Len(); i++ {
+						enumvals[i] = dv.Index(i).Interface()
+					}
+					schema.Value.Enum = enumvals
+				} else {
+					schema.Value.Default = defvalue
 				}
-				schema.Value.Enum = enumvals
-			} else {
-				schema.Value.Default = defvalue
 			}
 		}
 		r.headers = append(r.headers, &openapi3.ParameterRef{

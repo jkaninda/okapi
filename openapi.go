@@ -49,6 +49,7 @@ const (
 	UUID     = "uuid"
 	Bool     = "bool"
 	String   = "string"
+	Enum     = "enum"
 )
 
 // RouteOption defines a function type that modifies a Route's documentation properties
@@ -359,6 +360,16 @@ func (b *DocBuilder) PathParam(name, typ, desc string) *DocBuilder {
 	return b
 }
 
+// PathParamWithDefault adds a documented path parameter to the route.
+// name: parameter name
+// typ: parameter type (e.g., "string", "int")
+// desc: parameter description
+// defvalue: default value to use
+func (b *DocBuilder) PathParamWithDefault(name, typ, desc string, defvalue any) *DocBuilder {
+	b.options = append(b.options, DocPathParamWithDefault(name, typ, desc, defvalue))
+	return b
+}
+
 // QueryParam adds a documented query parameter to the route.
 // name: parameter name
 // typ: parameter type (e.g., "string", "int")
@@ -496,8 +507,38 @@ func Description(description string) RouteOption {
 // typ: parameter type (e.g., "string", "int", "uuid")
 // desc: parameter description
 func DocPathParam(name, typ, desc string) RouteOption {
+	return DocPathParamWithDefault(name, typ, desc, nil)
+}
+
+// DocPathParamWithDefault adds a path parameter to the route documentation
+// name: parameter name
+// typ: parameter type (e.g., "string", "int", "uuid")
+// desc: parameter description
+// defvalue: default value to use.
+func DocPathParamWithDefault(name, typ, desc string, defvalue any) RouteOption {
 	return func(r *Route) {
-		schema := getSchemaForType(typ)
+
+		var schema *openapi3.SchemaRef
+		// accept custom schema
+		if sch, ok := defvalue.(*openapi3.SchemaRef); ok {
+			schema = sch
+		} else {
+			schema = getSchemaForType(typ)
+			if defvalue != nil {
+				// special handling for enum default
+				dv := reflect.ValueOf(defvalue)
+				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
+					enumvals := make([]any, dv.Len())
+					for i := 0; i < dv.Len(); i++ {
+						enumvals[i] = dv.Index(i).Interface()
+					}
+					schema.Value.Enum = enumvals
+				} else {
+					schema.Value.Default = defvalue
+				}
+			}
+		}
+
 		r.pathParams = append(r.pathParams, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
@@ -549,18 +590,24 @@ func DocQueryParam(name, typ, desc string, required bool) RouteOption {
 // defvalue: default value to use
 func DocQueryParamWithDefault(name, typ, desc string, required bool, defvalue any) RouteOption {
 	return func(r *Route) {
-		schema := getSchemaForType(typ)
-		if defvalue != nil {
-			// special handling for enum default
-			dv := reflect.ValueOf(defvalue)
-			if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
-				enumvals := make([]any, dv.Len())
-				for i := 0; i < dv.Len(); i++ {
-					enumvals[i] = dv.Index(i).Interface()
+		var schema *openapi3.SchemaRef
+		// accept custom schema
+		if sch, ok := defvalue.(*openapi3.SchemaRef); ok {
+			schema = sch
+		} else {
+			schema = getSchemaForType(typ)
+			if defvalue != nil {
+				// special handling for enum default
+				dv := reflect.ValueOf(defvalue)
+				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
+					enumvals := make([]any, dv.Len())
+					for i := 0; i < dv.Len(); i++ {
+						enumvals[i] = dv.Index(i).Interface()
+					}
+					schema.Value.Enum = enumvals
+				} else {
+					schema.Value.Default = defvalue
 				}
-				schema.Value.Enum = enumvals
-			} else {
-				schema.Value.Default = defvalue
 			}
 		}
 		r.queryParams = append(r.queryParams, &openapi3.ParameterRef{
@@ -592,18 +639,24 @@ func DocHeader(name, typ, desc string, required bool) RouteOption {
 // defvalue: default value to use
 func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) RouteOption {
 	return func(r *Route) {
-		schema := getSchemaForType(typ)
-		if defvalue != nil {
-			// special handling for enum default
-			dv := reflect.ValueOf(defvalue)
-			if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
-				enumvals := make([]any, dv.Len())
-				for i := 0; i < dv.Len(); i++ {
-					enumvals[i] = dv.Index(i).Interface()
+		var schema *openapi3.SchemaRef
+		// accept custom schema
+		if sch, ok := defvalue.(*openapi3.SchemaRef); ok {
+			schema = sch
+		} else {
+			schema = getSchemaForType(typ)
+			if defvalue != nil {
+				// special handling for enum default
+				dv := reflect.ValueOf(defvalue)
+				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
+					enumvals := make([]any, dv.Len())
+					for i := 0; i < dv.Len(); i++ {
+						enumvals[i] = dv.Index(i).Interface()
+					}
+					schema.Value.Enum = enumvals
+				} else {
+					schema.Value.Default = defvalue
 				}
-				schema.Value.Enum = enumvals
-			} else {
-				schema.Value.Default = defvalue
 			}
 		}
 		r.headers = append(r.headers, &openapi3.ParameterRef{

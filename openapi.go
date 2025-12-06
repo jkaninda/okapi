@@ -49,6 +49,7 @@ const (
 	UUID     = "uuid"
 	Bool     = "bool"
 	String   = "string"
+	Enum     = "enum"
 )
 
 // RouteOption defines a function type that modifies a Route's documentation properties
@@ -526,7 +527,7 @@ func DocPathParamWithDefault(name, typ, desc string, defvalue any) RouteOption {
 			if defvalue != nil {
 				// special handling for enum default
 				dv := reflect.ValueOf(defvalue)
-				if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
+				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
 					enumvals := make([]any, dv.Len())
 					for i := 0; i < dv.Len(); i++ {
 						enumvals[i] = dv.Index(i).Interface()
@@ -598,7 +599,7 @@ func DocQueryParamWithDefault(name, typ, desc string, required bool, defvalue an
 			if defvalue != nil {
 				// special handling for enum default
 				dv := reflect.ValueOf(defvalue)
-				if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
+				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
 					enumvals := make([]any, dv.Len())
 					for i := 0; i < dv.Len(); i++ {
 						enumvals[i] = dv.Index(i).Interface()
@@ -647,7 +648,7 @@ func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) R
 			if defvalue != nil {
 				// special handling for enum default
 				dv := reflect.ValueOf(defvalue)
-				if strings.ToLower(typ) == "enum" && dv.Kind() == reflect.Slice {
+				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
 					enumvals := make([]any, dv.Len())
 					for i := 0; i < dv.Len(); i++ {
 						enumvals[i] = dv.Index(i).Interface()

@@ -68,6 +68,7 @@ type OpenAPI struct {
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
 	SecuritySchemes SecuritySchemes
 	ExternalDocs    *ExternalDocs
+	ComponentSchemas map[string]*SchemaInfo
 }
 type SecuritySchemes []SecurityScheme
 
@@ -919,6 +920,12 @@ func (o *Okapi) buildOpenAPISpec() {
 	}
 	// Initialize schema registry for reusable components
 	schemaRegistry := make(map[string]*SchemaInfo)
+
+	// Start with registered ones first
+	for name, sinfo := range o.openAPI.ComponentSchemas {
+		schemaRegistry[name] = sinfo
+		spec.Components.Schemas[name] = sinfo.Schema
+	}
 
 	// Process all registered routes
 	for _, r := range o.routes {

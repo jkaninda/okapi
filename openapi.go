@@ -1180,8 +1180,21 @@ func (o *Okapi) sanitizeComponentName(name string) string {
 	return name
 }
 
-// reflectToSchemaWithInfo converts a Go type to an OpenAPI schema with type information
+// reflectToSchemaWithInfo uses SchemaRef or converts a Go type to an OpenAPI schema with type information
 func reflectToSchemaWithInfo(v any) *SchemaInfo {
+	// 1. if v is schemaRef or *SchemaRef use it.
+	switch sr := v.(type) {
+	case *openapi3.SchemaRef:
+		return &SchemaInfo{
+			Schema: sr,
+		}
+	case openapi3.SchemaRef:
+		return &SchemaInfo{
+			Schema: &sr,
+		}
+	}
+
+	// 2. inspect the struct
 	t := reflect.TypeOf(v)
 
 	// Handle pointers

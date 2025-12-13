@@ -898,6 +898,13 @@ type BookRequest struct {
 }
 ```
 
+```go
+type BookResponse struct {
+	Version string `header:"X-Version"`
+	Status  int
+	Body    Book
+}
+```
 ---
 
 ### 5. Registering Routes with Body Field Style
@@ -907,13 +914,14 @@ type BookRequest struct {
 ```go
 o.Post("/books", func(c okapi.Context) error {
     req := &BookRequest{}
+	// Validate request body
     if err := c.Bind(req); err != nil {
         return c.ErrorBadRequest(err)
     }
     return c.Respond(req)
 },
     okapi.Request(&BookRequest{}),  // Request body
-    okapi.Response(&BookRequest{}), // Response body
+    okapi.Response(&BookResponse{}), // Response body
 )
 ```
 

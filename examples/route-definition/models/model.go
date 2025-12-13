@@ -55,3 +55,15 @@ type UserInfo struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
 }
+
+// Example of Okapi using Body Field Style
+
+type BookUpdateRequest struct {
+	ID   int  `path:"id"`
+	Body Book `json:"body"`
+}
+type BookResponse struct {
+	RequestId string `header:"X-Request-Id"`
+	Status    int    `json:"status"`
+	Body      Book   `json:"body"`
+}

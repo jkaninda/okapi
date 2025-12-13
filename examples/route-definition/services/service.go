@@ -49,7 +49,7 @@ var (
 	ApiVersion = "V1"
 )
 
-// ****************** Controllers *****************
+// ****************** Services *****************
 
 func (hc *CommonService) Home(c okapi.Context) error {
 	return c.OK(okapi.M{"message": "Welcome to the Okapi Web Framework!"})

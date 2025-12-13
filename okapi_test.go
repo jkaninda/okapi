@@ -553,11 +553,14 @@ func (bc *BookController) Routes() []RouteDefinition {
 
 func TestWithComponentSchemaRef(t *testing.T) {
 	o := Default()
-	o.RegisterSchemas(map[string]*SchemaInfo{
+	err := o.RegisterSchemas(map[string]*SchemaInfo{
 		"fieldNames": {
 			Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema().WithEnum([]string{"fldA", "fldB"})),
 		},
 	})
+	if err != nil {
+		t.Fatalf("Failed to register schema: %v", err)
+	}
 	o.Register(RouteDefinition{
 		Method: "GET",
 		Path:   "/example",

@@ -30,9 +30,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/gorilla/mux"
-	goutils "github.com/jkaninda/go-utils"
 	"io"
 	"log"
 	"log/slog"
@@ -43,6 +40,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/gorilla/mux"
+	goutils "github.com/jkaninda/go-utils"
 )
 
 var (
@@ -1168,10 +1169,10 @@ func initConfig(options ...OptionFunc) *Okapi {
 		maxMultipartMemory: defaultMaxMemory,
 		cors:               Cors{},
 		openAPI: &OpenAPI{
-			Title:           okapiName,
-			Version:         "1.0.0",
-			Servers:         Servers{{}},
-			SecuritySchemes: SecuritySchemes{},
+			Title:            okapiName,
+			Version:          "1.0.0",
+			Servers:          Servers{{}},
+			SecuritySchemes:  SecuritySchemes{},
 			ComponentSchemas: make(map[string]*SchemaInfo),
 		},
 		openapiSpec: &openapi3.T{},

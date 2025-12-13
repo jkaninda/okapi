@@ -27,8 +27,6 @@ package okapi
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/getkin/kin-openapi/openapi3"
-	goutils "github.com/jkaninda/go-utils"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -38,6 +36,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	goutils "github.com/jkaninda/go-utils"
 )
 
 const (
@@ -66,8 +67,8 @@ type OpenAPI struct {
 	License    License // License information for the API
 	Contact    Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
-	SecuritySchemes SecuritySchemes
-	ExternalDocs    *ExternalDocs
+	SecuritySchemes  SecuritySchemes
+	ExternalDocs     *ExternalDocs
 	ComponentSchemas map[string]*SchemaInfo
 }
 type SecuritySchemes []SecurityScheme

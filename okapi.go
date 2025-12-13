@@ -30,9 +30,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/gorilla/mux"
-	goutils "github.com/jkaninda/go-utils"
 	"io"
 	"log"
 	"log/slog"
@@ -43,6 +40,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/gorilla/mux"
+	goutils "github.com/jkaninda/go-utils"
 )
 
 var (
@@ -1168,10 +1169,11 @@ func initConfig(options ...OptionFunc) *Okapi {
 		maxMultipartMemory: defaultMaxMemory,
 		cors:               Cors{},
 		openAPI: &OpenAPI{
-			Title:           okapiName,
-			Version:         "1.0.0",
-			Servers:         Servers{{}},
-			SecuritySchemes: SecuritySchemes{},
+			Title:            okapiName,
+			Version:          "1.0.0",
+			Servers:          Servers{{}},
+			SecuritySchemes:  SecuritySchemes{},
+			ComponentSchemas: make(map[string]*SchemaInfo),
 		},
 		openapiSpec: &openapi3.T{},
 	}
@@ -1346,4 +1348,19 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 //	app.Register(routes...)
 func (o *Okapi) Register(routes ...RouteDefinition) {
 	RegisterRoutes(o, routes)
+}
+
+// Register component schemas that are re-used as references.
+func (o *Okapi) RegisterSchemas(schemas map[string]*SchemaInfo) error {
+	for name, schema := range schemas {
+		if _, exists := o.openAPI.ComponentSchemas[name]; exists {
+			return fmt.Errorf("component schema with name [%s] exists", name)
+		}
+		// ensure valid type name.
+		if schema.TypeName == "" {
+			schema.TypeName = name
+		}
+		o.openAPI.ComponentSchemas[name] = schema
+	}
+	return nil
 }

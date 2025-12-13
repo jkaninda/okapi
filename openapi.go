@@ -27,8 +27,6 @@ package okapi
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/getkin/kin-openapi/openapi3"
-	goutils "github.com/jkaninda/go-utils"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -38,6 +36,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	goutils "github.com/jkaninda/go-utils"
 )
 
 const (
@@ -66,8 +67,9 @@ type OpenAPI struct {
 	License    License // License information for the API
 	Contact    Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
-	SecuritySchemes SecuritySchemes
-	ExternalDocs    *ExternalDocs
+	SecuritySchemes  SecuritySchemes
+	ExternalDocs     *ExternalDocs
+	ComponentSchemas map[string]*SchemaInfo
 }
 type SecuritySchemes []SecurityScheme
 
@@ -920,6 +922,12 @@ func (o *Okapi) buildOpenAPISpec() {
 	// Initialize schema registry for reusable components
 	schemaRegistry := make(map[string]*SchemaInfo)
 
+	// Start with registered ones first
+	for name, sinfo := range o.openAPI.ComponentSchemas {
+		schemaRegistry[name] = sinfo
+		spec.Components.Schemas[name] = sinfo.Schema
+	}
+
 	// Process all registered routes
 	for _, r := range o.routes {
 		// If route is disabled ignore it
@@ -1173,8 +1181,21 @@ func (o *Okapi) sanitizeComponentName(name string) string {
 	return name
 }
 
-// reflectToSchemaWithInfo converts a Go type to an OpenAPI schema with type information
+// reflectToSchemaWithInfo uses SchemaRef or converts a Go type to an OpenAPI schema with type information
 func reflectToSchemaWithInfo(v any) *SchemaInfo {
+	// 1. if v is schemaRef or *SchemaRef use it.
+	switch sr := v.(type) {
+	case *openapi3.SchemaRef:
+		return &SchemaInfo{
+			Schema: sr,
+		}
+	case openapi3.SchemaRef:
+		return &SchemaInfo{
+			Schema: &sr,
+		}
+	}
+
+	// 2. inspect the struct
 	t := reflect.TypeOf(v)
 
 	// Handle pointers

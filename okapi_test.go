@@ -27,7 +27,6 @@ package okapi
 import (
 	"errors"
 	"fmt"
-	"github.com/gorilla/mux"
 	"io"
 	"log/slog"
 	"net/http"
@@ -36,6 +35,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/gorilla/mux"
 )
 
 var testBaseURL = "http://localhost:8080"
@@ -547,4 +549,42 @@ func (bc *BookController) Routes() []RouteDefinition {
 			},
 		},
 	}
+}
+
+func TestWithComponentSchemaRef(t *testing.T) {
+	o := Default()
+	err := o.RegisterSchemas(map[string]*SchemaInfo{
+		"fieldNames": {
+			Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema().WithEnum([]string{"fldA", "fldB"})),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to register schema: %v", err)
+	}
+	o.Register(RouteDefinition{
+		Method: "GET",
+		Path:   "/example",
+		Options: []RouteOption{
+			DocQueryParamWithDefault("fields", "enum", "Fields", false, openapi3.NewSchemaRef("#/components/schemas/fieldNames", nil)),
+		},
+		Handler: func(c Context) error {
+			return nil
+		},
+	})
+
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
+
+	waitForServer()
+	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 }

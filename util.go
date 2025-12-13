@@ -35,7 +35,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -70,23 +69,37 @@ func normalizeRoutePath(path string) string {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
+
 	// Remove double slashes
 	path = strings.ReplaceAll(path, "//", "/")
 
 	// Convert /*any or /* to /{any:.*}
 	if strings.HasSuffix(path, "/*") {
 		path = strings.TrimSuffix(path, "/*") + "/{any:.*}"
-	} else if matched, _ := regexp.MatchString(`/\*\w+`, path); matched {
-		// Handle cases like /*any, /*path, etc.
-		re := regexp.MustCompile(`/\*\w+`)
-		path = re.ReplaceAllString(path, "/{any:.*}")
+	} else {
+		path = wildcardRegex.ReplaceAllString(path, "/{any:.*}")
 	}
 
-	// Convert path parameters from :param to {param} AFTER handling wildcards
-	re := regexp.MustCompile(`:(\w+)`)
-	path = re.ReplaceAllString(path, `{$1}`)
+	// Process each segment to convert :param or :param:type to {param}
+	segments := strings.Split(path, "/")
+	for i, segment := range segments {
+		if strings.HasPrefix(segment, ":") {
+			// Remove leading :
+			segment = strings.TrimPrefix(segment, ":")
+			// Extract only the parameter name (ignore type if present)
+			paramName := strings.SplitN(segment, ":", 2)[0]
+			segments[i] = fmt.Sprintf("{%s}", paramName)
+		} else if strings.HasPrefix(segment, "{") && strings.Contains(segment, ":") && !strings.Contains(segment, ".*") {
+			// Handle {id:int} -> {id} (but preserve {any:.*})
+			segment = strings.TrimPrefix(segment, "{")
+			segment = strings.TrimSuffix(segment, "}")
+			// Extract only the parameter name (ignore type if present)
+			paramName := strings.SplitN(segment, ":", 2)[0]
+			segments[i] = fmt.Sprintf("{%s}", paramName)
+		}
+	}
 
-	return path
+	return strings.Join(segments, "/")
 }
 
 // ValidateAddr checks if the entrypoint address is valid.

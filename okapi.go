@@ -100,6 +100,7 @@ type (
 		Name            string
 		Path            string
 		Method          string
+		docPath         string
 		chain           chain
 		tags            []string
 		operationId     string
@@ -916,10 +917,11 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 	if path == "" {
 		panic("Path cannot be empty")
 	}
-	path = normalizeRoutePath(path)
+	normalizedPath := normalizeRoutePath(path)
 	route := &Route{
 		Name:      handleName(h),
-		Path:      path,
+		Path:      normalizedPath,
+		docPath:   path,
 		Method:    method,
 		tags:      goutils.RemoveDuplicates(tags),
 		handle:    h,
@@ -933,7 +935,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 	o.routes = append(o.routes, route)
 	route.handler = route.next(h)
 	// Main handler
-	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(normalizedPath, func(w http.ResponseWriter, r *http.Request) {
 		ctx := Context{
 			request:  r,
 			response: &response{writer: w},
@@ -950,7 +952,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 		}
 	}).Methods(method)
 	// Register OPTIONS handler only once per path if CORS is enabled
-	o.registerOptionsHandler(path)
+	o.registerOptionsHandler(normalizedPath)
 	return route
 }
 

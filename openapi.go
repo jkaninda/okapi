@@ -42,15 +42,18 @@ import (
 )
 
 const (
-	Int      = "int"
-	Int64    = "int64"
-	Float    = "float"
-	DateTime = "date-time"
-	Date     = "date"
-	UUID     = "uuid"
-	Bool     = "bool"
-	String   = "string"
-	Enum     = "enum"
+	constInt      = "int"
+	constInt64    = "int64"
+	constInt32    = "int32"
+	constFloat    = "float"
+	constFloat64  = "float64"
+	constDouble   = "double"
+	constDateTime = "date-time"
+	constDate     = "date"
+	constUUID     = "uuid"
+	constBool     = "bool"
+	constString   = "string"
+	constEnum     = "enum"
 )
 
 // RouteOption defines a function type that modifies a Route's documentation properties
@@ -529,7 +532,7 @@ func DocPathParamWithDefault(name, typ, desc string, defvalue any) RouteOption {
 			if defvalue != nil {
 				// special handling for enum default
 				dv := reflect.ValueOf(defvalue)
-				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
+				if strings.ToLower(typ) == constEnum && dv.Kind() == reflect.Slice {
 					enumvals := make([]any, dv.Len())
 					for i := 0; i < dv.Len(); i++ {
 						enumvals[i] = dv.Index(i).Interface()
@@ -558,7 +561,7 @@ func DocPathParamWithDefault(name, typ, desc string, defvalue any) RouteOption {
 // It skips parameters that are already defined.
 func DocAutoPathParams() RouteOption {
 	return func(r *Route) {
-		pathParams := extractPathParams(r.Path)
+		pathParams := extractPathParams(r.docPath)
 		for _, param := range pathParams {
 			// Check if parameter already exists to avoid duplicates
 			exists := false
@@ -601,7 +604,7 @@ func DocQueryParamWithDefault(name, typ, desc string, required bool, defvalue an
 			if defvalue != nil {
 				// special handling for enum default
 				dv := reflect.ValueOf(defvalue)
-				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
+				if strings.ToLower(typ) == constEnum && dv.Kind() == reflect.Slice {
 					enumvals := make([]any, dv.Len())
 					for i := 0; i < dv.Len(); i++ {
 						enumvals[i] = dv.Index(i).Interface()
@@ -650,7 +653,7 @@ func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) R
 			if defvalue != nil {
 				// special handling for enum default
 				dv := reflect.ValueOf(defvalue)
-				if strings.ToLower(typ) == Enum && dv.Kind() == reflect.Slice {
+				if strings.ToLower(typ) == constEnum && dv.Kind() == reflect.Slice {
 					enumvals := make([]any, dv.Len())
 					for i := 0; i < dv.Len(); i++ {
 						enumvals[i] = dv.Index(i).Interface()
@@ -943,7 +946,6 @@ func (o *Okapi) buildOpenAPISpec() {
 				r.operationId = goutils.Slug(r.summary)
 			}
 		}
-
 		item := spec.Paths.Value(r.Path)
 		if item == nil {
 			item = &openapi3.PathItem{}
@@ -1221,9 +1223,9 @@ func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		schema := openapi3.NewIntegerSchema()
 		if t.Kind() == reflect.Int64 {
-			schema.Format = Int64
+			schema.Format = constInt64
 		} else {
-			schema.Format = "int32"
+			schema.Format = constInt32
 		}
 		return openapi3.NewSchemaRef("", schema)
 
@@ -1231,18 +1233,18 @@ func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 		schema := openapi3.NewIntegerSchema()
 		schema.Min = ptr(float64(0))
 		if t.Kind() == reflect.Uint64 {
-			schema.Format = "int64"
+			schema.Format = constInt64
 		} else {
-			schema.Format = "int32"
+			schema.Format = constInt32
 		}
 		return openapi3.NewSchemaRef("", schema)
 
 	case reflect.Float32, reflect.Float64:
 		schema := openapi3.NewFloat64Schema()
 		if t.Kind() == reflect.Float32 {
-			schema.Format = Float
+			schema.Format = constFloat
 		} else {
-			schema.Format = "double"
+			schema.Format = constDouble
 		}
 		return openapi3.NewSchemaRef("", schema)
 
@@ -1282,7 +1284,7 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 	// Handle special types
 	if t == reflect.TypeOf(time.Time{}) {
 		schema := openapi3.NewStringSchema()
-		schema.Format = "date-time"
+		schema.Format = constDateTime
 		return openapi3.NewSchemaRef("", schema)
 	}
 
@@ -1376,80 +1378,148 @@ func isRequiredField(field reflect.StructField) bool {
 // extractPathParams extracts path parameters from a route path
 // Supports patterns like:
 // - /users/{id} -> id (string)
+// - /users/:id -> id (string)
 // - /users/{user_id} -> user_id (string)
 // - /users/{id:int} -> id (int)
+// - /users/:id:int -> id (int)
 // - /users/{user_id:uuid} -> user_id (uuid)
 func extractPathParams(path string) []*openapi3.ParameterRef {
 	params := []*openapi3.ParameterRef{}
+	seen := map[string]struct{}{}
 
-	// Find all parameters in curly braces
-	re := regexp.MustCompile(`\{([^}]+)\}`)
-	matches := re.FindAllStringSubmatch(path, -1)
+	// {id} or {id:type}
+	braceRe := regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([^}]+))?\}`)
 
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
+	// :id or :id:type
+	colonRe := regexp.MustCompile(`:([a-zA-Z_][a-zA-Z0-9_]*)(?::([^/]+))?`)
 
-		paramDef := match[1]
-		var name, typ, description string
+	// 1 Extract { } params
+	braceMatches := braceRe.FindAllStringSubmatch(path, -1)
+	for _, match := range braceMatches {
+		name := match[1]
+		typ := ""
 
-		// Check if type is specified (e.g., {id:int} or {user_id:uuid})
-		if strings.Contains(paramDef, ":") {
-			parts := strings.SplitN(paramDef, ":", 2)
-			name = parts[0]
-			typ = parts[1]
+		if len(match) > 2 && match[2] != "" {
+			typ = normalizeType(match[2])
 		} else {
-			name = paramDef
 			typ = inferTypeFromParamName(name)
 		}
 
-		description = generateParamDescription(name, typ)
-		schema := getSchemaForType(typ)
+		seen[name] = struct{}{}
+		params = append(params, buildPathParam(name, typ))
+	}
 
-		params = append(params, &openapi3.ParameterRef{
-			Value: &openapi3.Parameter{
-				Name:        name,
-				In:          "path",
-				Required:    true,
-				Schema:      schema,
-				Description: description,
-			},
-		})
+	// 2 Remove { } segments before scanning for :params
+	cleanPath := braceRe.ReplaceAllString(path, "")
+
+	// 3 Extract :params safely
+	colonMatches := colonRe.FindAllStringSubmatch(cleanPath, -1)
+	for _, match := range colonMatches {
+		name := match[1]
+		if _, exists := seen[name]; exists {
+			continue
+		}
+
+		typ := ""
+		if len(match) > 2 && match[2] != "" {
+			typ = normalizeType(match[2])
+		} else {
+			typ = inferTypeFromParamName(name)
+		}
+
+		seen[name] = struct{}{}
+		params = append(params, buildPathParam(name, typ))
 	}
 
 	return params
 }
+func buildPathParam(name, typ string) *openapi3.ParameterRef {
+	return &openapi3.ParameterRef{
+		Value: &openapi3.Parameter{
+			Name:        name,
+			In:          "path",
+			Required:    true,
+			Schema:      getSchemaForType(typ),
+			Description: generateParamDescription(name, typ),
+		},
+	}
+}
+
+func normalizeType(t string) string {
+	switch strings.ToLower(t) {
+	case constInt, "integer":
+		return constInt
+	case constInt64:
+		return constInt64
+	case constFloat, "float32":
+		return constFloat
+	case constFloat64, "double":
+		return constFloat64
+	case constBool, "boolean":
+		return constBool
+	case constUUID:
+		return constUUID
+	case constDate:
+		return constDate
+	case "datetime", "date-time":
+		return constDateTime
+	case "string":
+		return constString
+	default:
+		return t
+	}
+}
 
 // inferTypeFromParamName attempts to infer the parameter type from its name
 func inferTypeFromParamName(name string) string {
-	name = strings.ToLower(name)
-
-	// Common ID patterns
-	if strings.HasSuffix(name, "_id") || name == "id" {
-		return UUID // Assume UUIDs for IDs
+	n := strings.ToLower(name)
+	//  Explicit identifier patterns (highest priority)
+	// id, user_id, order_id, etc.
+	if n == "id" || strings.HasSuffix(n, "_id") {
+		return constUUID
+	}
+	if strings.HasSuffix(n, "id") {
+		return constString
 	}
 
-	// Numeric patterns
-	if strings.Contains(name, "count") || strings.Contains(name, "limit") ||
-		strings.Contains(name, "offset") || strings.Contains(name, "page") ||
-		strings.Contains(name, "size") || strings.Contains(name, "number") {
-		return Int
+	// Pagination & numeric counters
+	if strings.Contains(n, "count") ||
+		strings.Contains(n, "total") ||
+		strings.Contains(n, "limit") ||
+		strings.Contains(n, "offset") ||
+		strings.Contains(n, "page") ||
+		strings.Contains(n, "size") ||
+		strings.Contains(n, "number") ||
+		strings.Contains(n, "index") {
+		return constInt
 	}
 
-	// Date patterns
-	if strings.Contains(name, "date") || strings.Contains(name, "time") {
-		return Date
+	// Date & time (timestamps)
+	if strings.Contains(n, "created_at") ||
+		strings.Contains(n, "updated_at") ||
+		strings.Contains(n, "deleted_at") ||
+		strings.HasSuffix(n, "_at") ||
+		strings.Contains(n, "timestamp") {
+		return constDateTime
 	}
 
-	// Boolean patterns
-	if strings.HasPrefix(name, "is_") || strings.HasPrefix(name, "has_") ||
-		strings.HasPrefix(name, "can_") || strings.HasPrefix(name, "should_") {
-		return Bool
+	// Pure date (not time)
+	if strings.Contains(n, "date") ||
+		strings.HasSuffix(n, "_on") {
+		return constDate
 	}
 
-	// Default to string
-	return String
+	// Boolean flags
+	if strings.HasPrefix(n, "is_") ||
+		strings.HasPrefix(n, "has_") ||
+		strings.HasPrefix(n, "can_") ||
+		strings.HasPrefix(n, "should_") ||
+		strings.HasPrefix(n, "enable") ||
+		strings.HasPrefix(n, "disable") ||
+		strings.HasPrefix(n, "active") {
+		return constBool
+	}
+	return constString
 }
 
 // generateParamDescription generates a human-readable description for a parameter
@@ -1497,15 +1567,15 @@ func getSchemaForType(typ string) *openapi3.SchemaRef {
 		return openapi3.NewSchemaRef("", openapi3.NewBoolSchema())
 	case "uuid":
 		schema := openapi3.NewStringSchema()
-		schema.Format = UUID
+		schema.Format = constUUID
 		return openapi3.NewSchemaRef("", schema)
 	case "date":
 		schema := openapi3.NewStringSchema()
-		schema.Format = Date
+		schema.Format = constDate
 		return openapi3.NewSchemaRef("", schema)
-	case "datetime", DateTime:
+	case "datetime", constDateTime:
 		schema := openapi3.NewStringSchema()
-		schema.Format = DateTime
+		schema.Format = constDateTime
 		return openapi3.NewSchemaRef("", schema)
 	default:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())

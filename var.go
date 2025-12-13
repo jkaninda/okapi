@@ -24,6 +24,9 @@
 
 package okapi
 
+import "regexp"
+
 var (
-	jwtAlgo = []string{"RS256", "HS256", "ES256"}
+	jwtAlgo       = []string{"RS256", "HS256", "ES256"}
+	wildcardRegex = regexp.MustCompile(`/\*(\w*)`)
 )

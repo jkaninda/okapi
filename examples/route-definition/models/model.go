@@ -59,8 +59,11 @@ type UserInfo struct {
 // Example of Okapi using Body Field Style
 
 type BookUpdateRequest struct {
-	ID   int  `path:"id"`
-	Body Book `json:"body"`
+	ID   int `path:"id"`
+	Body struct {
+		Name  string `json:"name"  minLength:"5" maxLength:"50" required:"true" description:"Book name"`
+		Price int    `json:"price" min:"5" required:"true" description:"Book price"`
+	} `json:"body"`
 }
 type BookResponse struct {
 	RequestId string `header:"X-Request-Id"`

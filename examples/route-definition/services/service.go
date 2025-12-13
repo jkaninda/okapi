@@ -22,10 +22,11 @@
  *  SOFTWARE.
  */
 
-package controllers
+package services
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/jkaninda/okapi"
 	"github.com/jkaninda/okapi/examples/route-definition/middlewares"
 	"github.com/jkaninda/okapi/examples/route-definition/models"
@@ -33,9 +34,9 @@ import (
 	"strconv"
 )
 
-type BookController struct{}
-type CommonController struct{}
-type AuthController struct{}
+type BookService struct{}
+type CommonService struct{}
+type AuthService struct{}
 
 var (
 	books = []*models.Book{
@@ -50,18 +51,18 @@ var (
 
 // ****************** Controllers *****************
 
-func (hc *CommonController) Home(c okapi.Context) error {
+func (hc *CommonService) Home(c okapi.Context) error {
 	return c.OK(okapi.M{"message": "Welcome to the Okapi Web Framework!"})
 }
-func (hc *CommonController) Version(c okapi.Context) error {
+func (hc *CommonService) Version(c okapi.Context) error {
 	return c.OK(okapi.M{"version": ApiVersion})
 }
-func (bc *BookController) GetBooks(c okapi.Context) error {
+func (bc *BookService) GetBooks(c okapi.Context) error {
 	// Simulate fetching books from a database
 	return c.OK(books)
 }
 
-func (bc *BookController) CreateBook(c okapi.Context) error {
+func (bc *BookService) CreateBook(c okapi.Context) error {
 	// Simulate creating a book in a database
 	book := &models.Book{}
 	err := c.Bind(book)
@@ -77,7 +78,7 @@ func (bc *BookController) CreateBook(c okapi.Context) error {
 	}
 	return c.OK(response)
 }
-func (bc *BookController) GetBook(c okapi.Context) error {
+func (bc *BookService) GetBook(c okapi.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
@@ -92,7 +93,7 @@ func (bc *BookController) GetBook(c okapi.Context) error {
 	}
 	return c.AbortNotFound("Book not found")
 }
-func (bc *BookController) DeleteBook(c okapi.Context) error {
+func (bc *BookService) DeleteBook(c okapi.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
@@ -112,9 +113,36 @@ func (bc *BookController) DeleteBook(c okapi.Context) error {
 	return c.AbortNotFound("Book not found")
 }
 
-// ******************** AuthController *****************
+// Example of Okapi using Body Field Style
 
-func (bc *AuthController) Login(c okapi.Context) error {
+func (bc *BookService) UpdateBook(c okapi.Context) error {
+	bookRequest := &models.BookUpdateRequest{}
+	if err := c.Bind(bookRequest); err != nil {
+		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+	}
+	// Simulate updating a book from a database
+	for i, book := range books {
+		if book.Id == bookRequest.ID {
+			book.Name = bookRequest.Body.Name
+			book.Price = bookRequest.Body.Price
+			books[i] = book
+			return c.Respond(&models.BookResponse{
+				RequestId: uuid.NewString(),
+				Status:    200,
+				Body:      *book,
+			})
+		}
+	}
+	return c.Respond(&models.BookResponse{
+		RequestId: uuid.NewString(),
+		Status:    404,
+	})
+
+}
+
+// ******************** AuthService *****************
+
+func (bc *AuthService) Login(c okapi.Context) error {
 	authRequest := &models.AuthRequest{}
 	err := c.Bind(authRequest)
 	if err != nil {
@@ -127,7 +155,7 @@ func (bc *AuthController) Login(c okapi.Context) error {
 	}
 	return c.OK(authResponse)
 }
-func (bc *AuthController) WhoAmI(c okapi.Context) error {
+func (bc *AuthService) WhoAmI(c okapi.Context) error {
 	// Get User Information from the context, shared by the JWT middleware using forwardClaims
 	email := c.GetString("email")
 	if email == "" {

@@ -1585,15 +1585,42 @@ func createParameter(name, location string, info fieldInfo) *openapi3.ParameterR
 	}
 }
 
+// createHeader creates an OpenAPI Response Header
+func createHeader(name string, info fieldInfo) *openapi3.HeaderRef {
+	return &openapi3.HeaderRef{
+		Value: &openapi3.Header{
+			Parameter: openapi3.Parameter{
+				Name:        name,
+				Required:    info.required,
+				Schema:      getSchemaForType(info.field.Type.Name()),
+				Description: info.description,
+			},
+		},
+	}
+}
+
 // processField processes a single struct field for parameter extraction
 func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 	sf := info.field
 
 	// Header parameter
-	if key := sf.Tag.Get(tagHeader); key != "" {
-		param := createParameter(key, paramHeader, info)
-		r.headers = append(r.headers, param)
-		return true
+	if isRequest {
+		if key := sf.Tag.Get(tagHeader); key != "" {
+			param := createParameter(key, paramHeader, info)
+			r.headers = append(r.headers, param)
+			return true
+		}
+	} else {
+		// Response Header
+		// Initialize responseHeaders map if it doesn't exist
+		if r.responseHeaders == nil {
+			r.responseHeaders = make(map[string]*openapi3.HeaderRef)
+		}
+		if key := sf.Tag.Get(tagHeader); key != "" {
+			header := createHeader(key, info)
+			r.responseHeaders[key] = header
+			return true
+		}
 	}
 
 	// Cookie parameter

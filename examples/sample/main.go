@@ -11,12 +11,12 @@ type Book struct {
 	Price int    `json:"price" max:"100" min:"5"  yaml:"price" required:"true" description:"Book price"`
 }
 type Books []Book
-type BookInput struct {
+type BookRequest struct {
 	Tags []string `query:"tags"`
 	Body Book
 }
-type BooksOutput struct {
-	Version string `header:"version"`
+type BooksResponse struct {
+	Version string `header:"X-Version"`
 	Status  int
 	Body    []Book
 }
@@ -32,12 +32,12 @@ func main() {
 	})
 	// Using Body and Status
 	o.Get("/books", func(c okapi.Context) error {
-		output := &BooksOutput{
+		output := &BooksResponse{
 			Body:    books,
 			Version: `1.0.0`,
 		}
 		return c.Respond(output)
-	}).WithOutput(&BooksOutput{})
+	}).WithOutput(&BooksResponse{})
 
 	o.Post("/books", func(c okapi.Context) error {
 		book := &Book{}
@@ -53,7 +53,7 @@ func main() {
 		okapi.OperationId("NewBook"),
 		okapi.Summary("Create a Book"),
 		okapi.Description("Create a new Book"),
-		okapi.Request(&BookInput{}),
+		okapi.Request(&BookRequest{}),
 		okapi.Response(&Book{}), // Success Response body
 	)
 	o.Get("/books/:id", func(c okapi.Context) error {

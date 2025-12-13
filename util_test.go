@@ -30,26 +30,64 @@ import (
 )
 
 func TestNormalizeRoutePath(t *testing.T) {
-	input := "/users/:id"
-	result := normalizeRoutePath(input)
-	assert.Equal(t, "/users/{id}", result)
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty path",
+			input:    "",
+			expected: "/",
+		},
+		{
+			name:     "colon param",
+			input:    "/users/:id",
+			expected: "/users/{id}",
+		},
+		{
+			name:     "colon param with type",
+			input:    "/users/:id:int",
+			expected: "/users/{id}",
+		},
+		{
+			name:     "colon param with type and trailing slash",
+			input:    "/users/:id:int/",
+			expected: "/users/{id}/",
+		},
+		{
+			name:     "brace param with type",
+			input:    "/users/{id:int}",
+			expected: "/users/{id}",
+		},
+		{
+			name:     "wildcard only",
+			input:    "/*",
+			expected: "/{any:.*}",
+		},
+		{
+			name:     "named wildcard",
+			input:    "/*any",
+			expected: "/{any:.*}",
+		},
+		{
+			name:     "custom wildcard name ignored",
+			input:    "/*path",
+			expected: "/{any:.*}",
+		},
+		{
+			name:     "mixed params and wildcard",
+			input:    "/users/:id/books/*",
+			expected: "/users/{id}/books/{any:.*}",
+		},
+	}
 
-	input = "/*"
-	result = normalizeRoutePath(input)
-	assert.Equal(t, "/{any:.*}", result)
-
-	input = "/*any"
-	result = normalizeRoutePath(input)
-	assert.Equal(t, "/{any:.*}", result)
-
-	input = "/*any"
-	result = normalizeRoutePath(input)
-	assert.Equal(t, "/{any:.*}", result)
-
-	input = "/*path"
-	result = normalizeRoutePath(input)
-	assert.Equal(t, "/{any:.*}", result)
-
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeRoutePath(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestAllowOrigin(t *testing.T) {

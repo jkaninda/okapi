@@ -169,7 +169,7 @@ func (r *Route) BookRoutes() []okapi.RouteDefinition {
 
 func (r *Route) V1BookRoutes() []okapi.RouteDefinition {
 	apiGroup := &okapi.Group{Prefix: "/api"}
-	apiV1Group := apiGroup.Group("/v1").WithTags([]string{"BookService"})
+	apiV1Group := apiGroup.Group("/v1").WithTags([]string{"V1BookService"})
 	// Apply custom middleware
 	// apiGroup.Use(middlewares.CustomMiddleware)
 	return []okapi.RouteDefinition{
@@ -188,13 +188,12 @@ func (r *Route) V1BookRoutes() []okapi.RouteDefinition {
 		},
 		{
 			Method:  http.MethodGet,
-			Path:    "/books/:id",
+			Path:    "/books/{id:int}",
 			Handler: bookService.GetBook,
 			Group:   apiV1Group,
 			Options: []okapi.RouteOption{
 				okapi.DocSummary("Get Book by ID"),
 				okapi.DocDescription("Retrieve a book by its ID"),
-				okapi.DocPathParam("id", "int", "The ID of the book"),
 				okapi.DocResponse(models.Book{}),
 				okapi.DocResponse(http.StatusBadRequest, &models.ErrorResponse{}),
 				okapi.DocResponse(http.StatusNotFound, &models.ErrorResponse{}),
@@ -208,7 +207,7 @@ func (r *Route) V1BookRoutes() []okapi.RouteDefinition {
 // AuthRoute returns the route definition for the AuthController
 func (r *Route) AuthRoute() okapi.RouteDefinition {
 	// Create a new group for the AuthController
-	apiGroup := &okapi.Group{Prefix: "/api/v1/auth", Tags: []string{"AuthController"}}
+	apiGroup := &okapi.Group{Prefix: "/api/v1/auth", Tags: []string{"AuthService"}}
 	// Apply custom middleware
 	apiGroup.Use(middlewares.CustomMiddleware)
 	return okapi.RouteDefinition{
@@ -230,7 +229,7 @@ func (r *Route) AuthRoute() okapi.RouteDefinition {
 // ************** Authenticated Routes **************
 
 func (r *Route) SecurityRoutes() []okapi.RouteDefinition {
-	coreGroup := &okapi.Group{Prefix: "/api/v1/security", Tags: []string{"SecurityController"}}
+	coreGroup := &okapi.Group{Prefix: "/api/v1/security", Tags: []string{"SecurityService"}}
 	// Apply JWT authentication middleware to the admin group
 	coreGroup.Use(middlewares.JWTAuth.Middleware)
 	// Apply custom middleware
@@ -254,7 +253,7 @@ func (r *Route) SecurityRoutes() []okapi.RouteDefinition {
 // ***************** Admin Routes *****************
 
 func (r *Route) AdminRoutes() []okapi.RouteDefinition {
-	apiGroup := &okapi.Group{Prefix: "/api/v1/admin", Tags: []string{"AdminController"}}
+	apiGroup := &okapi.Group{Prefix: "/api/v1/admin", Tags: []string{"AdminService"}}
 	// Apply JWT authentication middleware to the admin group
 	apiGroup.Use(middlewares.JWTAuth.Middleware)
 	apiGroup.Use(middlewares.CustomMiddleware)
@@ -290,7 +289,7 @@ func (r *Route) AdminRoutes() []okapi.RouteDefinition {
 		},
 		{
 			Method:      http.MethodPut,
-			Path:        "/books/:id",
+			Path:        "/books/{id:int}",
 			Handler:     bookService.UpdateBook,
 			Group:       apiGroup,
 			Summary:     "Update a book",
@@ -301,7 +300,7 @@ func (r *Route) AdminRoutes() []okapi.RouteDefinition {
 		},
 		{
 			Method:      http.MethodDelete,
-			Path:        "/books/:id",
+			Path:        "/books/{id:int}",
 			Handler:     bookService.DeleteBook,
 			Group:       apiGroup,
 			OperationId: "books/:id",

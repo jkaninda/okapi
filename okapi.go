@@ -832,61 +832,147 @@ func (o *Okapi) SetContext(ctx *Context) {
 // ********** HTTP METHODS ***************
 
 // Get registers a new GET route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Path parameters support type hints for OpenAPI documentation generation:
+//
+//   - /users/{id} or /users/:id -> "id" documented as UUID in OpenAPI
+//   - /users/{user_id} -> "user_id" documented as UUID in OpenAPI
+//   - /users/{id:int} or /users/:id:int -> "id" documented as integer in OpenAPI
+//   - /users/{user_id:uuid} -> "user_id" documented as UUID in OpenAPI
+//
+// Note: Type hints affect OpenAPI schema generation only. All parameters are
+// accessed as strings via Context.Param() at runtime.
+//
+// Example:
+//
+//	o.Get("/users/{id:int}", func(c okapi.Context) error {
+//	    userID := c.Param("id") // Returns string "123"
+//	    return c.JSON(200, okapi.M{"user_id": userID})
+//	})
 func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(GET, path, nil, h, opts...)
 }
 
 // Post registers a new POST route with the given path and handler function.
 // Returns the created *Route for possible chaining or modification.
+//
+// Commonly used for creating resources. The handler can access request body
+// via Context.Bind() or Context.Body().
+//
+// Example:
+//
+//	o.Post("/users", func(c okapi.Context) error {
+//	    var user User
+//	    if err := c.Bind(&user); err != nil {
+//	        return err
+//	    }
+//	    // Create user logic...
+//	    return c.Created(user)
+//	})
 func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(POST, path, nil, h, opts...)
 }
 
 // Put registers a new PUT route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Commonly used for replacing/updating entire resources.
+//
+// Example:
+//
+//	o.Put("/users/{id}", func(c okapi.Context) error {
+//	    id := c.Param("id")
+//	    var user User
+//	    if err := c.Bind(&user); err != nil {
+//	        return err
+//	    }
+//	    // Update user logic...
+//	    return c.JSON(200, user)
+//	})
 func (o *Okapi) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(PUT, path, nil, h, opts...)
 }
 
 // Delete registers a new DELETE route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Commonly used for removing resources.
+//
+// Example:
+//
+//	o.Delete("/users/{id}", func(c okapi.Context) error {
+//	    id := c.Param("id")
+//	    // Delete user logic...
+//	    return c.NoContent(204)
+//	})
 func (o *Okapi) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(http.MethodDelete, path, nil, h, opts...)
 }
 
 // Patch registers a new PATCH route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Commonly used for partial updates to resources.
+//
+// Example:
+//
+//	o.Patch("/users/{id}", func(c okapi.Context) error {
+//	    id := c.Param("id")
+//	    var updates map[string]any
+//	    if err := c.Bind(&updates); err != nil {
+//	        return err
+//	    }
+//	    // Partial update logic...
+//	    return c.JSON(200, updates)
+//	})
 func (o *Okapi) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(PATCH, path, nil, h, opts...)
 }
 
 // Options registers a new OPTIONS route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Commonly used for CORS preflight requests to describe communication options.
 func (o *Okapi) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(http.MethodOptions, path, nil, h, opts...)
 }
 
 // Head registers a new HEAD route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Identical to GET but without the response body, useful for checking resource
+// existence or metadata.
 func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(HEAD, path, nil, h, opts...)
 }
 
 // Connect registers a new CONNECT route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Used to establish a tunnel to the server, typically for SSL/TLS connections.
 func (o *Okapi) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(http.MethodConnect, path, nil, h, opts...)
 }
 
 // Trace registers a new TRACE route with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Performs a message loop-back test, echoing the received request.
 func (o *Okapi) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(TRACE, path, nil, h, opts...)
 }
 
 // Any registers a route that matches any HTTP method with the given path and handler function.
-// Returns the created *Route
+// Returns the created *Route for possible chaining or modification.
+//
+// Useful for handlers that need to respond to multiple HTTP methods uniformly.
+//
+// Example:
+//
+//	o.Any("/health", func(c okapi.Context) error {
+//	    return c.String(200, "OK")
+//	})
 func (o *Okapi) Any(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute("", path, nil, h, opts...)
 }

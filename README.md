@@ -177,7 +177,12 @@ func main() {
     okapi.DocResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
 
   )
-  // Start the server
+  o.Get("/books/{id:int}", func(c okapi.Context) error {
+        bookId := c.Param("id") 
+		return c.JSON(200, okapi.M{"book_id": bookId})
+	})
+
+    // Start the server
   if err := o.Start(); err != nil {
     panic(err)
   }
@@ -253,6 +258,7 @@ Okapi supports flexible and expressive route path patterns, including named para
 
 ```go
 o.Get("/books/{id}", getBook)       // Named path parameter using curly braces
+o.Get("/books/{id:int}", getBook)    // Named path parameter using curly braces, "id" documented as integer in OpenAPI
 o.Get("/books/:id", getBook)        // Named path parameter using colon prefix
 o.Get("/*", getBook)                // Catch-all wildcard (matches everything)
 o.Get("/*any", getBook)             // Catch-all with named parameter (name is ignored)
@@ -670,7 +676,7 @@ o := okapi.New(okapi.WithCors(cors))
 ### Custom Middleware
 
 ```go
-func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
+func customMiddleware(next okapi.HandleFunc) okapi.HandleFunc {
 	return func(c okapi.Context) error {
 		start := time.Now()
 		err := next(c)
@@ -901,8 +907,8 @@ type BookRequest struct {
 ```go
 type BookResponse struct {
 	Version string `header:"X-Version"`
-	Status  int
-	Body    Book
+	Status  int // Response Status Code
+	Body    Book // Response Body
 }
 ```
 ---
@@ -918,12 +924,16 @@ o.Post("/books", func(c okapi.Context) error {
     if err := c.Bind(req); err != nil {
         return c.ErrorBadRequest(err)
     }
+	// Respond
     return c.Respond(req)
 },
     okapi.Request(&BookRequest{}),  // Request body
     okapi.Response(&BookResponse{}), // Response body
 )
 ```
+
+`Respond` serializes the output struct into the HTTP response.
+It inspects struct tags to automatically set headers, cookies, and status code, and encodes the response body in the format requested by the `Accept` header.
 
 #### Using `.WithIO()` for request and response
 
@@ -1219,19 +1229,19 @@ You can define routes individually or register multiple routes at once using the
 
 ### Defining Routes with `RouteDefinition`
 
-To group and manage routes more effectively, you can define them as a slice of `okapi.RouteDefinition`. This pattern is ideal for structuring routes in controllers or service layers.
+To group and manage routes more effectively, you can define them as a slice of `okapi.RouteDefinition`. This pattern is ideal for structuring routes in controllers or services layers.
 
-#### Example: Book Controller
+#### Example: Book Service
 
 ```go
-type BookController struct{}
+type BookService struct{}
 
-func (bc *BookController) GetBooks(c okapi.Context) error {
+func (bc *BookService) GetBooks(c okapi.Context) error {
 	// Simulate fetching books from a database
 	return c.OK(okapi.M{"success": true, "message": "Books retrieved successfully"})
 }
 
-func (bc *BookController) CreateBook(c okapi.Context) error {
+func (bc *BookService) CreateBook(c okapi.Context) error {
 	// Simulate creating a book in a database
 	return c.Created(okapi.M{
 		"success": true,
@@ -1241,10 +1251,10 @@ func (bc *BookController) CreateBook(c okapi.Context) error {
 ```
 
 
-### Defining Controller Routes
+### Defining Service Routes
 
 ```go
-func (bc *BookController) Routes() []okapi.RouteDefinition {
+func (bc *BookService) BookRoutes() []okapi.RouteDefinition {
 	apiGroup := &okapi.Group{Prefix: "/api"}
 	return []okapi.RouteDefinition{
 		{
@@ -1254,8 +1264,8 @@ func (bc *BookController) Routes() []okapi.RouteDefinition {
 			Group:   apiGroup,
             Summary:     "List Books",
             Description: `Retrieve a list of all books in the inventory.`,
-            Request:     &BookRequest{}, // OpenAPI documentation
-			Response:    &BooksResponse{}, // OpenAPI documentation
+            Request:     &BookRequest{}, // OpenAPI documentation using Body field style
+			Response:    &BooksResponse{}, // OpenAPI documentation using Body field style
 		},
 		{
 			Method:  http.MethodPost,
@@ -1264,8 +1274,14 @@ func (bc *BookController) Routes() []okapi.RouteDefinition {
 			Group:   apiGroup,
 			Middlewares: []okapi.Middleware{customMiddleware}
 			Security: bearerAuthSecurity, // Apply Bearer Auth security scheme
+			// Using RouteOption
             Options: []okapi.RouteOption{
             okapi.DocSummary("Create Book"), // OpenAPI documentation
+            okapi.DocDescription("Create Book"),
+            okapi.DocRequestBody(&models.Book{}),
+            okapi.DocResponse(&models.Book{}), // Success Response
+            okapi.DocResponse(http.StatusUnauthorized, models.AuthResponse{}), // Error response
+        
         },
 
         },
@@ -1398,6 +1414,7 @@ Check out my other project — **[Goma Gateway](https://github.com/jkaninda/goma
 
 * Basic, JWT, OAuth2, LDAP, and ForwardAuth authentication
 * Caching and rate limiting
+* Canary deployment
 * Bot detection
 * Built-in load balancing
 * Simple configuration with minimal overhead

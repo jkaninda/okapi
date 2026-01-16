@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -440,6 +441,20 @@ func (c *Context) SSEvent(name string, message any) error {
 // SendSSEvent writes SSE response with an ID.
 func (c *Context) SendSSEvent(id, name string, message any) error {
 	return c.sendSSE(id, name, message)
+}
+
+// SSEStream keeps connection open for multiple messages
+func (c *Context) SSEStream(ctx context.Context, messageChan <-chan Message) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg := <-messageChan:
+			if _, err := msg.Send(c.response); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // String is an alias for Text for convenience.

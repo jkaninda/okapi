@@ -135,11 +135,21 @@ func ValidateAddr(addr string) bool {
 }
 
 func joinPaths(basePath, path string) string {
-	// Ensure both segments have exactly one slash between them
-	joined := strings.TrimRight(basePath, "/") + "/" + strings.TrimLeft(path, "/")
+	// Trim slashes from both parts
+	basePath = strings.TrimRight(basePath, "/")
+	path = strings.TrimLeft(path, "/")
 
-	// Normalize any remaining double slashes
-	joined = strings.ReplaceAll(joined, "//", "/")
+	// If path is empty, return basePath as is
+	if path == "" {
+		// Ensure leading slash
+		if !strings.HasPrefix(basePath, "/") {
+			return "/" + basePath
+		}
+		return basePath
+	}
+
+	// Join with a single slash
+	joined := basePath + "/" + path
 
 	// Ensure leading slash
 	if !strings.HasPrefix(joined, "/") {

@@ -323,7 +323,7 @@ func TestStdMiddleware(t *testing.T) {
 	waitForServer()
 
 	assertStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/", nil, nil, "", http.StatusOK)
+	assertStatus(t, "GET", "http://localhost:8080/api", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusCreated)

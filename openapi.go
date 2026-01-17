@@ -1730,12 +1730,6 @@ func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 	if isRequest {
 		if key := sf.Tag.Get(tagQuery); key != "" {
 			param := createParameter(key, paramQuery, info)
-			if deprecated := sf.Tag.Get(tagDeprecated); deprecated == constTRUE {
-				//field := v.Field(i)
-				fmt.Println(deprecated)
-
-			}
-
 			r.queryParams = append(r.queryParams, param)
 			return true
 		}

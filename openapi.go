@@ -1308,17 +1308,22 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 		if fieldName == "-" {
 			continue
 		}
+		if hidden := field.Tag.Get(tagHidden); hidden == constTRUE {
+			continue
+		}
 
 		fieldSchema := typeToSchemaWithInfo(field.Type)
 
 		// Add description from comments or tags
-		if desc := field.Tag.Get("description"); desc != "" {
+		if desc := field.Tag.Get(tagDescription); desc != "" {
 			fieldSchema.Value.Description = desc
 		}
-		if desc := field.Tag.Get("doc"); desc != "" {
+		if desc := field.Tag.Get(tagDoc); desc != "" {
 			fieldSchema.Value.Description = desc
 		}
-
+		if deprecated := field.Tag.Get(tagDeprecated); deprecated == constTRUE {
+			fieldSchema.Value.Deprecated = true
+		}
 		schema.WithProperty(fieldName, fieldSchema.Value)
 
 		// Check if field is required

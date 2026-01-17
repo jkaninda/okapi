@@ -9,6 +9,7 @@ type Book struct {
 	ID    int    `json:"id"`
 	Name  string `json:"name"  maxLength:"100" minLength:"2" required:"true" description:"Book name"`
 	Price int    `json:"price" max:"100" min:"5"  yaml:"price" required:"true" description:"Book price"`
+	Year  int    `json:"year"  yaml:"year" description:"Book price" deprecated:"true" hidden:"true"`
 }
 type Books []Book
 type BookRequest struct {
@@ -56,7 +57,7 @@ func main() {
 		okapi.Request(&BookRequest{}),
 		okapi.Response(&Book{}), // Success Response body
 	)
-	o.Get("/books/:id", func(c okapi.Context) error {
+	o.Get("/books/{id:int}", func(c okapi.Context) error {
 		id, _ := strconv.Atoi(c.Param("id"))
 		for _, book := range books {
 			if book.ID == id {

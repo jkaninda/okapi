@@ -339,6 +339,8 @@ type Book struct {
 	Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
 	// Supports both ?tags=a&tags=b and ?tags=a,b
 	Tags []string `form:"tags" query:"tags" default:"a,b"`
+    Year  int    `json:"year"  yaml:"year" description:"Book price" deprecated:"true"`
+
 }
 
 o.Post("/books", func(c okapi.Context) error {
@@ -386,16 +388,28 @@ o.Post("/books", func(c okapi.Context) error {
 
 ## Supported Sources
 
-| Source           | Tag(s)               | Notes                                                                 |
-|------------------|----------------------|-----------------------------------------------------------------------|
-| Path parameters  | `path`, `param`      | Extracted from URL path variables (e.g. `/books/:id`, `/books/{id}`). |
-| Query parameters | `query`              | Automatically parses arrays (`?tags=a&tags=b` or `?tags=a,b`).        |
-| Headers          | `header`             | Reads values from HTTP headers.                                       |
-| Cookies          | `cookie`             | Reads cookie values.                                                  |
-| Form fields      | `form`               | Supports both standard and multipart forms (file uploads).            |
-| JSON body        | `json`               | Automatically decoded if `Content-Type: application/json`.            |
-| XML body         | `xml`                | Automatically decoded if `Content-Type: application/xml`.             |
-| OpenAPI metadata | `description`, `doc` | Used for generated OpenAPI documentation.                             |
+
+| Source           | Tag(s)          | Description                                                                                   |
+|------------------|-----------------|-----------------------------------------------------------------------------------------------|
+| Path parameters  | `path`, `param` | Extracted from path variables (e.g. `/books/:id` or `/books/{id:int}`).                       |
+| Query parameters | `query`         | Parses query strings; supports repeated arrays (`?tags=a&tags=b`) and comma-separated values. |
+| Headers          | `header`        | Reads values from HTTP request headers.                                                       |
+| Cookies          | `cookie`        | Reads values from cookies.                                                                    |
+| Form fields      | `form`          | Supports both `application/x-www-form-urlencoded` and `multipart/form-data` (file uploads).   |
+| JSON body        | `json`          | Decodes when `Content-Type: application/json`.                                                |
+| XML body         | `xml`           | Decodes when `Content-Type: application/xml`.                                                 |
+
+### OpenAPI & Documentation Tags
+
+These tags influence generated OpenAPI documentation:
+
+| Tag(s)               | Description                                                  |
+|----------------------|--------------------------------------------------------------|
+| `description`, `doc` | Adds documentation metadata to the field.                    |
+| `deprecated:"true"`  | Marks the field as deprecated in OpenAPI.                    |
+| `hidden:"true"`      | Excludes the field from the generated OpenAPI documentation. |
+
+
 
 ---
 

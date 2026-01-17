@@ -851,7 +851,7 @@ func (o *Okapi) SetContext(ctx *Context) {
 //	    return c.JSON(200, okapi.M{"user_id": userID})
 //	})
 func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(GET, path, nil, h, opts...)
+	return o.addRoute(methodGet, path, nil, h, opts...)
 }
 
 // Post registers a new POST route with the given path and handler function.
@@ -871,7 +871,7 @@ func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	    return c.Created(user)
 //	})
 func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(POST, path, nil, h, opts...)
+	return o.addRoute(methodPost, path, nil, h, opts...)
 }
 
 // Put registers a new PUT route with the given path and handler function.
@@ -891,7 +891,7 @@ func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	    return c.JSON(200, user)
 //	})
 func (o *Okapi) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(PUT, path, nil, h, opts...)
+	return o.addRoute(methodPut, path, nil, h, opts...)
 }
 
 // Delete registers a new DELETE route with the given path and handler function.
@@ -927,7 +927,7 @@ func (o *Okapi) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	    return c.JSON(200, updates)
 //	})
 func (o *Okapi) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(PATCH, path, nil, h, opts...)
+	return o.addRoute(methodPatch, path, nil, h, opts...)
 }
 
 // Options registers a new OPTIONS route with the given path and handler function.
@@ -944,7 +944,7 @@ func (o *Okapi) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
 // Identical to GET but without the response body, useful for checking resource
 // existence or metadata.
 func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(HEAD, path, nil, h, opts...)
+	return o.addRoute(methodHead, path, nil, h, opts...)
 }
 
 // Connect registers a new CONNECT route with the given path and handler function.
@@ -960,7 +960,7 @@ func (o *Okapi) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
 //
 // Performs a message loop-back test, echoing the received request.
 func (o *Okapi) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(TRACE, path, nil, h, opts...)
+	return o.addRoute(methodTrace, path, nil, h, opts...)
 }
 
 // Any registers a route that matches any HTTP method with the given path and handler function.
@@ -1133,16 +1133,16 @@ func (o *Okapi) registerOptionsHandler(path string) {
 			}
 
 			header := w.Header()
-			header.Set(AccessControlAllowOrigin, origin)
+			header.Set(constAccessControlAllowOrigin, origin)
 
 			if o.cors.AllowCredentials {
-				header.Set(AccessControlAllowCredentials, "true")
+				header.Set(constAccessControlAllowCredentials, "true")
 			}
 
 			if len(o.cors.AllowedHeaders) > 0 {
-				header.Set(AccessControlAllowHeaders, strings.Join(o.cors.AllowedHeaders, ", "))
+				header.Set(constAccessControlAllowHeaders, strings.Join(o.cors.AllowedHeaders, ", "))
 			} else if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-				header.Set(AccessControlAllowHeaders, reqHeaders)
+				header.Set(constAccessControlAllowHeaders, reqHeaders)
 			}
 
 			var methods []string
@@ -1152,17 +1152,17 @@ func (o *Okapi) registerOptionsHandler(path string) {
 				}
 			}
 			if len(o.cors.AllowMethods) > 0 {
-				header.Set(AccessControlAllowMethods, strings.Join(o.cors.AllowMethods, ", "))
+				header.Set(constAccessControlAllowMethods, strings.Join(o.cors.AllowMethods, ", "))
 			} else if len(methods) > 0 {
-				header.Set(AccessControlAllowMethods, strings.Join(methods, ", "))
+				header.Set(constAccessControlAllowMethods, strings.Join(methods, ", "))
 			}
 
 			if len(o.cors.ExposeHeaders) > 0 {
-				header.Set(AccessControlExposeHeaders, strings.Join(o.cors.ExposeHeaders, ", "))
+				header.Set(constAccessControlExposeHeaders, strings.Join(o.cors.ExposeHeaders, ", "))
 			}
 
 			if o.cors.MaxAge > 0 {
-				header.Set(AccessControlMaxAge, strconv.Itoa(o.cors.MaxAge))
+				header.Set(constAccessControlMaxAge, strconv.Itoa(o.cors.MaxAge))
 			}
 
 			w.WriteHeader(http.StatusNoContent)
@@ -1407,22 +1407,22 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
 //
 //	routes := []okapi.RouteDefinition{
 //	    {
-//	        Method:  "GET",
+//	        Method:  "POST",
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
 //			Middlewares: []okapi.Middleware{customMiddleware}
-//			OperationId: "GetExample",
-//			Summary: "Example GET request",
-//			Description: "This endpoint handles example GET requests.",
+//			OperationId: "PostExample",
+//			Summary: "Example POST request",
+//			Description: "This endpoint handles example POST request.",
 //			Request: &RequestExample{},
 //			Response: &ResponseExample{}
 //	    },
 //	    {
-//	        Method:  "POST",
+//	        Method:  "GET",
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
 //	        Options: []okapi.RouteOption{
-//	            okapi.DocSummary("Example POST request"),
+//	            okapi.DocSummary("Example GET request"),
 //	        },
 //	    	Security: Security: []map[string][]string{
 //				{
@@ -1438,7 +1438,7 @@ func (o *Okapi) Register(routes ...RouteDefinition) {
 	RegisterRoutes(o, routes)
 }
 
-// Register component schemas that are re-used as references.
+// RegisterSchemas registers component schemas that are re-used as references.
 func (o *Okapi) RegisterSchemas(schemas map[string]*SchemaInfo) error {
 	for name, schema := range schemas {
 		if _, exists := o.openAPI.ComponentSchemas[name]; exists {

@@ -176,47 +176,47 @@ func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *
 
 // Get registers a GET route within the group with the given path and handler.
 func (g *Group) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(GET, path, h, opts...)
+	return g.handle(methodGet, path, h, opts...)
 }
 
 // Post registers a POST route within the group with the given path and handler.
 func (g *Group) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(POST, path, h, opts...)
+	return g.handle(methodPost, path, h, opts...)
 }
 
 // Put registers a PUT route within the group with the given path and handler.
 func (g *Group) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(PUT, path, h, opts...)
+	return g.handle(methodPut, path, h, opts...)
 }
 
 // Delete registers a DELETE route within the group with the given path and handler.
 func (g *Group) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(DELETE, path, h, opts...)
+	return g.handle(methodDelete, path, h, opts...)
 }
 
 // Patch registers a PATCH route within the group with the given path and handler.
 func (g *Group) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(PATCH, path, h, opts...)
+	return g.handle(methodPatch, path, h, opts...)
 }
 
 // Options registers an OPTIONS route within the group with the given path and handler.
 func (g *Group) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(OPTIONS, path, h, opts...)
+	return g.handle(methodOptions, path, h, opts...)
 }
 
 // Head registers a HEAD route within the group with the given path and handler.
 func (g *Group) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(HEAD, path, h, opts...)
+	return g.handle(methodHead, path, h, opts...)
 }
 
 // Trace registers a TRACE route within the group with the given path and handler.
 func (g *Group) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(TRACE, path, h, opts...)
+	return g.handle(methodTrace, path, h, opts...)
 }
 
 // Connect registers a CONNECT route within the group with the given path and handler.
 func (g *Group) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return g.handle(CONNECT, path, h, opts...)
+	return g.handle(methodConnect, path, h, opts...)
 }
 
 // Group creates a nested subgroup with an additional path segment and optional middlewares.

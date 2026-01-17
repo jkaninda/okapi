@@ -280,7 +280,7 @@ func (c *Context) AcceptLanguage() []string {
 
 // ContentType returns the Content-Type header value.
 func (c *Context) ContentType() string {
-	return c.request.Header.Get(ContentTypeHeader)
+	return c.request.Header.Get(constContentTypeHeader)
 }
 
 // Form retrieves a form value after parsing the form data.
@@ -374,7 +374,7 @@ func (c *Context) WriteStatus(code int) {
 // writeResponse is a helper for writing responses with common headers and status.
 // Takes care of content type, status code, and error handling.
 func (c *Context) writeResponse(code int, contentType string, writeFunc func() error) error {
-	c.response.Header().Set(ContentTypeHeader, contentType)
+	c.response.Header().Set(constContentTypeHeader, contentType)
 	c.response.WriteHeader(code)
 	if err := writeFunc(); err != nil {
 		http.Error(c.response, err.Error(), http.StatusInternalServerError)
@@ -512,7 +512,7 @@ func (c *Context) renderHTML(code int, tmpl *template.Template, data any) error 
 
 // Redirect sends a redirect response to the specified location.
 func (c *Context) Redirect(code int, location string) {
-	c.SetHeader(LocationHeader, location)                         // Set Location header
+	c.SetHeader(constLocationHeader, location)                    // Set Location header
 	c.WriteStatus(code)                                           // Write status code
 	_, _ = fmt.Fprintf(c.response, "Redirecting to %s", location) // Optional message
 }

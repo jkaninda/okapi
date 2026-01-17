@@ -136,7 +136,7 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 // validateField performs tag-based validations: required, min/max, length constraints.
 func (c *Context) validateField(field reflect.Value, sf reflect.StructField) error {
 	// Required
-	if sf.Tag.Get(tagRequired) == TRUE && isEmptyValue(field) {
+	if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
 		return fmt.Errorf("field %s is required", sf.Name)
 	}
 
@@ -176,7 +176,7 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 		sf := t.Field(i)
 
 		// Required validation
-		if sf.Tag.Get(tagRequired) == TRUE && isEmptyValue(field) {
+		if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
 			return fmt.Errorf("field %s.%s is required", parentField.Name, sf.Name)
 		}
 

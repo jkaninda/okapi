@@ -1002,19 +1002,19 @@ func (o *Okapi) buildOpenAPISpec() {
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {
-		case GET:
+		case methodGet:
 			item.Get = op
-		case POST:
+		case methodPost:
 			item.Post = op
-		case PUT:
+		case methodPut:
 			item.Put = op
-		case DELETE:
+		case methodDelete:
 			item.Delete = op
-		case PATCH:
+		case methodPatch:
 			item.Patch = op
-		case HEAD:
+		case methodHead:
 			item.Head = op
-		case OPTIONS:
+		case methodOptions:
 			item.Options = op
 		}
 	}
@@ -1658,7 +1658,7 @@ func extractFieldInfo(field reflect.StructField) fieldInfo {
 	}
 	return fieldInfo{
 		field:       field,
-		required:    field.Tag.Get(tagRequired) == TRUE,
+		required:    field.Tag.Get(tagRequired) == constTRUE,
 		description: description,
 	}
 }

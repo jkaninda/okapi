@@ -92,9 +92,18 @@ func TestNormalizeRoutePath(t *testing.T) {
 
 func TestAllowOrigin(t *testing.T) {
 	origin := "http://localhost"
-	origins := []string{"https://test/com", "https:example.com", "http://localhost"}
+	origins := make([]string, 0, 4)
+	origins = append(origins,
+		"https://test/com",
+		"https:example.com",
+		"http://localhost",
+	)
 
 	result := allowedOrigin(origins, origin)
+	assert.Equal(t, true, result)
+
+	origins = append(origins, "*")
+	result = allowedOrigin(origins, origin)
 	assert.Equal(t, true, result)
 
 	origins = append(origins, "*")

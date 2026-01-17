@@ -164,23 +164,23 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 		if group == nil {
 			// Create on root Okapi instance
 			switch strings.ToUpper(r.Method) {
-			case GET:
+			case methodGet:
 				o.Get(r.Path, r.Handler, r.Options...)
-			case POST:
+			case methodPost:
 				o.Post(r.Path, r.Handler, r.Options...)
-			case PUT:
+			case methodPut:
 				o.Put(r.Path, r.Handler, r.Options...)
-			case DELETE:
+			case methodDelete:
 				o.Delete(r.Path, r.Handler, r.Options...)
-			case PATCH:
+			case methodPatch:
 				o.Patch(r.Path, r.Handler, r.Options...)
-			case HEAD:
+			case methodHead:
 				o.Head(r.Path, r.Handler, r.Options...)
-			case OPTIONS:
+			case methodOptions:
 				o.Options(r.Path, r.Handler, r.Options...)
-			case TRACE:
+			case methodTrace:
 				o.Trace(r.Path, r.Handler, r.Options...)
-			case CONNECT:
+			case methodConnect:
 				o.Connect(r.Path, r.Handler, r.Options...)
 			default:
 				panic("unsupported method: " + r.Method)
@@ -191,23 +191,23 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 			group.okapi = o
 		}
 		switch strings.ToUpper(r.Method) {
-		case GET:
+		case methodGet:
 			group.Get(r.Path, r.Handler, r.Options...)
-		case POST:
+		case methodPost:
 			group.Post(r.Path, r.Handler, r.Options...)
-		case PUT:
+		case methodPut:
 			group.Put(r.Path, r.Handler, r.Options...)
-		case DELETE:
+		case methodDelete:
 			group.Delete(r.Path, r.Handler, r.Options...)
-		case PATCH:
+		case methodPatch:
 			group.Patch(r.Path, r.Handler, r.Options...)
-		case HEAD:
+		case methodHead:
 			group.Head(r.Path, r.Handler, r.Options...)
-		case OPTIONS:
+		case methodOptions:
 			group.Options(r.Path, r.Handler, r.Options...)
-		case TRACE:
+		case methodTrace:
 			group.Trace(r.Path, r.Handler, r.Options...)
-		case CONNECT:
+		case methodConnect:
 			group.Connect(r.Path, r.Handler, r.Options...)
 		default:
 			panic("unsupported method: " + r.Method)

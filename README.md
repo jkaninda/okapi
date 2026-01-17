@@ -401,20 +401,32 @@ o.Post("/books", func(c okapi.Context) error {
 
 ## Validation and Default Values
 
-Okapi supports declarative validation and default value assignment through struct tags.
+Okapi provides declarative validation and automatic default value assignment using struct tags. This allows developers to enforce constraints on input data and ensure fields have sensible defaults.
 
-### Validation Semantics
+### Basic Validation Tags
 
-| Field Type | Tag               | Description                       |
-|------------|-------------------|-----------------------------------|
-| `string`   | `minLength:"10"`  | Minimum string length (10 chars). |
-| `string`   | `maxLength:"50"`  | Maximum string length (50 chars). |
-| `number`   | `min:"5"`         | Minimum numeric value.            |
-| `number`   | `max:"100"`       | Maximum numeric value.            |
-| `any`      | `default:"..."`   | Default value if field is empty.  |
-| `any`      | `required:"true"` | Field must be provided.           |
+| Field Type | Tag               | Description                                       |
+|------------|-------------------|---------------------------------------------------|
+| `string`   | `minLength:"10"`  | Ensures the string has at least 10 characters.    |
+| `string`   | `maxLength:"50"`  | Ensures the string does not exceed 50 characters. |
+| `number`   | `min:"5"`         | Ensures the number is at least 5.                 |
+| `number`   | `max:"100"`       | Ensures the number does not exceed 100.           |
+| `any`      | `default:"..."`   | Assigns a default value if the field is empty.    |
+| `any`      | `required:"true"` | Marks the field as mandatory.                     |
+| `any`      | `format:""`       | Enables format validation for the field.          |
 
----
+### Data Type & Format Validation
+
+| Field Type  | Tag / Attribute                               | Description                                            |
+|-------------|-----------------------------------------------|--------------------------------------------------------|
+| `date`      | `format:"date"`                               | Validates the field as a date (YYYY-MM-DD).            |
+| `date-time` | `format:"date-time"`                          | Validates the field as a date and time (RFC3339).      |
+| `email`     | `format:"email"`                              | Validates the field as a valid email address.          |
+| `duration`  | `format:"duration"`                           | Validates the field as a Go duration (e.g., `1h30m`).  |
+| `regex`     | `format:"regex" pattern="^\+?[1-9]\d{1,14}$"` | Validates the field using a custom regular expression. |
+| `enum`      | `enum:"pending,paid,canceled"`                | Restricts the field to one of the listed values.       |
+
+
 
 ## Response Struct Binding
 

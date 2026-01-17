@@ -87,7 +87,6 @@ const (
 	formatIPv6     = "ipv6"
 	formatUUID     = "uuid"
 	formatRegex    = "regex"
-	
 	// Special values
 	bodyValue = "body"
 	bodyField = "Body"

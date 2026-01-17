@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -120,41 +121,48 @@ type RouteDefinition struct {
 //
 // Example:
 //
-//	routes := []RouteDefinition{
-//	    {
-//	        Method:  "GET",
-//	        Path:    "/example",
-//	        Handler: exampleHandler,
-//	        Options: []okapi.RouteOption{
-//	            okapi.DocSummary("Example GET request"),
-//	        },
-//	        Group:   &okapi.Group{Prefix: "/api/v1", Tags: []string{"Example"}},
-//	    },
-//	    {
-//	        Method:  "POST",
-//	        Path:    "/example",
-//	        Handler: exampleHandler,
+//	routes := []okapi.RouteDefinition{
+//		{
+//			Method:  "GET",
+//			Path:    "/example",
+//			Handler: exampleHandler,
+//			OperationId: "get-example",
+//			Summary: "Example GET request",
+//			Request: nil,
+//			Response: &ExampleResponse{},
+//			Group:   &okapi.Group{Prefix: "/api/v1", Tags: []string{"Example"}},
+//		},
+//		{
+//			Method:  "POST",
+//			Path:    "/example",
+//			Handler: exampleHandler,
 //			Middlewares: []okapi.Middleware{customMiddleware}
-//	        Options: []okapi.RouteOption{
-//	            okapi.DocSummary("Example POST request"),
-//	        },
-//	    	Security: Security: []map[string][]string{
-//				{
-//					"bearerAuth": {},
-//				},
+//			Options: []okapi.RouteOption{
+//			okapi.DocSummary("Example POST request"),
+//			okapi.Request(&ExampleRequest{}),
+//			okapi.Response(&ExampleResponse{}),
+//		},
+//		Security: Security: []map[string][]string{
+//			{
+//			"bearerAuth": {},
 //			},
-//	    },
+//		},
+//		},
 //	}
+//
 //	// Create a new Okapi instance
 //	app := okapi.New()
 //	okapi.RegisterRoutes(app, routes)
 func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 	for _, r := range routes {
-		if r.Path == "" || r.Method == "" {
-			panic("invalid route definition: path and method must ve specified")
+		if r.Path == "" && r.Group == nil {
+			panic("okapi: invalid route definition — either Path or Group must be specified")
+		}
+		if r.Method == "" {
+			panic(fmt.Sprintf("okapi: invalid route definition — missing HTTP method for path=%q", r.Path))
 		}
 		if r.Handler == nil {
-			panic("invalid route definition: handler must be specified")
+			panic(fmt.Sprintf("okapi: invalid route definition — missing handler for method=%q path=%q", r.Method, r.Path))
 		}
 		group := r.Group
 		for _, mid := range r.Middlewares {
@@ -183,7 +191,7 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 			case methodConnect:
 				o.Connect(r.Path, r.Handler, r.Options...)
 			default:
-				panic("unsupported method: " + r.Method)
+				panic(fmt.Sprintf("okapi: unsupported HTTP method %q for path=%q", r.Method, r.Path))
 			}
 			continue
 		}
@@ -210,7 +218,7 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 		case methodConnect:
 			group.Connect(r.Path, r.Handler, r.Options...)
 		default:
-			panic("unsupported method: " + r.Method)
+			panic(fmt.Sprintf("okapi: unsupported HTTP method %q for path=%q", r.Method, r.Path))
 		}
 	}
 }

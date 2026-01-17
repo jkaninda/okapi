@@ -533,6 +533,14 @@ func (bc *BookController) Routes() []RouteDefinition {
 	return []RouteDefinition{
 		{
 			Method:      http.MethodGet,
+			Path:        "",
+			OperationId: "Get",
+			Handler:     bc.GetBooks,
+			Group:       coreGroup,
+			Request:     nil,
+			Response:    &Book{},
+		}, {
+			Method:      http.MethodGet,
 			Path:        "/books",
 			OperationId: "GetBooks",
 			Handler:     bc.GetBooks,

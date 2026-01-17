@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -279,7 +280,7 @@ func (c *Context) AcceptLanguage() []string {
 
 // ContentType returns the Content-Type header value.
 func (c *Context) ContentType() string {
-	return c.request.Header.Get(ContentTypeHeader)
+	return c.request.Header.Get(constContentTypeHeader)
 }
 
 // Form retrieves a form value after parsing the form data.
@@ -373,7 +374,7 @@ func (c *Context) WriteStatus(code int) {
 // writeResponse is a helper for writing responses with common headers and status.
 // Takes care of content type, status code, and error handling.
 func (c *Context) writeResponse(code int, contentType string, writeFunc func() error) error {
-	c.response.Header().Set(ContentTypeHeader, contentType)
+	c.response.Header().Set(constContentTypeHeader, contentType)
 	c.response.WriteHeader(code)
 	if err := writeFunc(); err != nil {
 		http.Error(c.response, err.Error(), http.StatusInternalServerError)
@@ -442,6 +443,20 @@ func (c *Context) SendSSEvent(id, name string, message any) error {
 	return c.sendSSE(id, name, message)
 }
 
+// SSEStream keeps connection open for multiple messages
+func (c *Context) SSEStream(ctx context.Context, messageChan <-chan Message) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg := <-messageChan:
+			if _, err := msg.Send(c.response); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 // String is an alias for Text for convenience.
 func (c *Context) String(code int, data any) error {
 	return c.Text(code, data)
@@ -497,7 +512,7 @@ func (c *Context) renderHTML(code int, tmpl *template.Template, data any) error 
 
 // Redirect sends a redirect response to the specified location.
 func (c *Context) Redirect(code int, location string) {
-	c.SetHeader(LocationHeader, location)                         // Set Location header
+	c.SetHeader(constLocationHeader, location)                    // Set Location header
 	c.WriteStatus(code)                                           // Write status code
 	_, _ = fmt.Fprintf(c.response, "Redirecting to %s", location) // Optional message
 }

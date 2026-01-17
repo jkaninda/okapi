@@ -448,7 +448,7 @@ func (c *Context) applyDefaultAndValidate(valField reflect.Value, field reflect.
 	}
 
 	// Only check required if no value was set and field is still zero after potential default application
-	if !wasSet && field.Tag.Get("required") == TRUE && isEmptyValue(valField) {
+	if !wasSet && field.Tag.Get("required") == constTRUE && isEmptyValue(valField) {
 		return fmt.Errorf("field %s is required", field.Name)
 	}
 
@@ -545,7 +545,7 @@ func (c *Context) bindFromFields(out any) error {
 		}
 
 		// Check required only if no value was set and field is still zero
-		if !wasSet && field.Tag.Get("required") == TRUE && isEmptyValue(valField) {
+		if !wasSet && field.Tag.Get("required") == constTRUE && isEmptyValue(valField) {
 			return fmt.Errorf("field %s is required", field.Name)
 		}
 	}

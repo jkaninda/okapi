@@ -47,42 +47,42 @@ type SendFunc func(data any, eventType string) (string, error)
 
 // Send writes an SSE message to the response writer.
 func (m *Message) Send(w http.ResponseWriter) (string, error) {
-	setSSEHeaders(w)
+	m.setSSEHeaders(w)
 	// Generate ID if not set
 	if m.ID == "" {
 		m.ID = strings.ReplaceAll(uuid.New().String(), "-", "")
 	}
-	if err := writeID(w, m.ID); err != nil {
+	if err := m.writeID(w, m.ID); err != nil {
 		return "", err
 	}
-	if err := writeEvent(w, m.Event); err != nil {
+	if err := m.writeEvent(w, m.Event); err != nil {
 		return "", err
 	}
-	if err := writeRetry(w, m.Retry); err != nil {
+	if err := m.writeRetry(w, m.Retry); err != nil {
 		return "", err
 	}
-	if err := writeData(w, m.Data); err != nil {
+	if err := m.writeData(w, m.Data); err != nil {
 		return "", err
 	}
 
-	flush(w)
+	m.flush(w)
 
 	return m.ID, nil
 }
 
 // Close flushes the response writer to ensure data is sent to the client.
 func (m *Message) Close(w http.ResponseWriter) error {
-	flush(w)
+	m.flush(w)
 	return nil
 }
 
-func flush(w http.ResponseWriter) {
+func (m *Message) flush(w http.ResponseWriter) {
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}
 }
 
-func writeID(w http.ResponseWriter, id string) error {
+func (m *Message) writeID(w http.ResponseWriter, id string) error {
 	if id == "" {
 		return nil
 	}
@@ -90,7 +90,7 @@ func writeID(w http.ResponseWriter, id string) error {
 	return err
 }
 
-func writeEvent(w http.ResponseWriter, eventType string) error {
+func (m *Message) writeEvent(w http.ResponseWriter, eventType string) error {
 	if eventType == "" {
 		return nil
 	}
@@ -98,7 +98,7 @@ func writeEvent(w http.ResponseWriter, eventType string) error {
 	return err
 }
 
-func writeRetry(w http.ResponseWriter, retry uint) error {
+func (m *Message) writeRetry(w http.ResponseWriter, retry uint) error {
 	if retry <= 0 {
 		return nil
 	}
@@ -106,7 +106,7 @@ func writeRetry(w http.ResponseWriter, retry uint) error {
 	return err
 }
 
-func writeData(w http.ResponseWriter, data any) error {
+func (m *Message) writeData(w http.ResponseWriter, data any) error {
 	var output string
 
 	switch v := data.(type) {
@@ -130,11 +130,11 @@ func writeData(w http.ResponseWriter, data any) error {
 	return err
 }
 
-func setSSEHeaders(w http.ResponseWriter) {
+func (m *Message) setSSEHeaders(w http.ResponseWriter) {
 	header := w.Header()
-	header["Content-Type"] = []string{"text/event-stream"}
+	header.Set("Content-Type", "text/event-stream")
+	header.Set("Connection", "keep-alive")
 	if _, ok := header["Cache-Control"]; !ok {
-		header["Cache-Control"] = []string{"no-cache"}
+		header.Set("Cache-Control", "no-cache")
 	}
-
 }

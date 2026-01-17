@@ -27,44 +27,35 @@ package okapi
 import "net/http"
 
 const (
-	defaultMaxMemory  = 32 << 20 // 32 MB
-	ContentTypeHeader = "Content-Type"
-	AcceptHeader      = "Accept"
-	LocationHeader    = "Location"
-	okapiName         = "Okapi"
-	TRUE              = "true"
+	defaultMaxMemory       = 32 << 20 // 32 MB
+	constContentTypeHeader = "Content-Type"
+	constAcceptHeader      = "Accept"
+	constLocationHeader    = "Location"
+	okapiName              = "Okapi"
+	constTRUE              = "true"
 
-	openApiVersion                = "3.0.0"
-	openApiDocPrefix              = "/docs"
-	openApiDocPath                = "/openapi.json"
-	AccessControlAllowOrigin      = "Access-Control-Allow-Origin"
-	AccessControlAllowHeaders     = "Access-Control-Allow-Headers"
-	AccessControlExposeHeaders    = "Access-Control-Expose-Headers"
-	AccessControlAllowMethods     = "Access-Control-Allow-Methods"
-	AccessControlMaxAge           = "Access-Control-Max-Age"
-	AccessControlAllowCredentials = "Access-Control-Allow-Credentials"
-)
-
-// Constants for HTTP StatusCode Codes
-const (
-	StatusNotFound            = http.StatusNotFound
-	StatusBadRequest          = http.StatusBadRequest
-	StatusUnauthorized        = http.StatusUnauthorized
-	StatusForbidden           = http.StatusForbidden
-	StatusInternalServerError = http.StatusInternalServerError
+	openApiVersion                     = "3.0.0"
+	openApiDocPrefix                   = "/docs"
+	openApiDocPath                     = "/openapi.json"
+	constAccessControlAllowOrigin      = "Access-Control-Allow-Origin"
+	constAccessControlAllowHeaders     = "Access-Control-Allow-Headers"
+	constAccessControlExposeHeaders    = "Access-Control-Expose-Headers"
+	constAccessControlAllowMethods     = "Access-Control-Allow-Methods"
+	constAccessControlMaxAge           = "Access-Control-Max-Age"
+	constAccessControlAllowCredentials = "Access-Control-Allow-Credentials"
 )
 
 // HTTP methods
 const (
-	DELETE  = http.MethodDelete
-	GET     = http.MethodGet
-	HEAD    = http.MethodHead
-	OPTIONS = http.MethodOptions
-	POST    = http.MethodPost
-	PUT     = http.MethodPut
-	PATCH   = http.MethodPatch
-	CONNECT = http.MethodConnect
-	TRACE   = http.MethodTrace
+	methodDelete  = http.MethodDelete
+	methodGet     = http.MethodGet
+	methodHead    = http.MethodHead
+	methodOptions = http.MethodOptions
+	methodPost    = http.MethodPost
+	methodPut     = http.MethodPut
+	methodPatch   = http.MethodPatch
+	methodConnect = http.MethodConnect
+	methodTrace   = http.MethodTrace
 )
 const (
 	// Tag names

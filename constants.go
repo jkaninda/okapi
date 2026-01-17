@@ -77,6 +77,8 @@ const (
 	tagFormat      = "format"
 	tagPattern     = "pattern"
 	tagEnum        = "enum"
+	tagDeprecated  = "deprecated"
+	tagHidden      = "hidden"
 
 	// Format types
 	formatEmail    = "email"

@@ -186,10 +186,6 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 				o.Head(r.Path, r.Handler, r.Options...)
 			case methodOptions:
 				o.Options(r.Path, r.Handler, r.Options...)
-			case methodTrace:
-				o.Trace(r.Path, r.Handler, r.Options...)
-			case methodConnect:
-				o.Connect(r.Path, r.Handler, r.Options...)
 			default:
 				panic(fmt.Sprintf("okapi: unsupported HTTP method %q for path=%q", r.Method, r.Path))
 			}
@@ -213,10 +209,6 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 			group.Head(r.Path, r.Handler, r.Options...)
 		case methodOptions:
 			group.Options(r.Path, r.Handler, r.Options...)
-		case methodTrace:
-			group.Trace(r.Path, r.Handler, r.Options...)
-		case methodConnect:
-			group.Connect(r.Path, r.Handler, r.Options...)
 		default:
 			panic(fmt.Sprintf("okapi: unsupported HTTP method %q for path=%q", r.Method, r.Path))
 		}

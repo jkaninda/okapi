@@ -947,22 +947,6 @@ func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
 	return o.addRoute(methodHead, path, nil, h, opts...)
 }
 
-// Connect registers a new CONNECT route with the given path and handler function.
-// Returns the created *Route for possible chaining or modification.
-//
-// Used to establish a tunnel to the server, typically for SSL/TLS connections.
-func (o *Okapi) Connect(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(http.MethodConnect, path, nil, h, opts...)
-}
-
-// Trace registers a new TRACE route with the given path and handler function.
-// Returns the created *Route for possible chaining or modification.
-//
-// Performs a message loop-back test, echoing the received request.
-func (o *Okapi) Trace(path string, h HandleFunc, opts ...RouteOption) *Route {
-	return o.addRoute(methodTrace, path, nil, h, opts...)
-}
-
 // Any registers a route that matches any HTTP method with the given path and handler function.
 // Returns the created *Route for possible chaining or modification.
 //

@@ -79,18 +79,6 @@ func (ec *ExampleController) Routes() []RouteDefinition {
 			Group:   group,
 		},
 		{
-			Method:  http.MethodConnect,
-			Path:    "/hello",
-			Handler: ec.Hello,
-			Group:   group,
-		},
-		{
-			Method:  http.MethodTrace,
-			Path:    "/hello",
-			Handler: ec.Hello,
-			Group:   group,
-		},
-		{
 			Method:  http.MethodHead,
 			Path:    "/hello",
 			Handler: ec.Hello,
@@ -144,8 +132,6 @@ func TestRouteDefinition(t *testing.T) {
 	okapitest.AssertHTTPStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	okapitest.AssertHTTPStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	okapitest.AssertHTTPStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "CONNECT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "TRACE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 
 }

@@ -72,8 +72,6 @@ func TestGroup(t *testing.T) {
 	api.Delete("hello", helloHandler)
 	api.Options("hello", helloHandler)
 	api.Head("hello", helloHandler)
-	api.Trace("hello", helloHandler)
-	api.Connect("hello", helloHandler)
 
 	api.Get("/group", func(c Context) error {
 		slog.Info("Calling route", "path", c.request.URL.Path)
@@ -109,8 +107,6 @@ func TestGroup(t *testing.T) {
 	okapitest.AssertHTTPStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	okapitest.AssertHTTPStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	okapitest.AssertHTTPStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "TRACE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "CONNECT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	okapitest.AssertHTTPStatus(t, "HEAD", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
 	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 }

@@ -27,6 +27,7 @@ package okapi
 import (
 	"errors"
 	"fmt"
+	"github.com/jkaninda/okapi/okapitest"
 	"net/http"
 	"strconv"
 	"strings"
@@ -65,6 +66,6 @@ func TestParam(t *testing.T) {
 	res := `{"version":"v1","user_id":1,"q":"Hello","tags":"hp,pc,mini"}`
 
 	waitForServer()
-	assertResponse(t, "GET", "http://localhost:8080/api/v1/users/1?q=Hello&tags=hp,pc&tags=mini", nil, strings.NewReader(body), "", http.StatusOK, res)
+	okapitest.GET(t, "http://localhost:8080/api/v1/users/1?q=Hello&tags=hp,pc&tags=mini").ExpectStatusOK().Body(strings.NewReader(body)).ExpectBody(res)
 
 }

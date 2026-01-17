@@ -482,7 +482,7 @@ func DocDescription(description string) RouteOption {
 // Hide marks the route to be excluded from OpenAPI documentation.
 func Hide() RouteOption {
 	return func(r *Route) {
-		r.hide = true
+		r.hidden = true
 	}
 }
 
@@ -934,7 +934,7 @@ func (o *Okapi) buildOpenAPISpec() {
 	// Process all registered routes
 	for _, r := range o.routes {
 		// If route is disabled ignore it
-		if r.disabled || r.hide {
+		if r.disabled || r.hidden {
 			continue
 		}
 		// Auto-extract path parameters if none are defined

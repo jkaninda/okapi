@@ -25,12 +25,11 @@
 package okapi
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
+	"github.com/jkaninda/okapi/okapitest"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,16 +39,7 @@ func TestHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/test", nil)
 	rec := httptest.NewRecorder()
 
-	resp := NewFakeResponse(rec)
-	store := &Store{
-		data: make(map[string]any),
-	}
-	ctx := &Context{
-		okapi:    nil,
-		request:  req,
-		response: &resp,
-		store:    store,
-	}
+	ctx := NewContext(nil, rec, req)
 	err := HelloHandler(*ctx)
 	if err != nil {
 		t.Errorf("Handler returned an error: %v", err)
@@ -68,24 +58,7 @@ func TestHandler(t *testing.T) {
 	}
 
 }
-func NewFakeResponse(w http.ResponseWriter) response {
-	return response{writer: w}
-}
 
-func NewFakeContext(method, target string) *Context {
-	req := httptest.NewRequest(method, target, nil)
-	rec := httptest.NewRecorder()
-	resp := &fakeResponse{ResponseWriter: rec}
-
-	store := &Store{data: make(map[string]any)}
-
-	return &Context{
-		okapi:    nil,
-		request:  req,
-		response: resp,
-		store:    store,
-	}
-}
 func TestServeFile(t *testing.T) {
 	createTemplate(t)
 
@@ -108,53 +81,8 @@ func TestServeFile(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
 }
-
-type fakeResponse struct {
-	http.ResponseWriter
-	status        int
-	headerWritten bool
-	bodyBytesSent int64
-}
-
-func (f *fakeResponse) Write(b []byte) (int, error) {
-	if !f.headerWritten {
-		f.WriteHeader(http.StatusOK)
-	}
-	n, err := f.ResponseWriter.Write(b)
-	f.bodyBytesSent += int64(n)
-	return n, err
-}
-
-func (f *fakeResponse) WriteHeader(statusCode int) {
-	if f.headerWritten {
-		return
-	}
-	f.status = statusCode
-	f.headerWritten = true
-	f.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (f *fakeResponse) BodyBytesSent() int64 {
-	return f.bodyBytesSent
-}
-
-func (f *fakeResponse) StatusCode() int {
-	return f.status
-}
-
-func (f *fakeResponse) Close() {
-}
-
-func (f *fakeResponse) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	h, ok := f.ResponseWriter.(http.Hijacker)
-	if !ok {
-		return nil, nil, fmt.Errorf("not hijackable")
-	}
-	return h.Hijack()
-}
-
 func HelloHandler(c Context) error {
 	if c.IsWebSocketUpgrade() {
 		fmt.Println("WebSocket upgrade detected")

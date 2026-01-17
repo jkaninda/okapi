@@ -74,7 +74,19 @@ const (
 	tagMinLength   = "minLength"
 	tagMaxLength   = "maxLength"
 	tagDefault     = "default"
+	tagFormat      = "format"
+	tagPattern     = "pattern"
+	tagEnum        = "enum"
 
+	// Format types
+	formatEmail    = "email"
+	formatDateTime = "date-time"
+	formatDate     = "date"
+	formatDuration = "duration"
+	formatIPv4     = "ipv4"
+	formatIPv6     = "ipv6"
+	formatUUID     = "uuid"
+	formatRegex    = "regex"
 	// Special values
 	bodyValue = "body"
 	bodyField = "Body"

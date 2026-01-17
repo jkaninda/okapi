@@ -26,9 +26,12 @@ package okapi
 
 import (
 	"fmt"
+	"net"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (c *Context) bindStruct(input any) error {
@@ -203,6 +206,19 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
 			}
 		}
+		// Enum validation
+		if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
+			if err := checkEnum(field, enumTag); err != nil {
+				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
+			}
+		}
+
+		// Format validation
+		if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
+			if err := checkFormat(field, formatTag, sf); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
 	}
 
 	return nil
@@ -352,6 +368,157 @@ func checkMaxLength(field reflect.Value, maxTag string) error {
 		if len(field.String()) > maxValue {
 			return fmt.Errorf("string length %d must be at most %d characters", len(field.String()), maxValue)
 		}
+	}
+	return nil
+}
+
+// checkFormat validates field based on format type
+func checkFormat(field reflect.Value, formatTag string, sf reflect.StructField) error {
+	if field.Kind() != reflect.String {
+		return fmt.Errorf("format validation can only be applied to string fields")
+	}
+
+	value := field.String()
+
+	// Skip validation if value is empty
+	if value == "" {
+		return nil
+	}
+
+	switch formatTag {
+	case formatEmail:
+		return validateEmail(value)
+	case formatDateTime:
+		return validateDateTime(value)
+	case formatDate:
+		return validateDate(value)
+	case formatDuration:
+		return validateDuration(value)
+	case formatIPv4:
+		return validateIPv4(value)
+	case formatIPv6:
+		return validateIPv6(value)
+	case formatUUID:
+		return validateUUID(value)
+	case formatRegex:
+		pattern := sf.Tag.Get(tagPattern)
+		if pattern == "" {
+			return fmt.Errorf("regex format requires 'pattern' tag")
+		}
+		return validateRegex(value, pattern)
+	default:
+		return fmt.Errorf("unsupported format: %s", formatTag)
+	}
+}
+
+// checkEnum validates that the field value is one of the allowed enum values
+func checkEnum(field reflect.Value, enumTag string) error {
+	if field.Kind() != reflect.String {
+		return fmt.Errorf("enum validation can only be applied to string fields")
+	}
+
+	value := field.String()
+
+	// Skip validation if value is empty (use 'required' tag for mandatory fields)
+	if value == "" {
+		return nil
+	}
+
+	allowedValues := strings.Split(enumTag, ",")
+
+	for i, v := range allowedValues {
+		allowedValues[i] = strings.TrimSpace(v)
+	}
+
+	// Check if value exists in allowed values
+	for _, allowed := range allowedValues {
+		if value == allowed {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("value '%s' is not one of the allowed values: [%s]", value, strings.Join(allowedValues, ", "))
+}
+func validateEmail(value string) error {
+	emailRegex := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
+	matched, err := regexp.MatchString(emailRegex, value)
+	if err != nil {
+		return fmt.Errorf("email validation error: %w", err)
+	}
+	if !matched {
+		return fmt.Errorf("invalid email format: %s", value)
+	}
+	return nil
+}
+
+func validateDateTime(value string) error {
+	// RFC3339 format: 2006-01-02T15:04:05Z07:00
+	_, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return fmt.Errorf("invalid date-time format (expected RFC3339): %s", value)
+	}
+	return nil
+}
+
+func validateDate(value string) error {
+	// ISO 8601 date format: YYYY-MM-DD
+	_, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return fmt.Errorf("invalid date format (expected YYYY-MM-DD): %s", value)
+	}
+	return nil
+}
+
+func validateDuration(value string) error {
+	// Go duration format: "300ms", "1.5h", "2h45m"
+	_, err := time.ParseDuration(value)
+	if err != nil {
+		return fmt.Errorf("invalid duration format: %s", value)
+	}
+	return nil
+}
+
+func validateIPv4(value string) error {
+	ip := net.ParseIP(value)
+	if ip == nil {
+		return fmt.Errorf("invalid IP address: %s", value)
+	}
+	if ip.To4() == nil {
+		return fmt.Errorf("not a valid IPv4 address: %s", value)
+	}
+	return nil
+}
+
+func validateIPv6(value string) error {
+	ip := net.ParseIP(value)
+	if ip == nil {
+		return fmt.Errorf("invalid IP address: %s", value)
+	}
+	if ip.To4() != nil {
+		return fmt.Errorf("not a valid IPv6 address: %s", value)
+	}
+	return nil
+}
+
+func validateUUID(value string) error {
+	uuidRegex := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
+	matched, err := regexp.MatchString(uuidRegex, value)
+	if err != nil {
+		return fmt.Errorf("UUID validation error: %w", err)
+	}
+	if !matched {
+		return fmt.Errorf("invalid UUID format: %s", value)
+	}
+	return nil
+}
+
+func validateRegex(value, pattern string) error {
+	matched, err := regexp.MatchString(pattern, value)
+	if err != nil {
+		return fmt.Errorf("regex validation error: %w", err)
+	}
+	if !matched {
+		return fmt.Errorf("value does not match pattern '%s': %s", pattern, value)
 	}
 	return nil
 }

@@ -648,30 +648,42 @@ func validateStruct(v any) error {
 			}
 		}
 		// Required validation
-		if sf.Tag.Get("required") == "true" && isEmptyValue(field) {
+		if sf.Tag.Get(tagRequired) == "true" && isEmptyValue(field) {
 			return fmt.Errorf("field %s is required", sf.Name)
 		}
 
 		// Numeric min/max
-		if minTag := sf.Tag.Get("min"); minTag != "" {
+		if minTag := sf.Tag.Get(tagMin); minTag != "" {
 			if err := checkMin(field, minTag); err != nil {
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
 		}
-		if maxTag := sf.Tag.Get("max"); maxTag != "" {
+		if maxTag := sf.Tag.Get(tagMax); maxTag != "" {
 			if err := checkMax(field, maxTag); err != nil {
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
 		}
 
 		// String minLength/maxLength
-		if minLenTag := sf.Tag.Get("minLength"); minLenTag != "" {
+		if minLenTag := sf.Tag.Get(tagMinLength); minLenTag != "" {
 			if err := checkMinLength(field, minLenTag); err != nil {
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
 		}
-		if maxLenTag := sf.Tag.Get("maxLength"); maxLenTag != "" {
+		if maxLenTag := sf.Tag.Get(tagMaxLength); maxLenTag != "" {
 			if err := checkMaxLength(field, maxLenTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+		// Enum validation
+		if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
+			if err := checkEnum(field, enumTag); err != nil {
+				return fmt.Errorf("field %s.%s: %w", sf.Name, sf.Name, err)
+			}
+		}
+		// Format validation
+		if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
+			if err := checkFormat(field, formatTag, sf); err != nil {
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
 		}

@@ -26,6 +26,7 @@ package okapi
 
 import (
 	"errors"
+	"github.com/jkaninda/okapi/okapitest"
 	"net/http"
 	"testing"
 )
@@ -140,8 +141,8 @@ func TestContext_Bind(t *testing.T) {
 		}
 	}(o)
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusBadRequest)
-	assertStatus(t, "POST", "http://localhost:8080/json", nil, nil, "", http.StatusBadRequest)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusBadRequest)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/json", nil, nil, "", http.StatusBadRequest)
 
 }

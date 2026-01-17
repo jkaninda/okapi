@@ -26,6 +26,7 @@ package okapi
 
 import (
 	"errors"
+	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -167,8 +168,8 @@ func TestOpenAPI(t *testing.T) {
 
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 
 }
 func TestNew(t *testing.T) {
@@ -233,8 +234,8 @@ func TestNew(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 }
 func TestWithOpenAPIDisabled(t *testing.T) {
 	o := Default().WithOpenAPIDisabled()
@@ -254,8 +255,8 @@ func TestWithOpenAPIDisabled(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusNotFound)
-	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusNotFound)
 
 }
 

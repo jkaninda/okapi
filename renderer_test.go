@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	goutils "github.com/jkaninda/go-utils"
+	"github.com/jkaninda/okapi/okapitest"
 	"html/template"
 	"io"
 	"net/http"
@@ -87,7 +88,7 @@ func TestWithRenderer(t *testing.T) {
 
 	waitForServer()
 
-	assertStatus(t, "GET", fmt.Sprintf("%s/", testBaseURL), nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", fmt.Sprintf("%s/", testBaseURL), nil, nil, "", http.StatusOK)
 
 }
 

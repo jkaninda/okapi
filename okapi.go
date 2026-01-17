@@ -119,7 +119,7 @@ type (
 		responses       map[int]*openapi3.SchemaRef
 		description     string
 		disabled        bool
-		hide            bool
+		hidden          bool
 		internal        bool
 		handle          HandleFunc
 		handler         HandleFunc
@@ -146,7 +146,7 @@ type chain interface {
 
 // Hide marks the Route as hidden, preventing it from being listed in OpenAPI documentation.
 func (r *Route) Hide() *Route {
-	r.hide = true
+	r.hidden = true
 	return r
 }
 

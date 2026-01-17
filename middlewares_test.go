@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -208,22 +209,22 @@ func TestJwtMiddleware(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
-	assertStatus(t, "GET", "http://localhost:8080/admin/protected", nil, nil, "", http.StatusUnauthorized)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", nil, nil, "", http.StatusUnauthorized)
 
 	headers := map[string]string{
 		"Authorization": "Bearer " + token,
 	}
-	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
 
 	headers["Authorization"] = "Bearer " + adminToken
-	assertStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
 
 	headers["Authorization"] = "Bearer " + noAudToken
-	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusUnauthorized)
-	assertStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusUnauthorized)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
 
 }
 func TestBasicAuth(t *testing.T) {
@@ -263,8 +264,8 @@ func TestBasicAuth(t *testing.T) {
 		"Authorization": "Basic " + credentials,
 	}
 
-	assertStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
-	assertStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
 }
 func TestStdMiddleware(t *testing.T) {
 	o := Default()
@@ -322,11 +323,11 @@ func TestStdMiddleware(t *testing.T) {
 
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusCreated)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusCreated)
 }
 func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string {
 	t.Helper()

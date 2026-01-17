@@ -678,4 +678,17 @@ func (c *Context) Respond(output any) error {
 	}
 }
 
+// NewContext creates a new Okapi Context
+func NewContext(o *Okapi, w http.ResponseWriter, r *http.Request) *Context {
+	if o == nil {
+		Default()
+	}
+	return &Context{
+		request:  r,
+		okapi:    o,
+		response: &response{writer: w},
+		store:    newStoreData(),
+	}
+}
+
 // ************ Errors in errors.go *****************

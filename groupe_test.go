@@ -26,6 +26,7 @@ package okapi
 
 import (
 	"errors"
+	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -99,19 +100,19 @@ func TestGroup(t *testing.T) {
 
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/api/group", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/standard", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/group", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/standard", nil, nil, "", http.StatusOK)
 
-	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "PUT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "TRACE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "CONNECT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "HEAD", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "PUT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "TRACE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "CONNECT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "HEAD", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
 }
 func TestRegister(t *testing.T) {
 	app := New()
@@ -141,8 +142,8 @@ func TestRegister(t *testing.T) {
 	}(app)
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/core/books", nil, nil, "", http.StatusCreated)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/core/books", nil, nil, "", http.StatusCreated)
 
 }
 func helloHandler(c Context) error {

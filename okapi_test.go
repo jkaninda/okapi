@@ -27,6 +27,7 @@ package okapi
 import (
 	"errors"
 	"fmt"
+	"github.com/jkaninda/okapi/okapitest"
 	"io"
 	"log/slog"
 	"net/http"
@@ -167,33 +168,33 @@ func TestStart(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/books", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/books/1", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/v1/books", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/v1/books/1", nil, nil, "", http.StatusOK)
 	// Docs
-	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 
 	// API V2
-	assertStatus(t, "GET", "http://localhost:8080/api/v2/books/1", nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/v2/books/1", nil, nil, "", http.StatusNotFound)
 	// Any
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/any/request", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/api/v1/all/request", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/favicon.ico", nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/v1/any/request", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/v1/all/request", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/favicon.ico", nil, nil, "", http.StatusNotFound)
 
-	assertStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "PUT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "PATCH", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "HEAD", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "TRACE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "CONNECT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "PUT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "PATCH", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "DELETE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "HEAD", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "TRACE", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "CONNECT", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 
-	assertStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
-	assertStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)
 
 	// NoRoute and NotMethod
-	assertStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", fmt.Sprintf("%s/api/standard-http", testBaseURL), nil, nil, "", http.StatusNotFound)
 	assertResponse(t, "GET", fmt.Sprintf("%s/custom", testBaseURL), nil, nil, "", http.StatusNotFound, pageNotFound)
 	assertResponse(t, "POST", fmt.Sprintf("%s/standard", testBaseURL),
 		nil, nil, "",
@@ -201,7 +202,7 @@ func TestStart(t *testing.T) {
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`
-	assertStatus(t, "POST",
+	okapitest.AssertHTTPStatus(t, "POST",
 		"http://localhost:8080/api/admin/books", nil,
 		strings.NewReader(body), "application/json",
 		http.StatusUnauthorized)
@@ -265,7 +266,7 @@ func TestWithServer(t *testing.T) {
 		}
 	}(o)
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
 
 }
 func TestWithAddr(t *testing.T) {
@@ -286,7 +287,7 @@ func TestWithAddr(t *testing.T) {
 		}
 	}(o)
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
 
 }
 func TestCustomConfig(t *testing.T) {
@@ -316,8 +317,8 @@ func TestCustomConfig(t *testing.T) {
 		}
 	}(o)
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8081/openapi.json", nil, nil, "", http.StatusNotFound)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8081", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8081/openapi.json", nil, nil, "", http.StatusNotFound)
 
 }
 
@@ -357,41 +358,9 @@ func TestRegisterRoutes(t *testing.T) {
 	}(app)
 	waitForServer()
 
-	assertStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/core/books", nil, nil, "", http.StatusCreated)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/core/books", nil, nil, "", http.StatusCreated)
 
-}
-func assertStatus(t *testing.T, method, url string,
-	headers map[string]string,
-	body io.Reader,
-	contentType string,
-	expected int) {
-	t.Helper()
-
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		t.Fatalf("Failed to create %s request to %s: %v", method, url, err)
-	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("Failed to make %s request to %s: %v", method, url, err)
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			t.Errorf("Failed to close response body: %v", err)
-		}
-	}(resp.Body)
-
-	if resp.StatusCode != expected {
-		t.Errorf("Expected status %d for %s %s, got %d", expected, method, url, resp.StatusCode)
-	}
 }
 func assertResponse(t *testing.T, method, url string,
 	headers map[string]string,
@@ -593,6 +562,6 @@ func TestWithComponentSchemaRef(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
-	assertStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
 }

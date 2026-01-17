@@ -1,7 +1,7 @@
 /*
  *  MIT License
  *
- * Copyright (c) 2025 Jonas Kaninda
+ * Copyright (c) 2026 Jonas Kaninda
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,38 +22,4 @@
  *  SOFTWARE.
  */
 
-package okapi
-
-import (
-	"errors"
-	"github.com/jkaninda/okapi/okapitest"
-	"net/http"
-	"testing"
-)
-
-func TestRegisterDocRoutes(t *testing.T) {
-	o := New()
-	o.Get("/", func(c Context) error {
-		return c.Text(http.StatusOK, "Hello World!")
-	})
-
-	o.registerDocRoutes(o.openAPI.Title)
-
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	waitForServer()
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/openapi.json", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/docs", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/redoc", nil, nil, "", http.StatusOK)
-
-}
+package okapitest

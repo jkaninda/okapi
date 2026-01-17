@@ -26,6 +26,7 @@ package okapi
 
 import (
 	"errors"
+	"github.com/jkaninda/okapi/okapitest"
 	"net/http"
 	"testing"
 )
@@ -138,13 +139,13 @@ func TestRouteDefinition(t *testing.T) {
 	}(app)
 
 	waitForServer()
-	assertStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "PUT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "CONNECT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "TRACE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	assertStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "PUT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "CONNECT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "TRACE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
+	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
 
 }

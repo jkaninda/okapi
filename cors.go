@@ -51,8 +51,8 @@ type Cors struct {
 }
 
 // CORSHandler applies CORS headers and handles preflight (OPTIONS) requests.
-func (cors Cors) CORSHandler(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func (cors Cors) CORSHandler(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		origin := c.request.Header.Get("Origin")
 		if !allowedOrigin(cors.AllowedOrigins, origin) {
 			return next(c)

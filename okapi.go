@@ -82,8 +82,8 @@ type (
 		openAPI            *OpenAPI
 		openApiEnabled     bool
 		maxMultipartMemory int64 // Maximum memory for multipart forms
-		noRoute            HandleFunc
-		noMethod           HandleFunc
+		noRoute            HandlerFunc
+		noMethod           HandlerFunc
 	}
 
 	Router struct {
@@ -121,27 +121,50 @@ type (
 		disabled        bool
 		hidden          bool
 		internal        bool
-		handle          HandleFunc
-		handler         HandleFunc
+		handle          HandlerFunc
+		handler         HandlerFunc
 		cookies         []*openapi3.ParameterRef
 	}
 
-	// ResponseWriter interface defines the methods for writing HTTP responses.
+	// ResponseWriter extends http.ResponseWriter with additional utilities.
 	ResponseWriter interface {
 		http.ResponseWriter
-		StatusCode() int
-		Close()
-		Hijack() (net.Conn, *bufio.ReadWriter, error)
-	}
-	// HandleFunc is a function type that takes a Context and returns an error.
-	HandleFunc func(c Context) error
 
-	Middleware func(next HandleFunc) HandleFunc
+		// StatusCode returns the written status code, or 0 if not written.
+		StatusCode() int
+
+		// BytesWritten returns number of bytes written to the body.
+		BytesWritten() int
+
+		// Close closes the writer if supported. Returns error instead of hiding it.
+		Close() error
+
+		// Hijack upgrades to raw TCP if supported (WebSockets, proxy, etc).
+		Hijack() (net.Conn, *bufio.ReadWriter, error)
+
+		// Flush flushes buffered data if supported (streaming, SSE, gzip, etc).
+		Flush()
+
+		// Push initiates HTTP/2 server push if supported.
+		Push(string, *http.PushOptions) error
+	}
+	// HandlerFunc is a function type that takes a Context and returns an error.
+	HandlerFunc func(*Context) error
+
+	Middleware func(next HandlerFunc) HandlerFunc
+
+	// Response implementation
+	responseWriter struct {
+		writer      http.ResponseWriter
+		status      int
+		wroteHeader bool
+		wroteBytes  int
+	}
 )
 
 // chain is an interface that defines a method for chaining handlers.
 type chain interface {
-	next(hf HandleFunc) HandleFunc
+	next(hf HandlerFunc) HandlerFunc
 }
 
 // Hide marks the Route as hidden, preventing it from being listed in OpenAPI documentation.
@@ -253,21 +276,6 @@ func (r *Route) Use(m ...Middleware) {
 	}
 	r.middlewares = append(r.middlewares, m...)
 	r.handler = r.next(r.handle)
-}
-
-// Response implementation
-type response struct {
-	writer        http.ResponseWriter
-	status        int
-	headerWritten bool
-}
-
-func (r *response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	hj, ok := r.writer.(http.Hijacker)
-	if !ok {
-		return nil, nil, http.ErrHijacked
-	}
-	return hj.Hijack()
 }
 
 // ****** OKAPI OPTIONS ******
@@ -586,53 +594,73 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 
 // ****** RESPONSE WRITER ******
 
-// Header returns the header map that will be sent by the ResponseWriter
-func (r *response) Header() http.Header {
+func newResponseWriter(w http.ResponseWriter) *responseWriter {
+	return &responseWriter{writer: w}
+}
+
+// Header delegates header access.
+func (r *responseWriter) Header() http.Header {
 	return r.writer.Header()
 }
 
-// // Write writes the data to the response writer.
-func (r *response) Write(bytes []byte) (int, error) {
-	if !r.headerWritten {
+func (r *responseWriter) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
 		r.WriteHeader(http.StatusOK)
 	}
-	return r.writer.Write(bytes)
+	n, err := r.writer.Write(b)
+	r.wroteBytes += n
+	return n, err
 }
 
-// WriteHeader sends an HTTP response header with the specified status code.
-func (r *response) WriteHeader(statusCode int) {
-	if r.headerWritten {
-		return // Header already written
+func (r *responseWriter) WriteHeader(statusCode int) {
+	if r.wroteHeader {
+		return
 	}
 	r.status = statusCode
+	r.wroteHeader = true
 	r.writer.WriteHeader(statusCode)
-	r.headerWritten = true
 }
 
-// StatusCode returns the HTTP status code of the response writer.
-func (r *response) StatusCode() int {
-	if !r.headerWritten {
-		return http.StatusOK
+func (r *responseWriter) StatusCode() int {
+	if !r.wroteHeader {
+		return 0
 	}
 	return r.status
 }
 
-// Close closes the response writer if it implements io.Closer.
-func (r *response) Close() {
-	// Close the response writer if needed
+func (r *responseWriter) BytesWritten() int {
+	return r.wroteBytes
+}
+
+// Close closes if the underlying writer supports io.Closer.
+func (r *responseWriter) Close() error {
 	if closer, ok := r.writer.(io.Closer); ok {
-		err := closer.Close()
-		if err != nil {
-			return
-		}
+		return closer.Close()
+	}
+	return nil
+}
+
+// Flush flushes if supported.
+func (r *responseWriter) Flush() {
+	if fl, ok := r.writer.(http.Flusher); ok {
+		fl.Flush()
 	}
 }
 
-// Flush flushes the response writer if it implements http.Flusher.
-func (r *response) Flush() {
-	if flusher, ok := r.writer.(http.Flusher); ok {
-		flusher.Flush()
+// Hijack supports WebSockets / raw TCP upgrades.
+func (r *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := r.writer.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("hijacking not supported")
 	}
+	return hj.Hijack()
+}
+
+func (r *responseWriter) Push(target string, opts *http.PushOptions) error {
+	if pusher, ok := r.writer.(http.Pusher); ok {
+		return pusher.Push(target, opts)
+	}
+	return http.ErrNotSupported
 }
 
 // ************ Router ************/
@@ -697,7 +725,7 @@ func (o *Okapi) StartOn(port int) error {
 //
 // Middleware functions have the signature:
 //
-//	func(next HandleFunc) HandleFunc
+//	func(next HandlerFunc) HandlerFunc
 //
 // Example:
 //
@@ -727,16 +755,12 @@ func (o *Okapi) Use(middlewares ...Middleware) {
 //	    })
 //	})
 //
-// Internally, Okapi converts between http.Handler and HandleFunc to allow smooth interop.
+// Internally, Okapi converts between http.Handler and HandlerFunc to allow smooth interop.
 func (o *Okapi) UseMiddleware(mw func(http.Handler) http.Handler) {
-	o.Use(func(next HandleFunc) HandleFunc {
-		// Convert HandleFunc to http.Handler
+	o.Use(func(next HandlerFunc) HandlerFunc {
+		// Convert HandlerFunc to http.Handler
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := Context{
-				request:  r,
-				response: &response{writer: w},
-				okapi:    o,
-			}
+			ctx := NewContext(o, w, r)
 			if err := next(ctx); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -745,8 +769,8 @@ func (o *Okapi) UseMiddleware(mw func(http.Handler) http.Handler) {
 		// Apply standard middleware
 		wrapped := mw(h)
 
-		// Convert back to HandleFunc
-		return func(ctx Context) error {
+		// Convert back to HandlerFunc
+		return func(ctx *Context) error {
 			wrapped.ServeHTTP(ctx.response, ctx.request)
 			return nil
 		}
@@ -850,7 +874,7 @@ func (o *Okapi) SetContext(ctx *Context) {
 //	    userID := c.Param("id") // Returns string "123"
 //	    return c.JSON(200, okapi.M{"user_id": userID})
 //	})
-func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Get(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute(methodGet, path, nil, h, opts...)
 }
 
@@ -870,7 +894,7 @@ func (o *Okapi) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	    // Create user logic...
 //	    return c.Created(user)
 //	})
-func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Post(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute(methodPost, path, nil, h, opts...)
 }
 
@@ -890,7 +914,7 @@ func (o *Okapi) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	    // Update user logic...
 //	    return c.JSON(200, user)
 //	})
-func (o *Okapi) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Put(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute(methodPut, path, nil, h, opts...)
 }
 
@@ -906,7 +930,7 @@ func (o *Okapi) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	    // Delete user logic...
 //	    return c.NoContent(204)
 //	})
-func (o *Okapi) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Delete(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute(http.MethodDelete, path, nil, h, opts...)
 }
 
@@ -926,7 +950,7 @@ func (o *Okapi) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	    // Partial update logic...
 //	    return c.JSON(200, updates)
 //	})
-func (o *Okapi) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Patch(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute(methodPatch, path, nil, h, opts...)
 }
 
@@ -934,7 +958,7 @@ func (o *Okapi) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
 // Returns the created *Route for possible chaining or modification.
 //
 // Commonly used for CORS preflight requests to describe communication options.
-func (o *Okapi) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Options(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute(http.MethodOptions, path, nil, h, opts...)
 }
 
@@ -943,7 +967,7 @@ func (o *Okapi) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
 //
 // Identical to GET but without the response body, useful for checking resource
 // existence or metadata.
-func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Head(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute(methodHead, path, nil, h, opts...)
 }
 
@@ -957,7 +981,7 @@ func (o *Okapi) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
 //	o.Any("/health", func(c okapi.Context) error {
 //	    return c.String(200, "OK")
 //	})
-func (o *Okapi) Any(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) Any(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return o.addRoute("", path, nil, h, opts...)
 }
 
@@ -983,7 +1007,7 @@ func (o *Okapi) StaticFS(prefix string, fs http.FileSystem) {
 }
 
 // addRoute adds a route with the specified method to the Okapi instance
-func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts ...RouteOption) *Route {
+func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts ...RouteOption) *Route {
 	if path == "" {
 		panic("Path cannot be empty")
 	}
@@ -1006,11 +1030,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 	route.handler = route.next(h)
 	// Main handler
 	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(normalizedPath, func(w http.ResponseWriter, r *http.Request) {
-		ctx := Context{
-			request:  r,
-			response: &response{writer: w},
-			okapi:    o,
-		}
+		ctx := NewContext(o, w, r)
 		// if the route is disabled, return 404 Not Found
 		if route.disabled {
 			http.Error(w, "404 Not Found", http.StatusNotFound)
@@ -1053,18 +1073,18 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandleFunc, opts 
 //
 // Example:
 //
-//	okapi.Handle("GET", "/users/:id", func(c Context) error {
+//	okapi.Handle("GET", "/users/:id", func(c *okapi.Context) error {
 //	    id := c.Param("id")
 //	    // process request...
 //	    return nil
 //	})
-func (o *Okapi) Handle(method, path string, h HandleFunc, opts ...RouteOption) {
+func (o *Okapi) Handle(method, path string, h HandlerFunc, opts ...RouteOption) {
 	o.addRoute(method, path, nil, h, opts...)
 }
 
 // HandleHTTP registers a new route using a standard http.Handler.
 //
-// It wraps the provided http.Handler into Okapi's internal HandleFunc signature
+// It wraps the provided http.Handler into Okapi's internal HandlerFunc signature
 // and processes it as if it were registered via Handle.
 //
 // Parameters:
@@ -1159,7 +1179,7 @@ func (o *Okapi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ctx := &Context{
 		request:  r,
-		response: &response{writer: w},
+		response: newResponseWriter(w),
 		okapi:    o,
 	}
 	handler := func(c *Context) {
@@ -1169,7 +1189,7 @@ func (o *Okapi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // next applies the middlewares in correct order
-func (o *Okapi) next(h HandleFunc) HandleFunc {
+func (o *Okapi) next(h HandlerFunc) HandlerFunc {
 	// Start with the original handler
 	for i := len(o.middlewares) - 1; i >= 0; i-- {
 		h = o.middlewares[i](h)
@@ -1178,7 +1198,7 @@ func (o *Okapi) next(h HandleFunc) HandleFunc {
 }
 
 // next applies the middlewares in correct order for a specific route
-func (r *Route) next(h HandleFunc) HandleFunc {
+func (r *Route) next(h HandlerFunc) HandlerFunc {
 	for i := len(r.middlewares) - 1; i >= 0; i-- {
 		h = r.middlewares[i](h)
 	}
@@ -1228,7 +1248,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 	o := &Okapi{
 		context: &Context{
 			request:  new(http.Request),
-			response: &response{},
+			response: &responseWriter{},
 			store:    newStoreData(),
 		},
 		router:             newRouter(),
@@ -1286,7 +1306,7 @@ func (o *Okapi) applyCommon() {
 //	o.NoRoute(func(c okapi.Context) error {
 //		return c.AbortNotFound("Custom 404 - Not found")
 //	})
-func (o *Okapi) NoRoute(h HandleFunc) {
+func (o *Okapi) NoRoute(h HandlerFunc) {
 	o.noRoute = h
 }
 
@@ -1300,12 +1320,12 @@ func (o *Okapi) NoRoute(h HandleFunc) {
 //	o.NoMethod(func(c okapi.Context) error {
 //	 return c.AbortMethodNotAllowed("Custom 405 - Method Not Allowed")
 //	})
-func (o *Okapi) NoMethod(h HandleFunc) {
+func (o *Okapi) NoMethod(h HandlerFunc) {
 	o.noMethod = h
 }
 
 // handleName returns the name of the handler function.
-func handleName(h HandleFunc) string {
+func handleName(h HandlerFunc) string {
 	t := reflect.ValueOf(h).Type()
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
@@ -1323,8 +1343,8 @@ func handleName(h HandleFunc) string {
 }
 
 // handleAccessLog logs the access details of the request
-func handleAccessLog(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func handleAccessLog(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		if c.IsWebSocketUpgrade() || c.IsSSE() || !c.okapi.accessLog {
 			return next(c)
 		}
@@ -1363,13 +1383,9 @@ func handleAccessLog(next HandleFunc) HandleFunc {
 func printBanner() {
 	fmt.Println(banner)
 }
-func (o *Okapi) wrapHandleFunc(h HandleFunc) http.Handler {
+func (o *Okapi) wrapHandleFunc(h HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := Context{
-			request:  r,
-			response: &response{writer: w},
-			okapi:    o,
-		}
+		ctx := NewContext(o, w, r)
 		if err := h(ctx); err != nil {
 			o.logger.Error("handler error", slog.String("error", err.Error()))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1377,8 +1393,8 @@ func (o *Okapi) wrapHandleFunc(h HandleFunc) http.Handler {
 		}
 	})
 }
-func (o *Okapi) wrapHTTPHandler(h http.Handler) HandleFunc {
-	return func(ctx Context) error {
+func (o *Okapi) wrapHTTPHandler(h http.Handler) HandlerFunc {
+	return func(ctx *Context) error {
 		h.ServeHTTP(ctx.response, ctx.request)
 		return nil
 	}

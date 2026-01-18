@@ -88,7 +88,7 @@ func main() {
 	// Create a new Okapi instance
 	o := okapi.Default()
 	// Define a route for the root path
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		// Render the HTML template with dynamic data
 		return c.HTMLView(200, template, okapi.M{
 			"name":    "OKAPI Multipart Example",
@@ -97,7 +97,7 @@ func main() {
 		})
 	})
 	// Define a route for handling multipart form data
-	o.Post("/upload", func(c okapi.Context) error {
+	o.Post("/upload", func(c *okapi.Context) error {
 		// Create an instance of MultipartBody to hold the form data
 		multipartBody := &MultipartBody{}
 		// Parse the multipart form data

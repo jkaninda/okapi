@@ -34,11 +34,11 @@ var (
 )
 
 type Renderer interface {
-	Render(io.Writer, string, interface{}, Context) error
+	Render(io.Writer, string, interface{}, *Context) error
 }
 
-type RendererFunc func(io.Writer, string, interface{}, Context) error
+type RendererFunc func(io.Writer, string, interface{}, *Context) error
 
-func (f RendererFunc) Render(w io.Writer, name string, data interface{}, c Context) error {
+func (f RendererFunc) Render(w io.Writer, name string, data interface{}, c *Context) error {
 	return f(w, name, data, c)
 }

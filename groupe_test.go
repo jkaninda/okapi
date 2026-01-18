@@ -37,8 +37,8 @@ func TestGroup(t *testing.T) {
 	// create api group
 	api := o.Group("/api").setDisabled(false)
 	// Okapi's Group Middleware
-	api.Use(func(next HandleFunc) HandleFunc {
-		return func(c Context) (err error) {
+	api.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c *Context) (err error) {
 			slog.Info("Okapi's Group middleware")
 			return next(c)
 		}
@@ -73,12 +73,12 @@ func TestGroup(t *testing.T) {
 	api.Options("hello", helloHandler)
 	api.Head("hello", helloHandler)
 
-	api.Get("/group", func(c Context) error {
+	api.Get("/group", func(c *Context) error {
 		slog.Info("Calling route", "path", c.request.URL.Path)
 		return c.OK(M{"message": "Welcome to Okapi!"})
 	})
 	newG := NewGroup("group", o, LoggerMiddleware)
-	newG.Get("/group", func(c Context) error {
+	newG.Get("/group", func(c *Context) error {
 		slog.Info("Calling route", "path", c.request.URL.Path)
 		return c.OK(M{"message": "Welcome to Okapi's new group!"})
 	})
@@ -114,8 +114,8 @@ func TestRegister(t *testing.T) {
 	app := New()
 	coreGroup := app.Group("/core").setDisabled(false).WithTags([]string{"CoreGroup"})
 
-	coreGroup.Use(func(next HandleFunc) HandleFunc {
-		return func(c Context) (err error) {
+	coreGroup.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c *Context) (err error) {
 			slog.Info("Core Group middleware")
 			return next(c)
 		}
@@ -138,11 +138,11 @@ func TestRegister(t *testing.T) {
 	}(app)
 	waitForServer()
 
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/core/books", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/core/books", nil, nil, "", http.StatusCreated)
+	okapitest.GET(t, "http://localhost:8080/core/books").ExpectStatusOK()
+	okapitest.POST(t, "http://localhost:8080/core/books").ExpectStatusCreated()
 
 }
-func helloHandler(c Context) error {
+func helloHandler(c *Context) error {
 	slog.Info("Calling route", "path", c.request.URL.Path, "method", c.request.Method)
 	return c.OK(M{"message": "Hello from Okapi!"})
 

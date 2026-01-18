@@ -68,14 +68,13 @@ func TestStart(t *testing.T) {
 		Realm:    "Restricted Area",
 	}
 	o := Default()
-	o.NoRoute(func(c Context) error {
+	o.NoRoute(func(c C) error {
 		return c.String(http.StatusNotFound, pageNotFound)
 	})
-	o.NoMethod(func(c Context) error {
+	o.NoMethod(func(c C) error {
 		return c.String(http.StatusMethodNotAllowed, methodNotAllowed)
 	})
-
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c C) error {
 		return c.OK(M{"message": "Welcome to Okapi!"})
 	})
 	o.Get("hello", helloHandler)
@@ -108,23 +107,23 @@ func TestStart(t *testing.T) {
 
 	v1 := api.Group("/v1")
 	v1.Use(customMiddleware)
-	v1.Get("/books", func(c Context) error { return c.OK(books) })
+	v1.Get("/books", func(c *Context) error { return c.OK(books) })
 	v1.Get("/books/:id", show)
 
 	v2 := api.Group("/v2").Disable()
-	v2.Get("/books", func(c Context) error { return c.OK(books) })
+	v2.Get("/books", func(c *Context) error { return c.OK(books) })
 	v2.Get("/books/:id", show)
 
-	v1.Get("/any/*any", func(c Context) error {
+	v1.Get("/any/*any", func(c *Context) error {
 		return c.OK(M{"message": "Tested Any"})
 	})
-	v1.Get("/all/*", func(c Context) error {
+	v1.Get("/all/*", func(c *Context) error {
 		return c.OK(M{"message": "Tested Any"})
 	})
 
 	o.StaticFile("/favicon.ico", "./favicon.ico")
 
-	o.Get("/events", func(c Context) error {
+	o.Get("/events", func(c *Context) error {
 		// Simulate sending events (you can replace this with real data)
 		for i := 0; i < 10; i++ {
 			data := M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
@@ -138,7 +137,7 @@ func TestStart(t *testing.T) {
 		}
 		return nil
 	})
-	o.Get("/events_with_id", func(c Context) error {
+	o.Get("/events_with_id", func(c *Context) error {
 		// Simulate sending events (you can replace this with real data)
 		for i := 0; i < 10; i++ {
 			data := M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
@@ -257,7 +256,7 @@ func TestWithAddr(t *testing.T) {
 	o := New()
 	o.With(WithAddr(":8081"), WithStrictSlash(true)).DisableAccessLog()
 
-	o.Get("/", func(c Context) error { return c.OK(Book{}) })
+	o.Get("/", func(c *Context) error { return c.OK(Book{}) })
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)
@@ -287,7 +286,7 @@ func TestCustomConfig(t *testing.T) {
 		WithMux(router)).WithDebug().
 		WithOpenAPIDisabled()
 
-	o.Get("/", func(c Context) error { return c.OK(Book{}) }).Deprecated()
+	o.Get("/", func(c *Context) error { return c.OK(Book{}) }).Deprecated()
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)
@@ -306,12 +305,12 @@ func TestCustomConfig(t *testing.T) {
 
 type BookController struct{}
 
-func (bc *BookController) GetBooks(c Context) error {
+func (bc *BookController) GetBooks(c *Context) error {
 	// Simulate fetching books from a database
 	return c.OK(M{"success": true, "message": "Books retrieved successfully"})
 }
 
-func (bc *BookController) CreateBook(c Context) error {
+func (bc *BookController) CreateBook(c *Context) error {
 	// Simulate creating a book in a database
 	return c.Created(M{
 		"success": true,
@@ -348,7 +347,7 @@ func waitForServer() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func adminStore(c Context) error {
+func adminStore(c *Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
 		errMessage := fmt.Sprintf("Failed to bind book: %v", err)
@@ -360,7 +359,7 @@ func adminStore(c Context) error {
 	// Respond with the created book
 	return c.JSON(http.StatusCreated, newBook)
 }
-func adminUpdate(c Context) error {
+func adminUpdate(c *Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
 		errMessage := fmt.Sprintf("Failed to bind book: %v", err)
@@ -377,7 +376,7 @@ func adminUpdate(c Context) error {
 	}
 	return c.JSON(http.StatusNotFound, M{"error": "Book not found"})
 }
-func show(c Context) error {
+func show(c *Context) error {
 	var newBook Book
 	// Bind the book ID from the request parameters using `param` tags
 	// You can also use c.Param("id") to get the ID from the URL
@@ -404,7 +403,7 @@ func show(c Context) error {
 	return nil
 }
 
-func customResponseWriter(c Context) error {
+func customResponseWriter(c *Context) error {
 	// Create a custom response writer
 	resp := c.ResponseWriter()
 	resp.Header().Set("Content-Type", "application/json")
@@ -418,8 +417,8 @@ func customResponseWriter(c Context) error {
 	return nil
 }
 
-func customMiddleware(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func customMiddleware(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		request := c.Request()
 		start := time.Now()
 		slog.Info("Custom middleware executed", "path", request.URL.Path, "method", request.Method)
@@ -448,7 +447,7 @@ func (bc *BookController) Routes() []RouteDefinition {
 		}, {
 			Method:      http.MethodGet,
 			Path:        "/books",
-			OperationId: "GetBooks",
+			OperationId: "List",
 			Handler:     bc.GetBooks,
 			Group:       coreGroup,
 		},
@@ -481,7 +480,7 @@ func TestWithComponentSchemaRef(t *testing.T) {
 		Options: []RouteOption{
 			DocQueryParamWithDefault("fields", "enum", "Fields", false, openapi3.NewSchemaRef("#/components/schemas/fieldNames", nil)),
 		},
-		Handler: func(c Context) error {
+		Handler: func(c *Context) error {
 			return nil
 		},
 	})

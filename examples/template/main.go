@@ -35,7 +35,7 @@ type Template struct {
 	templates *template.Template
 }
 
-func (t *Template) Render(w io.Writer, name string, data interface{}, c okapi.Context) error {
+func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 func main() {
@@ -59,7 +59,7 @@ func main() {
 			return tmpl.ExecuteTemplate(w, name, data)
 		})
 	*/
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 
 		title := "Greeting Page"
 		message := "Hello, World!"

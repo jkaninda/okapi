@@ -35,7 +35,7 @@ type RouteDefinition struct {
 	// Path is the URL path for the route, relative to the base path of the Okapi instance or group
 	Path string
 	// Handler is the function that will handle requests to this route
-	Handler HandleFunc
+	Handler HandlerFunc
 	// OperationId is an optional unique identifier for the route, primarily
 	// used in OpenAPI documentation to distinguish operations.
 	OperationId string
@@ -108,7 +108,7 @@ type RouteDefinition struct {
 // For each route definition, this function determines whether to register the route
 // on the root Okapi instance or within a specific route group (if provided).
 //
-// It supports all standard HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE, CONNECT)
+// It supports all standard HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
 // and applies any associated RouteOptions, such as documentation annotations or middleware settings.
 //
 // If the Group field in the RouteDefinition is nil, the route is registered on the root Okapi instance.

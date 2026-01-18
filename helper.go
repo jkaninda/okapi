@@ -70,7 +70,7 @@ func fPrint(msg string, args ...interface{}) {
 	_, _ = fmt.Fprint(os.Stdout, b.String())
 }
 
-func buildDebugFields(c Context) []any {
+func buildDebugFields(c *Context) []any {
 	fields := []any{
 		"request_content_length", c.request.ContentLength,
 	}

@@ -33,7 +33,7 @@ import (
 
 func TestRegisterDocRoutes(t *testing.T) {
 	o := New()
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	})
 

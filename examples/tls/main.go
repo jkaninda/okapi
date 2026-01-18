@@ -51,7 +51,7 @@ func main() {
 
 	// Register application routes and handlers
 
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		return c.JSON(http.StatusOK, okapi.M{
 			"message": "Welcome to Okapi!",
 			"status":  "operational",
@@ -70,7 +70,7 @@ func main() {
 }
 
 // greetingHandler handles personalized greeting requests
-func greetingHandler(c okapi.Context) error {
+func greetingHandler(c *okapi.Context) error {
 	name := c.Param("name") // Extract name from URL path
 
 	// Return personalized greeting as JSON

@@ -495,14 +495,14 @@ func (c *Context) AbortGatewayTimeout(msg string, err ...error) error {
 	return c.abortWithStatus(http.StatusGatewayTimeout, "Gateway Timeout", msg, err...)
 }
 
-// ErrorHTTPVersionNotSupported writes a 505 HTTP Version Not Supported response.
+// ErrorHTTPVersionNotSupported writes a 505 HTTP version Not Supported response.
 func (c *Context) ErrorHTTPVersionNotSupported(message any) error {
 	return c.JSON(http.StatusHTTPVersionNotSupported, message)
 }
 
-// AbortHTTPVersionNotSupported writes a standardized 505 HTTP Version Not Supported response.
+// AbortHTTPVersionNotSupported writes a standardized 505 HTTP version Not Supported response.
 func (c *Context) AbortHTTPVersionNotSupported(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusHTTPVersionNotSupported, "HTTP Version Not Supported", msg, err...)
+	return c.abortWithStatus(http.StatusHTTPVersionNotSupported, "HTTP version Not Supported", msg, err...)
 }
 
 // ErrorVariantAlsoNegotiates writes a 506 Variant Also Negotiates response.

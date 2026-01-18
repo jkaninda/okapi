@@ -48,7 +48,7 @@ Just like its namesake, which resembles a blend of giraffe and zebra. Okapi blen
 - Structured logging
 - Easy testing
 
-Built for **speed, simplicity, and real-world use**—whether you're prototyping or running in production.
+Built for **speed, simplicity, and real-world use** whether you're prototyping or running in production.
 
 ---
 
@@ -60,7 +60,7 @@ Built for **speed, simplicity, and real-world use**—whether you're prototyping
 * **Built for Production**: Fast, reliable, and efficient under real-world load. Okapi is optimized for performance without sacrificing developer experience.
 * **Standard Library Compatibility**: Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
 * **Automatic OpenAPI Documentation**: Generate comprehensive OpenAPI specs automatically for every route, keeping your API documentation always up to date with your code.
-* **Dynamic Route Management**: Enable or disable routes and route groups at runtime. No need to comment out code—just toggle behavior cleanly and efficiently.
+* **Dynamic Route Management**: Enable or disable routes and route groups at runtime. No need to comment out code, just toggle behavior cleanly and efficiently.
 
 Ideal for:
 
@@ -69,7 +69,7 @@ Ideal for:
 *  **Rapid prototyping**
 *  **Learning & teaching Go web development**
 
-Whether you're building your next startup, internal tools, or side projects—**Okapi scales with you.**
+Whether you're building your next startup, internal tools, or side projects, **Okapi scales with you.**
 
 
 ---
@@ -105,7 +105,7 @@ func main() {
 
 	o := okapi.Default()
 	
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!","License":"MIT"})
 	})
 	// Start the server
@@ -157,7 +157,7 @@ func main() {
   // Create a new Okapi instance with default config
   o := okapi.Default()
 
-  o.Post("/books", func(c okapi.Context) error {
+  o.Post("/books", func(c *okapi.Context) error {
     book := Book{}
     err := c.Bind(&book)
     if err != nil {
@@ -177,7 +177,7 @@ func main() {
     okapi.DocResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
 
   )
-  o.Get("/books/{id:int}", func(c okapi.Context) error {
+  o.Get("/books/{id:int}", func(c *okapi.Context) error {
         bookId := c.Param("id") 
 		return c.JSON(200, okapi.M{"book_id": bookId})
 	})
@@ -274,7 +274,7 @@ Use whichever syntax feels most natural — Okapi normalizes both `{}` and `:` s
 ### Path Parameters
 
 ```go
-o.Get("/books/:id", func(c okapi.Context) error {
+o.Get("/books/:id", func(c *okapi.Context) error {
 	id := c.Param("id")
 	return c.String(http.StatusOK, id)
 })
@@ -283,7 +283,7 @@ o.Get("/books/:id", func(c okapi.Context) error {
 ### Query Parameters
 
 ```go
-o.Get("/books", func(c okapi.Context) error {
+o.Get("/books", func(c *okapi.Context) error {
 	name := c.Query("name")
 	return c.String(http.StatusOK, name)
 })
@@ -298,7 +298,7 @@ o.Get("/books", func(c okapi.Context) error {
 Handle standard form fields and file uploads:
 
 ```go
-o.Post("/books", func(c okapi.Context) error {
+o.Post("/books", func(c *okapi.Context) error {
 	name := c.FormValue("name")
 	price := c.FormValue("price")
 
@@ -343,7 +343,7 @@ type Book struct {
 
 }
 
-o.Post("/books", func(c okapi.Context) error {
+o.Post("/books", func(c *okapi.Context) error {
 	book := &Book{}
 	if err := c.Bind(book); err != nil {
 		return c.ErrorBadRequest(err)
@@ -375,7 +375,7 @@ type BookRequest struct {
 	SessionID string   `cookie:"session_id" json:"session_id"`  // from cookie
 }
 
-o.Post("/books", func(c okapi.Context) error {
+o.Post("/books", func(c *okapi.Context) error {
 	bookReq := &BookRequest{}
 	if err := c.Bind(bookReq); err != nil {
 		return c.ErrorBadRequest(err)
@@ -472,7 +472,7 @@ type BookResponse struct {
 	SessionID string `cookie:"session_id" json:"session_id"`
 }
 
-o.Get("/books/:id", func(c okapi.Context) error {
+o.Get("/books/:id", func(c *okapi.Context) error {
 	book := BookResponse{
 		Status: http.StatusOK,
 		Body: struct {
@@ -605,7 +605,7 @@ jwtAuth.ForwardClaims = map[string]string{
 Get these claims in your handler:
 
 ```go
-func whoAmIHandler(c okapi.Context) error {
+func whoAmIHandler(c *okapi.Context) error {
     email := c.GetString("email")
     if email == "" {
         return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
@@ -628,7 +628,7 @@ You can combine this with `ClaimsExpression` for more complex scenarios.
 Example:
 
 ```go
-jwtAuth.ValidateClaims = func(c Context, claims jwt.Claims) error {
+jwtAuth.ValidateClaims = func(c *Context, claims jwt.Claims) error {
     method := c.Request().Method
     slog.Info("Request method,", "method", method)
     mapClaims, ok := claims.(jwt.MapClaims)
@@ -663,7 +663,7 @@ auth := okapi.JWTAuth{
     Audience:      "okapi.example.com",
     SigningSecret: SigningSecret,
     // ... other configurations
-    OnUnauthorized: func(c okapi.Context) error {
+    OnUnauthorized: func(c *okapi.Context) error {
         // Return custom unauthorized response
         return c.ErrorUnauthorized("Unauthorized")
     },
@@ -694,7 +694,7 @@ o.Get("/", SingleRouteMiddlewareHandler).Use(SingleRouteMiddleware)
 ```go
 cors := okapi.Cors{AllowedOrigins: []string{"http://localhost:8080", "https://example.com"}, AllowedHeaders: []string{}}
 o := okapi.New(okapi.WithCors(cors))
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		return c.String(http.StatusOK, "Hello World!")
 	})
 ```
@@ -703,7 +703,7 @@ o := okapi.New(okapi.WithCors(cors))
 
 ```go
 func customMiddleware(next okapi.HandleFunc) okapi.HandleFunc {
-	return func(c okapi.Context) error {
+	return func(c *okapi.Context) error {
 		start := time.Now()
 		err := next(c)
 		log.Printf("Request took %v", time.Since(start))
@@ -944,7 +944,7 @@ type BookResponse struct {
 #### Using `okapi.Request()` and `okapi.Response()`
 
 ```go
-o.Post("/books", func(c okapi.Context) error {
+o.Post("/books", func(c *okapi.Context) error {
     req := &BookRequest{}
 	// Validate request body
     if err := c.Bind(req); err != nil {
@@ -964,7 +964,7 @@ It inspects struct tags to automatically set headers, cookies, and status code, 
 #### Using `.WithIO()` for request and response
 
 ```go
-o.Post("/books", func(c okapi.Context) error {
+o.Post("/books", func(c *okapi.Context) error {
     req := &BookRequest{}
     if err := c.Bind(req); err != nil {
         return c.ErrorBadRequest(err)
@@ -976,7 +976,7 @@ o.Post("/books", func(c okapi.Context) error {
 #### Using `.WithInput()` for request only
 
 ```go
-o.Post("/books", func(c okapi.Context) error {
+o.Post("/books", func(c *okapi.Context) error {
     req := &BookRequest{}
     if err := c.Bind(req); err != nil {
         return c.ErrorBadRequest(err)
@@ -988,7 +988,7 @@ o.Post("/books", func(c okapi.Context) error {
 #### Using `.WithOutput()` for response only
 
 ```go
-o.Post("/books", func(c okapi.Context) error {
+o.Post("/books", func(c *okapi.Context) error {
     req := &BookRequest{}
     if err := c.Bind(req); err != nil {
         return c.ErrorBadRequest(err)
@@ -1067,13 +1067,13 @@ api := app.Group("api")
 
 // Define and disable v1 group
 v1 := api.Group("v1").Disable() // All v1 routes return 404 and are hidden from docs
-v1.Get("/", func(c okapi.Context) error {
+v1.Get("/", func(c *okapi.Context) error {
     return c.OK(okapi.M{"version": "v1"})
 })
 
 // Define active v2 group
 v2 := api.Group("v2")
-v2.Get("/", func(c okapi.Context) error {
+v2.Get("/", func(c *okapi.Context) error {
     return c.OK(okapi.M{"version": "v2"})
 })
 
@@ -1103,7 +1103,7 @@ To re-enable any route or group, simply call the `.Enable()` method or remove th
 ### Using a Custom Renderer
 
 ```go
-o.Renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c okapi.Context) error {
+o.Renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
 	tmpl, err := template.ParseFiles("templates/" + name + ".html")
 	if err != nil {
 		return err
@@ -1119,7 +1119,7 @@ type Template struct {
 	templates *template.Template
 }
 
-func (t *Template) Render(w io.Writer, name string, data interface{}, c okapi.Context) error {
+func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 
@@ -1136,7 +1136,7 @@ o.With().WithRenderer(&Template{templates: template.Must(template.ParseGlob("pub
 ### Rendering a View
 
 ```go
-o.Get("/", func(c okapi.Context) error {
+o.Get("/", func(c *okapi.Context) error {
 	return c.Render(http.StatusOK, "welcome", okapi.M{
 		"title":   "Welcome Page",
 		"message": "Hello from Okapi!",
@@ -1152,7 +1152,7 @@ Serve static assets and individual files:
 
 ```go
 // Serve a single file
-o.Get("/favicon.ico", func(c okapi.Context) error {
+o.Get("/favicon.ico", func(c *okapi.Context) error {
 	c.ServeFile("public/favicon.ico")
 	return nil
 })
@@ -1180,7 +1180,7 @@ o.Static("/static", "public/assets")
     o.With(okapi.WithTLSServer(":8443", tls))
     
     // Register application routes and handlers
-    o.Get("/", func(c okapi.Context) error {
+    o.Get("/", func(c *okapi.Context) error {
     return c.JSON(http.StatusOK, okapi.M{
     "message": "Welcome to Okapi!",
     "status":  "operational",
@@ -1262,12 +1262,12 @@ To group and manage routes more effectively, you can define them as a slice of `
 ```go
 type BookService struct{}
 
-func (bc *BookService) GetBooks(c okapi.Context) error {
+func (bc *BookService) GetBooks(c *okapi.Context) error {
 	// Simulate fetching books from a database
 	return c.OK(okapi.M{"success": true, "message": "Books retrieved successfully"})
 }
 
-func (bc *BookService) CreateBook(c okapi.Context) error {
+func (bc *BookService) CreateBook(c *okapi.Context) error {
 	// Simulate creating a book in a database
 	return c.Created(okapi.M{
 		"success": true,
@@ -1410,7 +1410,7 @@ You can mix Okapi and standard handlers in the same application:
 
 ```go
 // Okapi-style route
-o.Handle("GET", "/okapi", func(c okapi.Context) error {
+o.Handle("GET", "/okapi", func(c *okapi.Context) error {
     return c.OK(okapi.M{"status": "ok"})
 })
 

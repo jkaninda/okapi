@@ -17,7 +17,7 @@ type BookRequest struct {
 	Body Book
 }
 type BooksResponse struct {
-	Version string `header:"X-Version"`
+	Version string `header:"X-version"`
 	Status  int
 	Body    []Book
 }
@@ -28,11 +28,11 @@ func main() {
 	// Create a new Okapi instance with default config
 	o := okapi.Default()
 
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!", "License": "MIT"})
 	})
 	// Using Body and Status
-	o.Get("/books", func(c okapi.Context) error {
+	o.Get("/books", func(c *okapi.Context) error {
 		output := &BooksResponse{
 			Body:    books,
 			Version: `1.0.0`,
@@ -40,7 +40,7 @@ func main() {
 		return c.Respond(output)
 	}).WithOutput(&BooksResponse{})
 
-	o.Post("/books", func(c okapi.Context) error {
+	o.Post("/books", func(c okapi.C) error {
 		book := &Book{}
 		err := c.Bind(book)
 		if err != nil {
@@ -57,7 +57,7 @@ func main() {
 		okapi.Request(&BookRequest{}),
 		okapi.Response(&Book{}), // Success Response body
 	)
-	o.Get("/books/{id:int}", func(c okapi.Context) error {
+	o.Get("/books/{id:int}", func(c *okapi.Context) error {
 		id, _ := strconv.Atoi(c.Param("id"))
 		for _, book := range books {
 			if book.ID == id {

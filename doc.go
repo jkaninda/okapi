@@ -129,21 +129,21 @@ var (
 // registerDocRoutes registers the OpenAPI documentation routes for the Okapi instance.
 func (o *Okapi) registerDocRoutes(title string) {
 	// Register the OpenAPI JSON route
-	o.Get(openApiDocPath, func(c Context) error {
+	o.Get(openApiDocPath, func(c *Context) error {
 		return c.JSON(http.StatusOK, o.openapiSpec)
 	}).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// Register the swagger route
-	o.Get(openApiDocPrefix, func(c Context) error {
+	o.Get(openApiDocPrefix, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// TODO: remove this route in the next major release
-	o.Get("/docs/index.html", func(c Context) error {
+	o.Get("/docs/index.html", func(c *Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// Register the Redoc route
-	o.Get("/redoc", func(c Context) error {
+	o.Get("/redoc", func(c *Context) error {
 		return c.renderHTML(http.StatusOK, redocTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation

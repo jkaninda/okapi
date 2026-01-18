@@ -32,6 +32,7 @@ import (
 	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,7 +79,7 @@ func TestJwtMiddleware(t *testing.T) {
 			"role":  "user.role",
 			"name":  "user.name",
 		},
-		ValidateClaims: func(c Context, claims jwt.Claims) error {
+		ValidateClaims: func(c *Context, claims jwt.Claims) error {
 			fPrint("Validating claims using custom function")
 			method := c.Request().Method
 			fPrint("Request method,", "method", method)
@@ -98,7 +99,7 @@ func TestJwtMiddleware(t *testing.T) {
 			}
 			return nil
 		},
-		OnUnauthorized: func(c Context) error {
+		OnUnauthorized: func(c *Context) error {
 			return c.ErrorUnauthorized("Unauthorized")
 		},
 	}
@@ -235,7 +236,7 @@ func TestBasicAuth(t *testing.T) {
 	app := Default()
 	app.Use(auth.Middleware)
 
-	app.Get("/protected", func(c Context) error {
+	app.Get("/protected", func(c *Context) error {
 		user, exists := c.Get(auth.ContextKey)
 		if !exists {
 			return c.ErrorUnauthorized(M{"error": "Unauthorized"})
@@ -272,33 +273,58 @@ func TestStdMiddleware(t *testing.T) {
 	o.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			slog.Info("Hello Go standard HTTP middleware function")
+			w.Header().Add("Version", "v1.0")
 			handler.ServeHTTP(w, r)
 		})
 
 	})
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c *Context) error {
 		return c.JSON(http.StatusOK, M{"hello": "world"})
 	}).Use(helloMiddleware)
 	api := o.Group("/api")
 	api.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			slog.Info("Hello Go standard HTTP Group middleware function")
+			w.Header().Add("Group", "api")
 
 			handler.ServeHTTP(w, r)
 		})
 	})
-	api.Get("/hello", func(c Context) error {
+	api.Get("/hello", func(c *Context) error {
 		c.Logger().Info("Hello World")
 		return c.JSON(http.StatusOK, M{"hello": "world"})
 	}, UseMiddleware(helloMiddleware),
 	).Use(helloMiddleware)
-	api.Get("/", func(c Context) error {
+	api.Get("/", func(c *Context) error {
 		return c.JSON(http.StatusOK, M{"hello": "world"})
 	})
-	o.Handle("GET", "hello", func(c Context) error {
+	o.Handle("GET", "hello", func(c *Context) error {
 		return c.JSON(http.StatusOK, M{"hello": "world"})
 	})
 	o.HandleStd("POST", "hello", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, err := w.Write([]byte("hello world"))
+		if err != nil {
+			return
+		}
+	})
+	apiV1 := api.Group("v1")
+	apiV1.UseMiddleware(func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if s := r.Header.Get("Authorization"); s == "" || !strings.Contains(s, "Bearer") {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, err := w.Write([]byte("Unauthorized"))
+				if err != nil {
+					return
+				}
+				return
+			}
+			handler.ServeHTTP(w, r)
+
+		})
+
+	})
+	apiV1.HandleStd("POST", "protected", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		_, err := w.Write([]byte("hello world"))
 		if err != nil {
@@ -322,12 +348,14 @@ func TestStdMiddleware(t *testing.T) {
 	}(o)
 
 	waitForServer()
+	okapitest.GET(t, "http://localhost:8080/").ExpectStatusOK().ExpectHeader("Version", "v1.0")
+	okapitest.GET(t, "http://localhost:8080/api").ExpectStatusOK().ExpectHeader("Group", "api")
+	okapitest.GET(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/hello").ExpectStatusOK()
+	okapitest.POST(t, "http://localhost:8080/hello").ExpectStatusCreated().ExpectBody("hello world")
+	okapitest.POST(t, "http://localhost:8080/api/v1/protected").ExpectStatusUnauthorized().ExpectBody("Unauthorized")
+	okapitest.POST(t, "http://localhost:8080/api/v1/protected").SetBearerAuth("Token").ExpectStatusCreated().ExpectBody("hello world")
 
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusCreated)
 }
 func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string {
 	t.Helper()
@@ -341,7 +369,7 @@ func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string
 	return token
 }
 
-func whoAmIHandler(c Context) error {
+func whoAmIHandler(c *Context) error {
 	email := c.GetString("email")
 	if email == "" {
 		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
@@ -356,8 +384,8 @@ func whoAmIHandler(c Context) error {
 	)
 }
 
-func helloMiddleware(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func helloMiddleware(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		slog.Info("Hello Okapi Route middleware function")
 		return next(c)
 	}

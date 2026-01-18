@@ -40,7 +40,7 @@ func TestHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(nil, rec, req)
-	err := HelloHandler(*ctx)
+	err := HelloHandler(ctx)
 	if err != nil {
 		t.Errorf("Handler returned an error: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestServeFile(t *testing.T) {
 	createTemplate(t)
 
 	o := New()
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c *Context) error {
 		c.ServeFileAttachment("public", "hello.html")
 		return nil
 	})
@@ -83,7 +83,7 @@ func TestServeFile(t *testing.T) {
 	waitForServer()
 	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
 }
-func HelloHandler(c Context) error {
+func HelloHandler(c *Context) error {
 	if c.IsWebSocketUpgrade() {
 		fmt.Println("WebSocket upgrade detected")
 	}

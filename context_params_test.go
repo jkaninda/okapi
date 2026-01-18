@@ -37,7 +37,7 @@ import (
 func TestParam(t *testing.T) {
 
 	o := Default()
-	o.Get("/api/:version/users/:id", func(c Context) error {
+	o.Get("/api/:version/users/:id", func(c *Context) error {
 		version := c.Param("version")
 		q := c.Query("q")
 		tags := c.QueryArray("tags")

@@ -56,7 +56,7 @@ type Template struct {
 	templates *template.Template
 }
 
-func (t *Template) Render(w io.Writer, name string, data interface{}, c Context) error {
+func (t *Template) Render(w io.Writer, name string, data interface{}, c *Context) error {
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 func TestWithRenderer(t *testing.T) {
@@ -65,7 +65,7 @@ func TestWithRenderer(t *testing.T) {
 		templates: template.Must(template.ParseGlob("public/*.html")),
 	}
 	o := New().WithRenderer(temp)
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c *Context) error {
 
 		title := "Greeting Page"
 		message := "Hello, World!"

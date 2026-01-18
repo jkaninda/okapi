@@ -78,7 +78,7 @@ func TestSanitizeHeaders(t *testing.T) {
 }
 func TestBuildDebugFields(t *testing.T) {
 	o := New().WithDebug()
-	o.Get("/debug", func(c Context) error {
+	o.Get("/debug", func(c *Context) error {
 		fields := buildDebugFields(c)
 		slog.Info("Debug Fields", "fields", fields)
 		return c.JSON(http.StatusOK, fields)

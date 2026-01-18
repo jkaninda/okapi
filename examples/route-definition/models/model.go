@@ -30,11 +30,13 @@ type Response struct {
 	Data    Book   `json:"data"`
 }
 type Book struct {
-	Id    int    `json:"id"`
-	Name  string `json:"name" form:"name"  max:"50" required:"true" description:"Book name"`
-	Price int    `json:"price" form:"price" query:"price" yaml:"price" required:"true" description:"Book price"`
+	Id       int    `json:"id"`
+	Name     string `json:"name" form:"name"  max:"50" required:"true" description:"Book name"`
+	Price    int    `json:"price" form:"price" query:"price" yaml:"price" required:"true" description:"Book price"`
+	Year     int    `json:"year" form:"year" query:"year" yaml:"year" deprecated:"true" description:"Publication year"`
+	Quantity int    `json:"quantity" form:"quantity" query:"quantity" yaml:"quantity" hidden:"true" description:"Available quantity"`
 }
-type ErrorResponse struct {
+type ErrorResponseDto struct {
 	Success bool `json:"success"`
 	Status  int  `json:"status"`
 	Details any  `json:"details"`
@@ -45,10 +47,9 @@ type AuthRequest struct {
 	Password string `json:"password" required:"true" description:"Password for authentication"`
 }
 type AuthResponse struct {
-	Success   bool   `json:"success"`
-	Message   string `json:"message"`
-	Token     string `json:"token,omitempty"`
-	ExpiresAt int64  `json:"expires,omitempty"`
+	Token     string   `json:"token,omitempty"`
+	ExpiresAt int64    `json:"expires,omitempty"`
+	User      UserInfo `json:"user,omitempty"`
 }
 type UserInfo struct {
 	Name  string `json:"name"`
@@ -65,8 +66,42 @@ type BookUpdateRequest struct {
 		Price int    `json:"price" min:"5" required:"true" description:"Book price"`
 	} `json:"body"`
 }
+type BookRequest struct {
+	Authorization string `header:"Authorization"`
+	Body          Book   `json:"body"`
+}
 type BookResponse struct {
 	RequestId string `header:"X-Request-Id"`
 	Status    int    `json:"status"`
 	Body      Book   `json:"body"`
+}
+type ResponseBase struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Details any    `json:"details,omitempty"`
+}
+
+type ResponseDto[T any] struct {
+	*ResponseBase
+	Data T `json:"data,omitempty"`
+}
+type BooksResponse = ResponseDto[[]Book]
+
+func SuccessResponse[T any](message string, data T) ResponseDto[T] {
+	return ResponseDto[T]{
+		ResponseBase: &ResponseBase{
+			Success: true,
+			Message: message,
+		},
+		Data: data,
+	}
+}
+func ErrorResponse(message string, err error) ResponseDto[any] {
+	return ResponseDto[any]{
+		ResponseBase: &ResponseBase{
+			Success: false,
+			Message: message,
+			Details: err.Error(),
+		},
+	}
 }

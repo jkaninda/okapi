@@ -45,7 +45,7 @@ type output struct {
 func TestOpenAPI(t *testing.T) {
 	o := Default()
 
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	},
 		DocOperationId("getBook"),
@@ -239,7 +239,7 @@ func TestNew(t *testing.T) {
 }
 func TestWithOpenAPIDisabled(t *testing.T) {
 	o := Default().WithOpenAPIDisabled()
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	}).Hide()
 	go func() {
@@ -260,7 +260,7 @@ func TestWithOpenAPIDisabled(t *testing.T) {
 
 }
 
-func anyHandler(c Context) error {
+func anyHandler(c *Context) error {
 	slog.Info("Calling route", "path", c.Request().URL.Path, "method", c.request.Method)
 	c.SetHeader("X-RateLimit-Limit", "100")
 	return c.OK(M{"message": "Hello from Okapi!"})

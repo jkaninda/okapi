@@ -38,13 +38,13 @@ type User struct {
 func TestContext_Bind(t *testing.T) {
 	o := Default()
 
-	o.Get("/", func(c Context) error {
+	o.Get("/", func(c *Context) error {
 		return c.XML(http.StatusOK, books)
 	})
-	o.Get("/hello", func(c Context) error {
+	o.Get("/hello", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	})
-	o.Post("/hello", func(c Context) error {
+	o.Post("/hello", func(c *Context) error {
 		user := User{}
 		if err := c.Bind(&user); err != nil {
 			return c.AbortBadRequest("Bad requests")
@@ -55,18 +55,18 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Put("/hello", func(c Context) error {
+	o.Put("/hello", func(c *Context) error {
 		user := User{}
 		if err := c.B(&user); err != nil {
 			return c.AbortBadRequest("Bad requests")
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Get("/hello", func(c Context) error {
+	o.Get("/hello", func(c *Context) error {
 		return c.JSON(http.StatusOK, books)
 	})
 
-	o.Post("/bind", func(c Context) error {
+	o.Post("/bind", func(c *Context) error {
 		user := User{}
 		if ok, err := c.ShouldBind(&user); !ok {
 			return c.AbortBadRequest("Bad requests", err)
@@ -74,7 +74,7 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Post("/multipart", func(c Context) error {
+	o.Post("/multipart", func(c *Context) error {
 		user := User{}
 		if err := c.BindMultipart(&user); err != nil {
 			return c.AbortBadRequest("Bad requests", err)
@@ -82,7 +82,7 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Post("/xml", func(c Context) error {
+	o.Post("/xml", func(c *Context) error {
 		user := User{}
 		if err := c.BindXML(&user); err != nil {
 			return c.AbortBadRequest("Bad requests", err)
@@ -90,7 +90,7 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Post("/form", func(c Context) error {
+	o.Post("/form", func(c *Context) error {
 		user := User{}
 		if err := c.BindForm(&user); err != nil {
 			return c.AbortBadRequest("Bad requests", err)
@@ -98,7 +98,7 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Get("/query", func(c Context) error {
+	o.Get("/query", func(c *Context) error {
 		user := User{}
 		if err := c.BindQuery(&user); err != nil {
 			return c.AbortBadRequest("Bad requests", err)
@@ -106,7 +106,7 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Post("/json", func(c Context) error {
+	o.Post("/json", func(c *Context) error {
 		user := User{}
 		if err := c.BindJSON(&user); err != nil {
 			return c.AbortBadRequest("Bad requests", err)
@@ -114,7 +114,7 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Post("/yaml", func(c Context) error {
+	o.Post("/yaml", func(c *Context) error {
 		user := User{}
 		if err := c.BindYAML(&user); err != nil {
 			return c.ErrorBadRequest("Bad requests")
@@ -122,7 +122,7 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.JSON(http.StatusCreated, user)
 	})
-	o.Post("/protobuf", func(c Context) error {
+	o.Post("/protobuf", func(c *Context) error {
 		if err := c.BindProtoBuf(nil); err != nil {
 			return c.AbortBadRequest("Bad requests", err)
 

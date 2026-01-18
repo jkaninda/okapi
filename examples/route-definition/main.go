@@ -10,15 +10,7 @@ func main() {
 	app := okapi.Default()
 	// Create the route instance
 	route := routes.NewRoute(app)
-	// ************ Registering Routes ************
-	app.Register(route.Home())
-	app.Register(route.Version())
-	app.Register(route.AdminRoutes()...)
-	app.Register(route.AuthRoute())
-	app.Register(route.SecurityRoutes()...)
-	app.Register(route.BookRoutes()...)
-	app.Register(route.V1BookRoutes()...)
-
+	route.RegisterRoutes()
 	// Start the server
 	if err := app.Start(); err != nil {
 		panic(err)

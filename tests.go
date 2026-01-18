@@ -38,7 +38,7 @@ func NewTestContext(method, url string, body io.Reader) (*Context, *httptest.Res
 	ctx := &Context{
 		request:  req,
 		okapi:    nil,
-		response: &response{writer: w},
+		response: &responseWriter{writer: w},
 		store:    newStoreData(),
 	}
 

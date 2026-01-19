@@ -58,6 +58,8 @@ type (
 		mu   sync.RWMutex
 		data map[string]any
 	}
+	// C is a shortcut of *Context
+	C = *Context
 )
 
 // Mime types
@@ -495,11 +497,11 @@ func (c *Context) Render(code int, name string, data interface{}) error {
 	}
 	if name == "" {
 		return c.writeResponse(code, HTML, func() error {
-			return c.okapi.renderer.Render(c.response, "", nil, *c)
+			return c.okapi.renderer.Render(c.response, "", nil, c)
 		})
 	}
 	return c.writeResponse(code, HTML, func() error {
-		return c.okapi.renderer.Render(c.response, name, data, *c)
+		return c.okapi.renderer.Render(c.response, name, data, c)
 	})
 }
 
@@ -586,7 +588,7 @@ func (c *Context) Return(output any) error {
 //
 //	type BookResponse struct {
 //	  Status  int                           // HTTP status code
-//	  Version string `header:"Version"`     // Response header
+//	  version string `header:"version"`     // Response header
 //	  Session string `cookie:"SessionID"`   // Response cookie
 //	  Body    struct {
 //	    ID    int    `json:"id"`
@@ -597,7 +599,7 @@ func (c *Context) Return(output any) error {
 //
 //	okapi.Get("/books/:id", func(c okapi.Context) error {
 //	  return c.Respond(BookResponse{
-//	    Version: "v1",
+//	    version: "v1",
 //	    Session: "abc123",
 //	    Status:  200,
 //	    Body: struct {
@@ -686,7 +688,7 @@ func NewContext(o *Okapi, w http.ResponseWriter, r *http.Request) *Context {
 	return &Context{
 		request:  r,
 		okapi:    o,
-		response: &response{writer: w},
+		response: newResponseWriter(w),
 		store:    newStoreData(),
 	}
 }

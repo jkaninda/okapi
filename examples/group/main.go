@@ -54,7 +54,7 @@ func main() {
 	// Example usage of Group handling in Okapi
 	// Create a new Okapi instance
 	o := okapi.New(okapi.WithDebug()).WithOpenAPIDocs()
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		// Handler logic for the root route
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
 	})
@@ -64,7 +64,7 @@ func main() {
 	v1 := api.Group("/v1")
 
 	// Define a route with a handler
-	v1.Get("/users", func(c okapi.Context) error {
+	v1.Get("/users", func(c *okapi.Context) error {
 		// Handler logic for the route
 		return c.OK(users)
 	},
@@ -83,12 +83,12 @@ func main() {
 	// Create a new group with a base path v2
 	v2 := api.Group("/v2")
 	// Define a route with a handler
-	v2.Get("/users", func(c okapi.Context) error {
+	v2.Get("/users", func(c *okapi.Context) error {
 		c.SetHeader("Version", "v2")
 		// Handler logic for the route
 		return c.JSON(http.StatusOK, users)
 	})
-	v2.Get("/users/:id", func(c okapi.Context) error {
+	v2.Get("/users/:id", func(c *okapi.Context) error {
 		c.SetHeader("Version", "v2")
 		id := c.Param("id")
 		for _, user := range users {
@@ -105,7 +105,7 @@ func main() {
 		panic(err)
 	}
 }
-func store(c okapi.Context) error {
+func store(c *okapi.Context) error {
 	var newUser User
 	if ok, err := c.ShouldBind(&newUser); !ok {
 		errMessage := fmt.Sprintf("Failed to bind user data: %v", err)
@@ -117,7 +117,7 @@ func store(c okapi.Context) error {
 	// Respond with the created user
 	return c.JSON(http.StatusCreated, newUser)
 }
-func show(c okapi.Context) error {
+func show(c *okapi.Context) error {
 	var newUser User
 	if ok, err := c.ShouldBind(&newUser); !ok {
 		errMessage := fmt.Sprintf("Failed to bind user data: %v", err)
@@ -130,7 +130,7 @@ func show(c okapi.Context) error {
 	}
 	return c.JSON(http.StatusNotFound, okapi.M{"error": "User not found"})
 }
-func update(c okapi.Context) error {
+func update(c *okapi.Context) error {
 	var newUser User
 	if ok, err := c.ShouldBind(&newUser); !ok {
 		errMessage := fmt.Sprintf("Failed to bind user data: %v", err)

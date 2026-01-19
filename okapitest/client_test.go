@@ -1,7 +1,7 @@
 /*
  *  MIT License
  *
- * Copyright (c) 2025 Jonas Kaninda
+ * Copyright (c) 2026 Jonas Kaninda
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,23 +22,16 @@
  *  SOFTWARE.
  */
 
-package okapi
+package okapitest
 
-import (
-	"errors"
-	"io"
-)
+import "testing"
 
-var (
-	ErrNoRenderer = errors.New("no renderer set for context")
-)
-
-type Renderer interface {
-	Render(io.Writer, string, interface{}, *Context) error
-}
-
-type RendererFunc func(io.Writer, string, interface{}, *Context) error
-
-func (f RendererFunc) Render(w io.Writer, name string, data interface{}, c *Context) error {
-	return f(w, name, data, c)
+func TestNewClient(t *testing.T) {
+	client := NewClient(t, "http://example.com")
+	if client == nil {
+		t.Fatal("Expected client to be created, got nil")
+	}
+	if client.BaseURL != "http://example.com" {
+		t.Fatalf("Expected BaseURL to be 'http://example.com', got '%s'", client.BaseURL)
+	}
 }

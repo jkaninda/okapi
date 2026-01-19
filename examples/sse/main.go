@@ -55,14 +55,14 @@ func main() {
 	// Create a new Okapi instance
 	o := okapi.Default()
 
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		return c.HTMLView(http.StatusOK, template, okapi.M{
 			"name":     "OKAPI",
 			"message":  "This is an example of SSE",
 			"eventURL": "/events",
 		})
 	})
-	o.Get("/events", func(c okapi.Context) error {
+	o.Get("/events", func(c *okapi.Context) error {
 		// Simulate sending events (you can replace this with real data)
 		for i := 0; i <= 10; i++ {
 			data := okapi.M{"name": "Okapi", "License": "MIT", "event": "SSE example", "count": i}

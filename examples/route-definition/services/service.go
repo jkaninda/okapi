@@ -51,38 +51,33 @@ var (
 
 // ****************** Services *****************
 
-func (hc *CommonService) Home(c okapi.Context) error {
+func (hc *CommonService) Home(c *okapi.Context) error {
 	return c.OK(okapi.M{"message": "Welcome to the Okapi Web Framework!"})
 }
-func (hc *CommonService) Version(c okapi.Context) error {
+func (hc *CommonService) Version(c *okapi.Context) error {
 	return c.OK(okapi.M{"version": ApiVersion})
 }
-func (bc *BookService) GetBooks(c okapi.Context) error {
+func (bc *BookService) List(c *okapi.Context) error {
 	// Simulate fetching books from a database
-	return c.OK(books)
+	return c.OK(models.SuccessResponse("Books fetched successfully", books))
 }
 
-func (bc *BookService) CreateBook(c okapi.Context) error {
+func (bc *BookService) Create(c *okapi.Context) error {
 	// Simulate creating a book in a database
 	book := &models.Book{}
 	err := c.Bind(book)
 	if err != nil {
-		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+		return c.ErrorBadRequest(models.ErrorResponse("Bad Request", err))
 	}
 	book.Id = len(books) + 1
 	books = append(books, book)
-	response := models.Response{
-		Success: true,
-		Message: "Book created successfully",
-		Data:    *book,
-	}
-	return c.OK(response)
+	return c.OK(models.SuccessResponse("Book created successfully", book))
 }
-func (bc *BookService) GetBook(c okapi.Context) error {
+func (bc *BookService) Get(c *okapi.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+		return c.ErrorBadRequest(models.ErrorResponse("Bad Request", err))
 	}
 	// Simulate a fetching book from a database
 
@@ -91,13 +86,13 @@ func (bc *BookService) GetBook(c okapi.Context) error {
 			return c.OK(book)
 		}
 	}
-	return c.AbortNotFound("Book not found")
+	return c.ErrorNotFound(models.ErrorResponse("Not found", fmt.Errorf("book not found with id %s", id)))
 }
-func (bc *BookService) DeleteBook(c okapi.Context) error {
+func (bc *BookService) Delete(c *okapi.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
-		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+		return c.ErrorBadRequest(models.ErrorResponseDto{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
 	}
 
 	// Simulate deleting a book from a database
@@ -115,10 +110,10 @@ func (bc *BookService) DeleteBook(c okapi.Context) error {
 
 // Example of Okapi using Body Field Style
 
-func (bc *BookService) UpdateBook(c okapi.Context) error {
+func (bc *BookService) Update(c *okapi.Context) error {
 	bookRequest := &models.BookUpdateRequest{}
 	if err := c.Bind(bookRequest); err != nil {
-		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+		return c.ErrorBadRequest(models.ErrorResponse("Bad Request", err))
 	}
 	// Simulate updating a book from a database
 	for i, book := range books {
@@ -133,40 +128,35 @@ func (bc *BookService) UpdateBook(c okapi.Context) error {
 			})
 		}
 	}
-	return c.Respond(&models.BookResponse{
-		RequestId: uuid.NewString(),
-		Status:    404,
-	})
+	return c.ErrorNotFound(models.ErrorResponse("Not found", fmt.Errorf("book not found with id %d", bookRequest.ID)))
 
 }
 
 // ******************** AuthService *****************
 
-func (bc *AuthService) Login(c okapi.Context) error {
+func (bc *AuthService) Login(c *okapi.Context) error {
 	authRequest := &models.AuthRequest{}
 	err := c.Bind(authRequest)
 	if err != nil {
-		return c.ErrorBadRequest(models.ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+		return c.ErrorBadRequest(models.ErrorResponse("Bad Request", err))
 	}
 	// Validate the authRequest and generate a JWT token
 	authResponse, err := middlewares.Login(authRequest)
 	if err != nil {
-		return c.ErrorUnauthorized(authResponse)
+		return c.ErrorUnauthorized(models.ErrorResponse("Unauthorized", err))
 	}
-	return c.OK(authResponse)
+	message := "Welcome back " + authRequest.Username
+
+	return c.OK(models.SuccessResponse(message, authResponse))
 }
-func (bc *AuthService) WhoAmI(c okapi.Context) error {
+func (bc *AuthService) WhoAmI(c *okapi.Context) error {
 	// Get User Information from the context, shared by the JWT middleware using forwardClaims
 	email := c.GetString("email")
 	if email == "" {
-		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
+		return c.ErrorUnauthorized(models.ErrorResponse("Unauthorized", fmt.Errorf("user not authenticated")))
+
 	}
 
 	// Respond with the current user information
-	return c.OK(models.UserInfo{
-		Email: email,
-		Role:  c.GetString("role"),
-		Name:  c.GetString("name"),
-	},
-	)
+	return c.OK(models.SuccessResponse("Who am I'm logged in", email))
 }

@@ -127,7 +127,7 @@ func main() {
 		},
 	})
 
-	o.Get("/", func(c okapi.Context) error {
+	o.Get("/", func(c *okapi.Context) error {
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
 	}, okapi.DocSummary("Home "))
 
@@ -173,7 +173,7 @@ func main() {
 			"role":  "user.role",
 			"name":  "user.name",
 		},
-		ValidateClaims: func(c okapi.Context, claims jwt.Claims) error {
+		ValidateClaims: func(c *okapi.Context, claims jwt.Claims) error {
 			method := c.Request().Method
 			slog.Info("Validating JWT claims", "method", method)
 			slog.Info("Validating JWT claims for role using custom function")
@@ -201,7 +201,7 @@ func main() {
 		okapi.DocResponse(Book{}),
 		okapi.DocRequestBody(Book{}))
 
-	adminApiV2.Delete("/books/:id", func(c okapi.Context) error {
+	adminApiV2.Delete("/books/:id", func(c *okapi.Context) error {
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			return c.AbortBadRequest("invalid request", err)
@@ -223,7 +223,7 @@ func main() {
 
 	// ******* Public API Routes ********
 	// Define routes for the v2 group
-	v2.Post("/login", func(c okapi.Context) error {
+	v2.Post("/login", func(c *okapi.Context) error {
 		loginRequest := &LoginRequest{}
 		if err := c.Bind(loginRequest); err != nil {
 			return c.AbortBadRequest("invalid request", err)
@@ -270,7 +270,7 @@ func main() {
 
 // ***** Handlers *****
 
-func adminCreateBook(c okapi.Context) error {
+func adminCreateBook(c *okapi.Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
 		return c.AbortBadRequest(fmt.Sprintf("Failed to bind book: %v", err))
@@ -284,7 +284,7 @@ func adminCreateBook(c okapi.Context) error {
 	// Respond with the created book
 	return c.JSON(http.StatusCreated, newBook)
 }
-func adminUpdate(c okapi.Context) error {
+func adminUpdate(c *okapi.Context) error {
 	var newBook Book
 	if ok, err := c.ShouldBind(&newBook); !ok {
 		return c.AbortBadRequest("Bad request", err)
@@ -300,10 +300,10 @@ func adminUpdate(c okapi.Context) error {
 	}
 	return c.AbortNotFound("Book not found")
 }
-func getBooks(c okapi.Context) error {
+func getBooks(c *okapi.Context) error {
 	return c.JSON(http.StatusOK, books)
 }
-func findById(c okapi.Context) error {
+func findById(c *okapi.Context) error {
 	var newBook Book
 	// Bind the book ID from the request parameters using `param` tags
 	// You can also use c.Param("id") to get the ID from the URL
@@ -319,7 +319,7 @@ func findById(c okapi.Context) error {
 	}
 	return c.ErrorNotFound(okapi.M{"error": "Book not found"})
 }
-func whoAmI(c okapi.Context) error {
+func whoAmI(c *okapi.Context) error {
 	email := c.GetString("email")
 	if email == "" {
 		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
@@ -334,8 +334,8 @@ func whoAmI(c okapi.Context) error {
 	)
 }
 
-func customMiddleware(next okapi.HandleFunc) okapi.HandleFunc {
-	return func(c okapi.Context) error {
+func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
+	return func(c *okapi.Context) error {
 		slog.Info("Custom middleware executed", "path", c.Request().URL.Path, "method", c.Request().Method)
 		// Call the next handler in the chain
 		if err := next(c); err != nil {

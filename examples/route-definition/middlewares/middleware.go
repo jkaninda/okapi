@@ -52,7 +52,7 @@ var (
 			"name":  "user.name",
 		},
 		// CustomClaims claims validation function
-		ValidateClaims: func(c okapi.Context, claims jwt.Claims) error {
+		ValidateClaims: func(c *okapi.Context, claims jwt.Claims) error {
 			slog.Info("Validating JWT claims for role using custom function")
 			// Simulate a custom claims validation
 			mapClaims, ok := claims.(jwt.MapClaims)
@@ -88,10 +88,7 @@ func Login(authRequest *models.AuthRequest) (models.AuthResponse, error) {
 	// Simulate a login function that returns a JWT token
 	if authRequest.Username != "admin" && authRequest.Password != "password" ||
 		authRequest.Username != "user" && authRequest.Password != "password" {
-		return models.AuthResponse{
-			Success: false,
-			Message: "Invalid username or password",
-		}, fmt.Errorf("username or password is wrong")
+		return models.AuthResponse{}, fmt.Errorf("username or password is wrong")
 	}
 
 	if _, ok := jwtClaims["user"].(map[string]string); ok {
@@ -113,21 +110,21 @@ func Login(authRequest *models.AuthRequest) (models.AuthResponse, error) {
 	token, err := okapi.GenerateJwtToken(JWTAuth.SigningSecret, jwtClaims, expireAt)
 	if err != nil {
 
-		return models.AuthResponse{
-			Success: false,
-			Message: "Invalid username or password",
-		}, fmt.Errorf("failed to generate JWT token: %w", err)
+		return models.AuthResponse{}, fmt.Errorf("failed to generate JWT token: %w", err)
 	}
 	return models.AuthResponse{
-		Success:   true,
-		Message:   "Welcome back " + authRequest.Username,
 		Token:     token,
 		ExpiresAt: time.Now().Add(expireAt).Unix(),
+		User: models.UserInfo{
+			Name:  strings.ToUpper(authRequest.Username),
+			Email: authRequest.Username + "@example.com",
+			Role:  authRequest.Username,
+		},
 	}, nil
 
 }
-func CustomMiddleware(next okapi.HandleFunc) okapi.HandleFunc {
-	return func(c okapi.Context) error {
+func CustomMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
+	return func(c *okapi.Context) error {
 		slog.Info("Custom middleware executed", "path", c.Request().URL.Path, "method", c.Request().Method)
 		// You can add any custom logic here, such as logging, authentication, etc.
 		// For example, let's log the request method and URL

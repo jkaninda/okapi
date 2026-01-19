@@ -25,9 +25,27 @@
 package okapi
 
 import (
+	"errors"
 	"io"
+	"net"
+	"net/http"
 	"net/http/httptest"
+	"strings"
+	"time"
 )
+
+type TestServer struct {
+	*Okapi
+	BaseURL string
+	t       TestingT
+}
+
+type TestingT interface {
+	Helper()
+	Cleanup(func())
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
 
 // NewTestContext creates a Context with its own in-memory request and recorder.
 // Unlike NewContext, it does not initialize a default Okapi engine.
@@ -38,9 +56,103 @@ func NewTestContext(method, url string, body io.Reader) (*Context, *httptest.Res
 	ctx := &Context{
 		request:  req,
 		okapi:    nil,
-		response: &response{writer: w},
+		response: &responseWriter{writer: w},
 		store:    newStoreData(),
 	}
 
 	return ctx, w
+}
+
+// NewTestServer creates and starts a new Okapi test server.
+//
+// Example:
+//
+// testServer := okapi.NewTestServer(t)
+//
+// testServer.Get("/books", GetBooksHandler)
+//
+// okapitest.GET(t, testServer.BaseURL+"/books").ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
+func NewTestServer(t TestingT) *TestServer {
+	t.Helper()
+	o := New()
+	baseURL := o.StartForTest(t)
+
+	return &TestServer{
+		Okapi:   o,
+		BaseURL: baseURL,
+		t:       t,
+	}
+}
+
+// NewTestServerOn creates and starts a new Okapi test server.
+//
+// Example:
+//
+// testServer := okapi.NewTestServerOn(t,80801)
+//
+// testServer.Get("/books", GetBooksHandler)
+//
+// okapitest.GET(t, testServer.BaseURL+"/books").ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
+func NewTestServerOn(t TestingT, port int) *TestServer {
+	t.Helper()
+	o := New(WithPort(port))
+	baseURL := o.StartForTest(t)
+
+	return &TestServer{
+		Okapi:   o,
+		BaseURL: baseURL,
+		t:       t,
+	}
+}
+
+// StartForTest starts the Okapi server for testing and returns the base URL.
+func (o *Okapi) StartForTest(t TestingT) string {
+	t.Helper()
+
+	if o == nil {
+		t.Fatalf("Okapi instance is nil")
+	}
+
+	// Start server
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+
+	// Cleanup Stop
+	t.Cleanup(func() {
+		if err := o.Stop(); err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	})
+
+	// Wait for server
+	addr := o.WaitForServer(100 * time.Millisecond)
+
+	// Build base URL
+	if strings.HasPrefix(addr, ":") {
+		addr = "localhost" + addr
+	}
+
+	return "http://" + strings.TrimPrefix(addr, ":")
+}
+
+// WaitForServer waits until the server is ready and returns the address
+func (o *Okapi) WaitForServer(timeout time.Duration) string {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if o.server != nil && o.server.Addr != "" {
+			conn, err := net.DialTimeout("tcp", o.server.Addr, 50*time.Millisecond)
+			if err == nil {
+				err = conn.Close()
+				if err != nil {
+					return ""
+				}
+				return o.server.Addr
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return ""
 }

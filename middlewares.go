@@ -161,7 +161,7 @@ type (
 		// Return an error to reject the request.
 		//
 		// Example:
-		//   ValidateClaims: func(c okapi.Context,claims jwt.Claims) error {
+		//   ValidateClaims: func(c *okapi.Context,claims jwt.Claims) error {
 		//     mapClaims, ok := claims.(jwt.MapClaims)
 		//     if !ok {
 		//       return errors.New("invalid claims type")
@@ -174,13 +174,13 @@ type (
 		//     }
 		//     return nil
 		//   }
-		ValidateClaims func(c Context, claims jwt.Claims) error
+		ValidateClaims func(c *Context, claims jwt.Claims) error
 		// OnUnauthorized defines a custom handler function that is called when JWT validation fails.
 		// This includes scenarios such as missing, expired, malformed, or invalid tokens,
 		// or when claims validation (via ClaimsExpression or ValidateClaims) is unsuccessful.
 		//
 		// Use this to customize the error response sent to unauthorized clients.
-		OnUnauthorized HandleFunc
+		OnUnauthorized HandlerFunc
 
 		// Deprecated: Use ValidateClaims instead.
 		//
@@ -193,8 +193,8 @@ type (
 
 // LoggerMiddleware is a middleware that logs request details like method, URL, client IP,
 // status, duration, referer, and user agent.
-func LoggerMiddleware(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func LoggerMiddleware(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		if c.IsWebSocketUpgrade() || c.IsSSE() {
 			// Skip logging for WebSocket upgrades or Server-Sent Events
 			return next(c)
@@ -229,8 +229,8 @@ func LoggerMiddleware(next HandleFunc) HandleFunc {
 
 // Middleware is a basic authentication middleware that checks Basic Auth credentials.
 // It returns 401 Unauthorized and sets the WWW-Authenticate header on failure.
-func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func (b *BasicAuth) Middleware(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		username, password, ok := c.request.BasicAuth()
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(username), []byte(b.Username)) != 1 ||
@@ -256,14 +256,14 @@ func (b *BasicAuth) Middleware(next HandleFunc) HandleFunc {
 // Middleware
 //
 // deprecate, use BasicAuth.Middleware
-func (b *BasicAuthMiddleware) Middleware(next HandleFunc) HandleFunc {
+func (b *BasicAuthMiddleware) Middleware(next HandlerFunc) HandlerFunc {
 	auth := BasicAuth{Username: b.Username, Password: b.Password, ContextKey: b.ContextKey}
 	return auth.Middleware(next)
 }
 
 // Middleware is a middleware that limits the size of the request body to prevent excessive memory usage.
-func (b BodyLimit) Middleware(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func (b BodyLimit) Middleware(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		const errReadBody = "Failed to read request body"
 		const errTooLarge = "Request body too large"
 
@@ -284,8 +284,8 @@ func (b BodyLimit) Middleware(next HandleFunc) HandleFunc {
 }
 
 // Middleware validates JWT tokens from the configured source
-func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
-	return func(c Context) error {
+func (jwtAuth *JWTAuth) Middleware(next HandlerFunc) HandlerFunc {
+	return func(c *Context) error {
 		tokenStr, err := jwtAuth.extractToken(c)
 		if err != nil || tokenStr == "" {
 			c.Logger().Debug("Failed to extract token", "error", err, "ip", c.RealIP())
@@ -362,7 +362,7 @@ func (jwtAuth *JWTAuth) Middleware(next HandleFunc) HandleFunc {
 		}
 		// Forward specific claims to context if configured
 		if jwtAuth.ForwardClaims != nil {
-			if err = jwtAuth.forwardContextFromClaims(token, &c); err != nil {
+			if err = jwtAuth.forwardContextFromClaims(token, c); err != nil {
 				c.Logger().Error("Failed to forward context from claims", "error", err)
 			}
 		}

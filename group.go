@@ -131,7 +131,7 @@ func (g *Group) Use(m ...Middleware) {
 
 // add is an internal method that handles route registration with the combined
 // middlewares from both the group and parent Okapi instance.
-func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) add(method, path string, h HandlerFunc, opts ...RouteOption) *Route {
 	if g.okapi == nil {
 		panic("okapi instance is nil, cannot register route")
 	}
@@ -150,7 +150,7 @@ func (g *Group) add(method, path string, h HandleFunc, opts ...RouteOption) *Rou
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
-func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) handle(method, path string, h HandlerFunc, opts ...RouteOption) *Route {
 	if g.bearerAuth {
 		opts = append(opts, DocBearerAuth())
 	}
@@ -175,37 +175,37 @@ func (g *Group) handle(method, path string, h HandleFunc, opts ...RouteOption) *
 }
 
 // Get registers a GET route within the group with the given path and handler.
-func (g *Group) Get(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) Get(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodGet, path, h, opts...)
 }
 
 // Post registers a POST route within the group with the given path and handler.
-func (g *Group) Post(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) Post(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodPost, path, h, opts...)
 }
 
 // Put registers a PUT route within the group with the given path and handler.
-func (g *Group) Put(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) Put(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodPut, path, h, opts...)
 }
 
 // Delete registers a DELETE route within the group with the given path and handler.
-func (g *Group) Delete(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) Delete(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodDelete, path, h, opts...)
 }
 
 // Patch registers a PATCH route within the group with the given path and handler.
-func (g *Group) Patch(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) Patch(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodPatch, path, h, opts...)
 }
 
 // Options registers an OPTIONS route within the group with the given path and handler.
-func (g *Group) Options(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) Options(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodOptions, path, h, opts...)
 }
 
 // Head registers a HEAD route within the group with the given path and handler.
-func (g *Group) Head(path string, h HandleFunc, opts ...RouteOption) *Route {
+func (g *Group) Head(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodHead, path, h, opts...)
 }
 
@@ -224,8 +224,8 @@ func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 
 // HandleStd registers a standard http.HandlerFunc and wraps it with the group's middleware chain.
 func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http.Request), opts ...RouteOption) {
-	// Convert standard handler to HandleFunc
-	converted := func(c Context) error {
+	// Convert standard handler to HandlerFunc
+	converted := func(c *Context) error {
 		h(c.response, c.request)
 		return nil
 	}
@@ -243,7 +243,7 @@ func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http
 
 // HandleHTTP registers a standard http.Handler and wraps it with the group's middleware chain.
 func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOption) {
-	// Convert standard handler to HandleFunc
+	// Convert standard handler to HandlerFunc
 	converted := g.okapi.wrapHTTPHandler(h)
 	// Apply group middleware
 	for i := len(g.middlewares) - 1; i >= 0; i-- {
@@ -263,14 +263,10 @@ func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 // This enables compatibility with existing middleware libraries that use the
 // func(http.Handler) http.Handler pattern.
 func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
-	g.Use(func(next HandleFunc) HandleFunc {
-		// Convert HandleFunc to http.Handler
+	g.Use(func(next HandlerFunc) HandlerFunc {
+		// Convert HandlerFunc to http.Handler
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := Context{
-				request:  r,
-				response: &response{writer: w},
-				okapi:    g.okapi,
-			}
+			ctx := NewContext(g.okapi, w, r)
 			if err := next(ctx); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -279,8 +275,8 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 		// Apply standard middleware
 		wrapped := mw(h)
 
-		// Convert back to HandleFunc
-		return func(ctx Context) error {
+		// Convert back to HandlerFunc
+		return func(ctx *Context) error {
 			wrapped.ServeHTTP(ctx.response, ctx.request)
 			return nil
 		}

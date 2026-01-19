@@ -554,6 +554,104 @@ func TestExtractJSONPath(t *testing.T) {
 	}
 }
 
+func TestHandlerWithRecorder(t *testing.T) {
+	// Create test request and recorder
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/test", nil)
+	rec := httptest.NewRecorder()
+	HelloHandler(rec, req)
+	FromRecorder(t, rec).
+		ExpectStatus(http.StatusOK).
+		ExpectBody("Hello world!")
+}
+
+func TestJSONHandlerWithRecorder(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/api/status", nil)
+	rec := httptest.NewRecorder()
+
+	JSONHandler(rec, req)
+
+	// Test JSON response
+	FromRecorder(t, rec).
+		ExpectStatusOK().
+		ExpectContentType("application/json").
+		ExpectJSONPath("message", "success").
+		ExpectJSONPath("status", "ok")
+}
+
+func TestHandlerWithRecorderParseJSON(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/api/status", nil)
+	rec := httptest.NewRecorder()
+
+	JSONHandler(rec, req)
+
+	// Parse JSON into struct
+	var response struct {
+		Message string `json:"message"`
+		Status  string `json:"status"`
+	}
+
+	FromRecorder(t, rec).
+		ExpectStatusOK().
+		ParseJSON(&response)
+
+	if response.Message != "success" {
+		t.Errorf("Expected message 'success', got '%s'", response.Message)
+	}
+	if response.Status != "ok" {
+		t.Errorf("Expected status 'ok', got '%s'", response.Status)
+	}
+}
+
+type Context struct {
+	Response http.ResponseWriter
+	Request  *http.Request
+}
+
+func NewContext(w http.ResponseWriter, r *http.Request) *Context {
+	return &Context{
+		Response: w,
+		Request:  r,
+	}
+}
+
+func TestCustomHandlerWithContext(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := NewContext(rec, req)
+	err := CustomHelloHandler(ctx)
+	if err != nil {
+		t.Errorf("Handler returned an error: %v", err)
+	}
+	FromRecorder(t, rec).
+		ExpectStatus(http.StatusOK).
+		ExpectBody("Hello world!")
+}
+func CustomHelloHandler(ctx *Context) error {
+	ctx.Response.WriteHeader(http.StatusOK)
+	_, err := ctx.Response.Write([]byte("Hello world!"))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func HelloHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, err := w.Write([]byte("Hello world!"))
+	if err != nil {
+		return
+	}
+}
+
+func JSONHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err := w.Write([]byte(`{"message":"success","status":"ok"}`))
+	if err != nil {
+		return
+	}
+}
+
 // Benchmark tests
 func BenchmarkRequestBuilder(b *testing.B) {
 	server := setupTestServer()

@@ -33,10 +33,10 @@ import (
 
 type ExampleController struct{}
 
-func (ec *ExampleController) Hello(c Context) error {
+func (ec *ExampleController) Hello(c *Context) error {
 	return c.OK("Hello, World!")
 }
-func (ec *ExampleController) Ping(c Context) error {
+func (ec *ExampleController) Ping(c *Context) error {
 	return c.OK("Pong")
 }
 func (ec *ExampleController) Routes() []RouteDefinition {
@@ -127,11 +127,12 @@ func TestRouteDefinition(t *testing.T) {
 	}(app)
 
 	waitForServer()
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "PUT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusOK)
+
+	okapitest.GET(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.POST(t, "http://localhost:8080/hello").ExpectStatusOK()
+	okapitest.PUT(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.PATCH(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.OPTIONS(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.DELETE(t, "http://localhost:8080/api/hello").ExpectStatusOK()
 
 }

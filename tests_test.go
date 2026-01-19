@@ -1,7 +1,7 @@
 /*
  *  MIT License
  *
- * Copyright (c) 2025 Jonas Kaninda
+ * Copyright (c) 2026 Jonas Kaninda
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -25,20 +25,20 @@
 package okapi
 
 import (
-	"errors"
-	"io"
+	"testing"
+	"time"
 )
 
-var (
-	ErrNoRenderer = errors.New("no renderer set for context")
-)
-
-type Renderer interface {
-	Render(io.Writer, string, interface{}, *Context) error
+func TestNewTestServer(t *testing.T) {
+	testServer := NewTestServer(t)
+	if testServer == nil {
+		t.Fatal("Expected test server to be created, got nil")
+	}
+	if testServer.BaseURL == "" {
+		t.Fatal("Expected test server to have a base URL, got empty string")
+	}
 }
 
-type RendererFunc func(io.Writer, string, interface{}, *Context) error
-
-func (f RendererFunc) Render(w io.Writer, name string, data interface{}, c *Context) error {
-	return f(w, name, data, c)
+func waitForServer() {
+	time.Sleep(100 * time.Millisecond)
 }

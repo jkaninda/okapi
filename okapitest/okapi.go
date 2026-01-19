@@ -38,7 +38,7 @@ import (
 type RequestBuilder struct {
 	t           *testing.T
 	method      string
-	path        string
+	url         string
 	headers     map[string]string
 	body        io.Reader
 	contentType string
@@ -57,34 +57,56 @@ func Request(t *testing.T) *RequestBuilder {
 	}
 }
 
+// FromRecorder creates a RequestBuilder from a httptest.ResponseRecorder
+// This is useful for testing handlers directly without making HTTP requests
+func FromRecorder(t *testing.T, recorder interface{ Result() *http.Response }) *RequestBuilder {
+	t.Helper()
+	result := recorder.Result()
+
+	bodyBytes, err := io.ReadAll(result.Body)
+	_ = result.Body.Close()
+	if err != nil {
+		t.Fatalf("failed to read recorder response body: %v", err)
+	}
+
+	return &RequestBuilder{
+		t:        t,
+		headers:  make(map[string]string),
+		timeout:  30 * time.Second,
+		resp:     result,
+		respBody: bodyBytes,
+		executed: true,
+	}
+}
+
 // HTTP method constructors
 
-func GET(t *testing.T, path string) *RequestBuilder {
-	return Request(t).Method(http.MethodGet).Path(path)
+func GET(t *testing.T, url string) *RequestBuilder {
+	return Request(t).Method(http.MethodGet).URL(url)
 }
 
-func POST(t *testing.T, path string) *RequestBuilder {
-	return Request(t).Method(http.MethodPost).Path(path)
+func POST(t *testing.T, url string) *RequestBuilder {
+	return Request(t).Method(http.MethodPost).URL(url)
 }
 
-func PUT(t *testing.T, path string) *RequestBuilder {
-	return Request(t).Method(http.MethodPut).Path(path)
+func PUT(t *testing.T, url string) *RequestBuilder {
+	return Request(t).Method(http.MethodPut).URL(url)
 }
 
-func DELETE(t *testing.T, path string) *RequestBuilder {
-	return Request(t).Method(http.MethodDelete).Path(path)
+func DELETE(t *testing.T, url string) *RequestBuilder {
+	return Request(t).Method(http.MethodDelete).URL(url)
 }
 
-func PATCH(t *testing.T, path string) *RequestBuilder {
-	return Request(t).Method(http.MethodPatch).Path(path)
+func PATCH(t *testing.T, url string) *RequestBuilder {
+	return Request(t).Method(http.MethodPatch).URL(url)
 }
 
-func HEAD(t *testing.T, path string) *RequestBuilder {
-	return Request(t).Method(http.MethodHead).Path(path)
+func HEAD(t *testing.T, url string) *RequestBuilder {
+	return Request(t).Method(http.MethodHead).URL(url)
 }
 
-func OPTIONS(t *testing.T, path string) *RequestBuilder {
-	return Request(t).Method(http.MethodOptions).Path(path)
+func OPTIONS(t *testing.T, url string) *RequestBuilder {
+	return Request(t).Method(http.MethodOptions).URL(url)
 }
 
 // Builder methods
@@ -94,10 +116,18 @@ func (rb *RequestBuilder) Method(method string) *RequestBuilder {
 	return rb
 }
 
-func (rb *RequestBuilder) Path(path string) *RequestBuilder {
-	rb.path = path
+// URL sets the request URL
+func (rb *RequestBuilder) URL(url string) *RequestBuilder {
+	rb.url = url
 	return rb
 }
+
+// Path appends a path segment to the existing URL
+func (rb *RequestBuilder) Path(path string) *RequestBuilder {
+	rb.url = strings.TrimRight(rb.url, "/") + "/" + strings.TrimLeft(path, "/")
+	return rb
+}
+
 func (rb *RequestBuilder) Header(k, v string) *RequestBuilder {
 	rb.headers[k] = v
 	return rb
@@ -161,7 +191,7 @@ func (rb *RequestBuilder) do() (*http.Response, []byte) {
 		return rb.resp, rb.respBody
 	}
 
-	req, err := http.NewRequest(rb.method, rb.path, rb.body)
+	req, err := http.NewRequest(rb.method, rb.url, rb.body)
 	if err != nil {
 		rb.t.Fatalf("failed to create request: %v", err)
 	}
@@ -392,6 +422,8 @@ func extractJSONPath(data map[string]any, path string) any {
 	return current
 }
 
+// AssertHTTPStatus asserts that an HTTP request returns the expected status code.
+// Deprecated: Use RequestBuilder instead.
 func AssertHTTPStatus(
 	t *testing.T,
 	method, url string,
@@ -413,6 +445,8 @@ func AssertHTTPStatus(
 	}
 }
 
+// AssertHTTPResponse asserts that an HTTP request returns the expected status code and body.
+// // Deprecated: Use RequestBuilder instead.
 func AssertHTTPResponse(
 	t *testing.T,
 	method, url string,

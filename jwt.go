@@ -35,7 +35,7 @@ import (
 // ********** Helpers **********************
 
 // extractToken pulls the token from header, query or cookie
-func (jwtAuth *JWTAuth) extractToken(c Context) (string, error) {
+func (jwtAuth *JWTAuth) extractToken(c *Context) (string, error) {
 	tokenLookup := jwtAuth.TokenLookup
 	if tokenLookup == "" {
 		tokenLookup = "header:Authorization"
@@ -67,7 +67,7 @@ func (jwtAuth *JWTAuth) extractToken(c Context) (string, error) {
 }
 
 // ValidateToken checks the JWT token and returns the claims if valid
-func (jwtAuth *JWTAuth) ValidateToken(c Context) (jwt.MapClaims, error) {
+func (jwtAuth *JWTAuth) ValidateToken(c *Context) (jwt.MapClaims, error) {
 	tokenStr, err := jwtAuth.extractToken(c)
 	if err != nil {
 		return nil, err

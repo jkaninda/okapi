@@ -37,7 +37,7 @@ import (
 func TestParam(t *testing.T) {
 
 	o := Default()
-	o.Get("/api/:version/users/:id", func(c Context) error {
+	o.Get("/api/:version/users/:id", func(c *Context) error {
 		version := c.Param("version")
 		q := c.Query("q")
 		tags := c.QueryArray("tags")
@@ -50,9 +50,10 @@ func TestParam(t *testing.T) {
 		return c.String(http.StatusOK, body)
 	})
 
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {
@@ -62,10 +63,10 @@ func TestParam(t *testing.T) {
 		}
 	}(o)
 
+	waitForServer()
 	body := `{"version":"v1","user_id":1}`
 	res := `{"version":"v1","user_id":1,"q":"Hello","tags":"hp,pc,mini"}`
 
-	waitForServer()
 	okapitest.GET(t, "http://localhost:8080/api/v1/users/1?q=Hello&tags=hp,pc&tags=mini").ExpectStatusOK().Body(strings.NewReader(body)).ExpectBody(res)
 
 }

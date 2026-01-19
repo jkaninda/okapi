@@ -27,6 +27,7 @@ package okapi
 import (
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -107,20 +108,19 @@ func NewTestServerOn(t TestingT, port int) *TestServer {
 // StartForTest starts the Okapi server for testing and returns the base URL.
 func (o *Okapi) StartForTest(t TestingT) string {
 	t.Helper()
-	ready := make(chan struct{})
-	if o == nil || o.server == nil {
-		t.Fatalf("Okapi instance or server is nil")
-		return ""
+
+	if o == nil {
+		t.Fatalf("Okapi instance is nil")
 	}
+
+	// Start server
 	go func() {
-		if o == nil || o.server == nil {
-			close(ready)
-		}
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server failed to start: %v", err)
 		}
 	}()
 
+	// Cleanup Stop
 	t.Cleanup(func() {
 		if err := o.Stop(); err != nil {
 			t.Errorf("Failed to stop server: %v", err)
@@ -135,20 +135,24 @@ func (o *Okapi) StartForTest(t TestingT) string {
 		addr = "localhost" + addr
 	}
 
-	return "http://" + addr
+	return "http://" + strings.TrimPrefix(addr, ":")
 }
 
 // WaitForServer waits until the server is ready and returns the address
 func (o *Okapi) WaitForServer(timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
-	if o == nil || o.server == nil {
-		return ""
-	}
 	for time.Now().Before(deadline) {
 		if o.server != nil && o.server.Addr != "" {
-			return o.server.Addr
+			conn, err := net.DialTimeout("tcp", o.server.Addr, 50*time.Millisecond)
+			if err == nil {
+				err = conn.Close()
+				if err != nil {
+					return ""
+				}
+				return o.server.Addr
+			}
 		}
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	return ""
 }

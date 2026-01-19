@@ -620,6 +620,38 @@ func TestCheckEnumNonStringField(t *testing.T) {
 		t.Errorf("checkEnum() error should mention string fields only, got: %v", err)
 	}
 }
+func TestCheckMultipleOf(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    float64
+		multiple string
+		wantErr  bool
+	}{
+		{"valid - exact multiple", 10, "5", false},
+		{"valid - zero value", 0, "3", false},
+		{"valid - negative multiple", -10, "2", false},
+		{"invalid - not a multiple", 7, "3", true},
+		{"invalid - negative not a multiple", -7, "4", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			field := reflect.ValueOf(tt.value)
+
+			err := checkMultipleOf(field, tt.multiple)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("checkMultipleOf() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr && err != nil {
+				if !strings.Contains(err.Error(), "is not a multiple of") {
+					t.Errorf("checkMultipleOf() error should mention multiple constraint, got: %v", err)
+				}
+			}
+		})
+	}
+}
 
 func TestEnumValidationIntegration(t *testing.T) {
 	type OrderRequest struct {

@@ -7,9 +7,10 @@ import (
 
 type Book struct {
 	ID    int    `json:"id"`
-	Name  string `json:"name"  maxLength:"100" minLength:"2" required:"true" description:"Book name"`
+	Name  string `json:"name"  maxLength:"100" minLength:"2" required:"true" description:"Book name" pattern:"^[A-Za-z]+$"`
 	Price int    `json:"price" max:"100" min:"5"  yaml:"price" required:"true" description:"Book price"`
 	Year  int    `json:"year"  yaml:"year" description:"Book price" deprecated:"true" hidden:"true"`
+	Qty   int    `json:"qty" yaml:"qty" description:"Book quantity" `
 }
 type Books []Book
 type BookRequest struct {
@@ -22,7 +23,13 @@ type BooksResponse struct {
 	Body    []Book
 }
 
-var books = Books{}
+var books = Books{
+	{ID: 1, Name: "The Go Programming Language", Price: 30, Qty: 100, Year: 2014},
+	{ID: 2, Name: "Learning Go", Price: 25, Qty: 50, Year: 2021},
+	{ID: 3, Name: "Go in Action", Price: 40, Qty: 75, Year: 2015},
+	{ID: 4, Name: "Go Web Programming", Price: 35, Qty: 60, Year: 2016},
+	{ID: 5, Name: "Go Design Patterns", Price: 45, Qty: 80, Year: 2017},
+}
 
 func main() {
 	// Create a new Okapi instance with default config

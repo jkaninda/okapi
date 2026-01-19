@@ -81,13 +81,14 @@ type (
 		openapiSpec        *openapi3.T
 		openAPI            *OpenAPI
 		openApiEnabled     bool
+		showBanner         bool
 		maxMultipartMemory int64 // Maximum memory for multipart forms
 		noRoute            HandlerFunc
 		noMethod           HandlerFunc
 	}
 
 	Router struct {
-		mux *mux.Router
+		muxRouter *mux.Router
 	}
 	OptionFunc func(*Okapi)
 
@@ -280,20 +281,11 @@ func (r *Route) Use(m ...Middleware) {
 
 // ****** OKAPI OPTIONS ******
 
-// WithMux sets the router for the Okapi instance
-func WithMux(mux *mux.Router) OptionFunc {
-	return func(o *Okapi) {
-		if mux != nil {
-			o.router.mux = mux
-		}
-	}
-}
-
 // WithMuxRouter sets the router for the Okapi instance
 func WithMuxRouter(router *mux.Router) OptionFunc {
 	return func(o *Okapi) {
 		if router != nil {
-			o.router.mux = router
+			o.router.muxRouter = router
 		}
 	}
 }
@@ -668,7 +660,7 @@ func (r *responseWriter) Push(target string, opts *http.PushOptions) error {
 // newRouter creates a new Router instance
 func newRouter() *Router {
 	return &Router{
-		mux: mux.NewRouter(),
+		muxRouter: mux.NewRouter(),
 	}
 }
 
@@ -689,6 +681,7 @@ func Default() *Okapi {
 func withDefaultConfig() OptionFunc {
 	return func(o *Okapi) {
 		o.openApiEnabled = true
+		o.showBanner = true
 	}
 }
 
@@ -786,10 +779,12 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	if o.openApiEnabled {
 		o.WithOpenAPIDocs()
 	}
-	printBanner()
+	if o.showBanner {
+		printBanner()
+	}
 	o.server = server
 	server.Handler = o
-	o.router.mux.StrictSlash(o.strictSlash)
+	o.router.muxRouter.StrictSlash(o.strictSlash)
 	o.context.okapi = o
 	o.applyCommon()
 	_, _ = fmt.Fprintf(defaultWriter, "Starting HTTP server at %s\n", o.server.Addr)
@@ -990,12 +985,12 @@ func (o *Okapi) Any(path string, h HandlerFunc, opts ...RouteOption) *Route {
 // Static serves static files under a path prefix, without directory listing
 func (o *Okapi) Static(prefix string, dir string) {
 	fs := http.StripPrefix(prefix, http.FileServer(noDirListing{http.Dir(dir)}))
-	o.router.mux.PathPrefix(prefix).Handler(fs).Methods(http.MethodGet)
+	o.router.muxRouter.PathPrefix(prefix).Handler(fs).Methods(http.MethodGet)
 }
 
 // StaticFile serves a single file at the specified path.
 func (o *Okapi) StaticFile(path string, filepath string) {
-	o.router.mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+	o.router.muxRouter.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath)
 	}).Methods(http.MethodGet)
 }
@@ -1003,7 +998,7 @@ func (o *Okapi) StaticFile(path string, filepath string) {
 // StaticFS serves static files from a custom http.FileSystem (e.g., embed.FS).
 func (o *Okapi) StaticFS(prefix string, fs http.FileSystem) {
 	fileServer := http.StripPrefix(prefix, http.FileServer(fs))
-	o.router.mux.PathPrefix(prefix).Handler(fileServer).Methods(http.MethodGet)
+	o.router.muxRouter.PathPrefix(prefix).Handler(fileServer).Methods(http.MethodGet)
 }
 
 // addRoute adds a route with the specified method to the Okapi instance
@@ -1029,7 +1024,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts
 	o.routes = append(o.routes, route)
 	route.handler = route.next(h)
 	// Main handler
-	o.router.mux.StrictSlash(o.strictSlash).HandleFunc(normalizedPath, func(w http.ResponseWriter, r *http.Request) {
+	o.router.muxRouter.StrictSlash(o.strictSlash).HandleFunc(normalizedPath, func(w http.ResponseWriter, r *http.Request) {
 		ctx := NewContext(o, w, r)
 		// if the route is disabled, return 404 Not Found
 		if route.disabled {
@@ -1129,7 +1124,7 @@ func (o *Okapi) registerOptionsHandler(path string) {
 	if o.corsEnabled && !o.optionsRegistered[path] {
 		o.optionsRegistered[path] = true
 
-		o.router.mux.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		o.router.muxRouter.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 			if !allowedOrigin(o.cors.AllowedOrigins, origin) {
 				http.Error(w, "", http.StatusMethodNotAllowed)
@@ -1183,7 +1178,7 @@ func (o *Okapi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		okapi:    o,
 	}
 	handler := func(c *Context) {
-		o.router.mux.ServeHTTP(c.response, c.request)
+		o.router.muxRouter.ServeHTTP(c.response, c.request)
 	}
 	handler(ctx)
 }
@@ -1289,10 +1284,10 @@ func (o *Okapi) apply(options ...OptionFunc) *Okapi {
 }
 func (o *Okapi) applyCommon() {
 	if o.noRoute != nil {
-		o.router.mux.NotFoundHandler = o.wrapHandleFunc(o.noRoute)
+		o.router.muxRouter.NotFoundHandler = o.wrapHandleFunc(o.noRoute)
 	}
 	if o.noMethod != nil {
-		o.router.mux.MethodNotAllowedHandler = o.wrapHandleFunc(o.noMethod)
+		o.router.muxRouter.MethodNotAllowedHandler = o.wrapHandleFunc(o.noMethod)
 	}
 }
 

@@ -98,17 +98,17 @@ func TestGroup(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/group", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/standard", nil, nil, "", http.StatusOK)
+	okapitest.GET(t, "http://localhost:8080/api/group").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/api/standard").ExpectStatusOK()
 
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "PUT", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "PATCH", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "DELETE", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "OPTIONS", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "HEAD", "http://localhost:8080/api/hello", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/standard-http", nil, nil, "", http.StatusNotFound)
+	okapitest.GET(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.POST(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.PUT(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.PATCH(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.DELETE(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.OPTIONS(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.HEAD(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/api/tandard-http").ExpectStatusNotFound()
 }
 func TestRegister(t *testing.T) {
 	app := New()
@@ -137,7 +137,6 @@ func TestRegister(t *testing.T) {
 		}
 	}(app)
 	waitForServer()
-
 	okapitest.GET(t, "http://localhost:8080/core/books").ExpectStatusOK()
 	okapitest.POST(t, "http://localhost:8080/core/books").ExpectStatusCreated()
 

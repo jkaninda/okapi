@@ -1280,7 +1280,6 @@ func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 }
 
 // structToSchemaWithInfo converts a struct type to an OpenAPI schema with proper naming
-// structToSchemaWithInfo converts a struct type to an OpenAPI schema with proper naming
 func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 	// Handle time.Time
 	if t == reflect.TypeOf(time.Time{}) {
@@ -1345,7 +1344,16 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 			continue
 		}
 
-		fieldSchema := typeToSchemaWithInfo(field.Type)
+		fieldType := field.Type
+		for fieldType.Kind() == reflect.Ptr {
+			fieldType = fieldType.Elem()
+		}
+
+		// Create schema for the field type
+		fieldSchema := typeToSchemaWithInfo(fieldType)
+
+		// Apply validation tags from the field
+		applyValidationTags(fieldSchema.Value, field.Tag)
 
 		// Description
 		if desc := field.Tag.Get(tagDescription); desc != "" {
@@ -1362,11 +1370,12 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 
 		schema.WithProperty(jsonName, fieldSchema.Value)
 
-		// Required
-		if isRequiredField(field) {
+		// Required, check both the required tag and standard logic
+		if isRequiredFieldWithTag(field) {
 			required = append(required, jsonName)
 		}
 	}
+
 	if len(required) > 0 {
 		schema.Required = required
 	}
@@ -1391,8 +1400,13 @@ func getJSONFieldName(field reflect.StructField) string {
 	return name
 }
 
-// isRequiredField determines if a struct field is required
-func isRequiredField(field reflect.StructField) bool {
+// isRequiredFieldWithTag determines if a struct field is required
+func isRequiredFieldWithTag(field reflect.StructField) bool {
+	// First check explicit "required" tag
+	if requiredTag := field.Tag.Get("required"); requiredTag == "true" {
+		return true
+	}
+
 	jsonTag := field.Tag.Get("json")
 	validateTag := field.Tag.Get("validate")
 
@@ -1413,6 +1427,66 @@ func isRequiredField(field reflect.StructField) bool {
 
 	// Default to required for non-pointer fields without omitempty
 	return !strings.Contains(jsonTag, "omitempty")
+}
+
+// applyValidationTags applies struct tag validations to a schema
+func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
+	// Description
+	if desc := tag.Get(tagDescription); desc != "" {
+		schema.Description = desc
+	}
+	if desc := tag.Get(tagDoc); desc != "" {
+		schema.Description = desc
+	}
+
+	// String validations
+	if maxLen := tag.Get(tagMaxLength); maxLen != "" {
+		if val, err := strconv.ParseUint(maxLen, 10, 64); err == nil {
+			schema.MaxLength = ptr(val)
+		}
+	}
+	if minLen := tag.Get(tagMinLength); minLen != "" {
+		if val, err := strconv.ParseUint(minLen, 10, 64); err == nil {
+			schema.MinLength = val
+		}
+	}
+	if pattern := tag.Get(tagPattern); pattern != "" {
+		schema.Pattern = pattern
+	}
+	if format := tag.Get(tagForm); format != "" {
+		schema.Format = format
+	}
+
+	// Numeric validations
+	if maxTag := tag.Get(tagMax); maxTag != "" {
+		if val, err := strconv.ParseFloat(maxTag, 64); err == nil {
+			schema.Max = ptr(val)
+		}
+	}
+	if minTag := tag.Get(tagMin); minTag != "" {
+		if val, err := strconv.ParseFloat(minTag, 64); err == nil {
+			schema.Min = ptr(val)
+		}
+	}
+	if multipleOf := tag.Get(tagMultipleOf); multipleOf != "" {
+		if val, err := strconv.ParseFloat(multipleOf, 64); err == nil {
+			schema.MultipleOf = ptr(val)
+		}
+	}
+
+	// Enum validation
+	if enum := tag.Get(tagEnum); enum != "" {
+		values := strings.Split(enum, ",")
+		schema.Enum = make([]interface{}, len(values))
+		for i, v := range values {
+			schema.Enum[i] = strings.TrimSpace(v)
+		}
+	}
+
+	// Example
+	if example := tag.Get(tagExample); example != "" {
+		schema.Example = example
+	}
 }
 
 // extractPathParams extracts path parameters from a route path

@@ -79,6 +79,8 @@ const (
 	tagEnum        = "enum"
 	tagDeprecated  = "deprecated"
 	tagHidden      = "hidden"
+	tagMultipleOf  = "multipleOf"
+	tagExample     = "example"
 
 	// Format types
 	formatEmail    = "email"

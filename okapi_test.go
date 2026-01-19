@@ -43,10 +43,10 @@ import (
 var testBaseURL = "http://localhost:8080"
 
 type Book struct {
-	ID    int    `json:"id" param:"id" query:"id" form:"id"  xml:"id" max:"50" `
-	Name  string `json:"name" form:"name"  maxLength:"50"`
-	Price int    `json:"price" form:"price" query:"price" yaml:"price"`
-	Qty   int    `json:"qty" form:"qty" query:"qty" yaml:"qty"`
+	ID    int    `json:"id" param:"id" query:"id" form:"id"  xml:"id" max:"50" multipleOf:"1" example:"1"`
+	Name  string `json:"name" form:"name"  maxLength:"50" example:"The Go Programming Language" yaml:"name"`
+	Price int    `json:"price" form:"price" query:"price" yaml:"price" min:"0" default:"0" max:"500"`
+	Qty   int    `json:"qty" form:"qty" query:"qty" yaml:"qty" default:"0"`
 }
 
 var (
@@ -151,9 +151,10 @@ func TestStart(t *testing.T) {
 		}
 		return nil
 	})
+	// Start server in background
 	go func() {
-		if err := o.StartOn(8080); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {
@@ -172,7 +173,7 @@ func TestStart(t *testing.T) {
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
 
 	// API V2
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/api/v2/books/1", nil, nil, "", http.StatusNotFound)
+	okapitest.GET(t, "http://localhost:8080/api/v2/books/1").ExpectStatusNotFound()
 
 	// Any
 	okapitest.GET(t, "http://localhost:8080/api/v1/any/request").ExpectStatusOK()
@@ -191,7 +192,7 @@ func TestStart(t *testing.T) {
 	okapitest.GET(t, fmt.Sprintf("%s/api/standard-http", testBaseURL)).ExpectStatusNotFound()
 
 	// NoRoute and NotMethod
-	okapitest.GET(t, fmt.Sprintf("%s/api/standard-http", testBaseURL)).ExpectStatusNotFound()
+	okapitest.GET(t, fmt.Sprintf("%s/api/standard-http", testBaseURL)).ExpectStatusNotFound().ExpectBody(pageNotFound)
 
 	okapitest.GET(t, fmt.Sprintf("%s/custom", testBaseURL)).ExpectStatusNotFound().ExpectBody(pageNotFound)
 
@@ -236,9 +237,10 @@ func TestWithServer(t *testing.T) {
 
 	})
 	o.Get("/", customResponseWriter)
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {
@@ -247,7 +249,9 @@ func TestWithServer(t *testing.T) {
 			t.Errorf("Failed to stop server: %v", err)
 		}
 	}(o)
+
 	waitForServer()
+
 	okapitest.GET(t, "http://localhost:8081").ExpectStatusOK()
 
 }
@@ -257,9 +261,10 @@ func TestWithAddr(t *testing.T) {
 	o.With(WithAddr(":8081"), WithStrictSlash(true)).DisableAccessLog()
 
 	o.Get("/", func(c *Context) error { return c.OK(Book{}) })
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {
@@ -268,6 +273,7 @@ func TestWithAddr(t *testing.T) {
 			t.Errorf("Failed to stop server: %v", err)
 		}
 	}(o)
+
 	waitForServer()
 	okapitest.GET(t, "http://localhost:8081").ExpectStatusOK()
 
@@ -282,14 +288,14 @@ func TestCustomConfig(t *testing.T) {
 	o.With(WithAddr(":8081"),
 		WithStrictSlash(true),
 		WithOpenAPIDisabled(),
-		WithMuxRouter(router),
-		WithMux(router)).WithDebug().
+		WithMuxRouter(router)).WithDebug().
 		WithOpenAPIDisabled()
 
 	o.Get("/", func(c *Context) error { return c.OK(Book{}) }).Deprecated()
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {
@@ -298,6 +304,7 @@ func TestCustomConfig(t *testing.T) {
 			t.Errorf("Failed to stop server: %v", err)
 		}
 	}(o)
+
 	waitForServer()
 	okapitest.GET(t, "http://localhost:8081").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8081/openapi.json").ExpectStatusNotFound()
@@ -326,25 +333,24 @@ func TestRegisterRoutes(t *testing.T) {
 	// Method 2: Register using RegisterRoutes
 	RegisterRoutes(app, bookController.Routes())
 
+	// Start server in background
 	go func() {
 		if err := app.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
-	defer func(app *Okapi) {
-		err := app.Stop()
+	defer func(o *Okapi) {
+		err := o.Stop()
 		if err != nil {
 			t.Errorf("Failed to stop server: %v", err)
 		}
 	}(app)
+
 	waitForServer()
 
 	okapitest.GET(t, "http://localhost:8080/core/books").ExpectStatusOK()
 	okapitest.POST(t, "http://localhost:8080/core/books").ExpectStatusCreated()
 
-}
-func waitForServer() {
-	time.Sleep(100 * time.Millisecond)
 }
 
 func adminStore(c *Context) error {
@@ -485,9 +491,10 @@ func TestWithComponentSchemaRef(t *testing.T) {
 		},
 	})
 
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {

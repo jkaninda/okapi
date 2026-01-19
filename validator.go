@@ -26,6 +26,7 @@ package okapi
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"reflect"
 	"regexp"
@@ -212,10 +213,21 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
 			}
 		}
-
+		// MultipleOf validation
+		if multipleOfTag := sf.Tag.Get(tagMultipleOf); multipleOfTag != "" {
+			if err := checkMultipleOf(field, multipleOfTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
 		// Format validation
 		if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
 			if err := checkFormat(field, formatTag, sf); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+		// Pattern validation
+		if patternTag := sf.Tag.Get(tagPattern); patternTag != "" {
+			if err := checkPattern(field, patternTag); err != nil {
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
 		}
@@ -410,6 +422,25 @@ func checkFormat(field reflect.Value, formatTag string, sf reflect.StructField) 
 		return fmt.Errorf("unsupported format: %s", formatTag)
 	}
 }
+func checkPattern(field reflect.Value, pattern string) error {
+	if field.Kind() != reflect.String {
+		return fmt.Errorf("pattern validation can only be applied to string fields")
+	}
+	value := field.String()
+
+	if value == "" {
+		return nil
+	}
+
+	matched, err := regexp.MatchString(pattern, value)
+	if err != nil {
+		return fmt.Errorf("regex validation error: %w", err)
+	}
+	if !matched {
+		return fmt.Errorf("value does not match pattern '%s': %s", pattern, value)
+	}
+	return nil
+}
 
 // checkEnum validates that the field value is one of the allowed enum values
 func checkEnum(field reflect.Value, enumTag string) error {
@@ -419,7 +450,6 @@ func checkEnum(field reflect.Value, enumTag string) error {
 
 	value := field.String()
 
-	// Skip validation if value is empty (use 'required' tag for mandatory fields)
 	if value == "" {
 		return nil
 	}
@@ -521,4 +551,68 @@ func validateRegex(value, pattern string) error {
 		return fmt.Errorf("value does not match pattern '%s': %s", pattern, value)
 	}
 	return nil
+}
+
+func checkMultipleOf(field reflect.Value, tag string) error {
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		multipleOf, err := parseInt(tag)
+		if err != nil {
+			return fmt.Errorf("invalid multipleOf tag: %w", err)
+		}
+		if field.Int()%multipleOf != 0 {
+			return fmt.Errorf("value %d is not a multiple of %d", field.Int(), multipleOf)
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		multipleOf, err := parseUint(tag)
+		if err != nil {
+			return fmt.Errorf("invalid multipleOf tag: %w", err)
+		}
+		if field.Uint()%multipleOf != 0 {
+			return fmt.Errorf("value %d is not a multiple of %d", field.Uint(), multipleOf)
+		}
+	case reflect.Float32, reflect.Float64:
+		multipleOf, err := parseFloat(tag)
+		if err != nil {
+			return fmt.Errorf("invalid multipleOf tag: %w", err)
+		}
+		if multipleOf == 0 {
+			return fmt.Errorf("multipleOf cannot be zero")
+		}
+
+		value := field.Float()
+		remainder := math.Mod(value, multipleOf)
+
+		const epsilon = 1e-9
+		if math.Abs(remainder) > epsilon && math.Abs(remainder-multipleOf) > epsilon {
+			return fmt.Errorf("value %f is not a multiple of %f", value, multipleOf)
+		}
+	default:
+		return fmt.Errorf("multipleOf validation not supported for type %s", field.Kind())
+	}
+	return nil
+}
+
+func parseFloat(tag string) (float64, error) {
+	val, err := strconv.ParseFloat(tag, 64)
+	if err != nil {
+		return 0.0, fmt.Errorf("invalid float: %w", err)
+	}
+	return val, nil
+}
+
+func parseInt(tag string) (int64, error) {
+	val, err := strconv.ParseInt(tag, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid integer: %w", err)
+	}
+	return val, nil
+}
+
+func parseUint(tag string) (uint64, error) {
+	val, err := strconv.ParseUint(tag, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid unsigned integer: %w", err)
+	}
+	return val, nil
 }

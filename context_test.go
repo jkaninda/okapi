@@ -28,8 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jkaninda/okapi/okapitest"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,18 +42,9 @@ func TestHandler(t *testing.T) {
 	if err != nil {
 		t.Errorf("Handler returned an error: %v", err)
 	}
-
-	result := rec.Result()
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			slog.Error(err.Error())
-		}
-	}(result.Body)
-
-	if result.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", result.StatusCode)
-	}
+	okapitest.FromRecorder(t, rec).
+		ExpectStatus(http.StatusOK).
+		ExpectBody("Hello world!")
 
 }
 
@@ -68,9 +57,10 @@ func TestServeFile(t *testing.T) {
 		return nil
 	})
 
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {
@@ -81,7 +71,8 @@ func TestServeFile(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
+	okapitest.GET(t, "http://localhost:8080").ExpectStatusOK()
+
 }
 func HelloHandler(c *Context) error {
 	if c.IsWebSocketUpgrade() {

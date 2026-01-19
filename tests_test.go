@@ -1,7 +1,7 @@
 /*
  *  MIT License
  *
- * Copyright (c) 2025 Jonas Kaninda
+ * Copyright (c) 2026 Jonas Kaninda
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -25,35 +25,20 @@
 package okapi
 
 import (
-	"errors"
-	"github.com/jkaninda/okapi/okapitest"
-	"net/http"
 	"testing"
+	"time"
 )
 
-func TestRegisterDocRoutes(t *testing.T) {
-	o := New()
-	o.Get("/", func(c *Context) error {
-		return c.Text(http.StatusOK, "Hello World!")
-	})
+func TestNewTestServer(t *testing.T) {
+	testServer := NewTestServer(t)
+	if testServer == nil {
+		t.Fatal("Expected test server to be created, got nil")
+	}
+	if testServer.BaseURL == "" {
+		t.Fatal("Expected test server to have a base URL, got empty string")
+	}
+}
 
-	o.registerDocRoutes(o.openAPI.Title)
-
-	// Start server in background
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Failed to start server: %v", err)
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/redoc").ExpectStatusOK()
+func waitForServer() {
+	time.Sleep(100 * time.Millisecond)
 }

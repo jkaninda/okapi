@@ -25,7 +25,6 @@
 package okapi
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
@@ -210,22 +209,24 @@ func TestJwtMiddleware(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", nil, nil, "", http.StatusUnauthorized)
+	client := okapitest.NewClient(t, "http://localhost:8080")
 
-	headers := map[string]string{
-		"Authorization": "Bearer " + token,
-	}
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
+	client.GET("/protected").ExpectStatusUnauthorized()
+	client.GET("/admin/protected").ExpectStatusUnauthorized()
 
-	headers["Authorization"] = "Bearer " + adminToken
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
+	client.Headers["Authorization"] = "Bearer " + token
 
-	headers["Authorization"] = "Bearer " + noAudToken
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusUnauthorized)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/admin/protected", headers, nil, "", http.StatusUnauthorized)
+	// client.Headers = headers
+	client.GET("/protected").ExpectStatusOK()
+	client.GET("/admin/protected").ExpectStatusUnauthorized()
+
+	client.Headers["Authorization"] = "Bearer " + adminToken
+	client.GET("/protected").ExpectStatusOK()
+	client.GET("/admin/protected").ExpectStatusOK()
+
+	client.Headers["Authorization"] = "Bearer " + noAudToken
+	client.GET("/protected").ExpectStatusUnauthorized()
+	client.GET("/admin/protected").ExpectStatusUnauthorized()
 
 }
 func TestBasicAuth(t *testing.T) {
@@ -260,13 +261,9 @@ func TestBasicAuth(t *testing.T) {
 
 	waitForServer()
 
-	credentials := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	headers := map[string]string{
-		"Authorization": "Basic " + credentials,
-	}
+	okapitest.GET(t, "http://localhost:8080/protected").ExpectStatusUnauthorized()
+	okapitest.GET(t, "http://localhost:8080/protected").SetBasicAuth(username, password).ExpectStatusOK()
 
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", nil, nil, "", http.StatusUnauthorized)
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080/protected", headers, nil, "", http.StatusOK)
 }
 func TestStdMiddleware(t *testing.T) {
 	o := Default()

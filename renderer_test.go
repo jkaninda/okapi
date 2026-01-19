@@ -88,7 +88,7 @@ func TestWithRenderer(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.AssertHTTPStatus(t, "GET", fmt.Sprintf("%s/", testBaseURL), nil, nil, "", http.StatusOK)
+	okapitest.GET(t, fmt.Sprintf("%s/", testBaseURL)).ExpectStatusOK()
 
 }
 

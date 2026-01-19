@@ -129,9 +129,10 @@ func TestContext_Bind(t *testing.T) {
 		}
 		return c.OK(http.StatusOK)
 	})
+	// Start server in background
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			t.Errorf("Failed to start server: %v", err)
 		}
 	}()
 	defer func(o *Okapi) {
@@ -140,9 +141,11 @@ func TestContext_Bind(t *testing.T) {
 			t.Errorf("Failed to stop server: %v", err)
 		}
 	}(o)
+
 	waitForServer()
-	okapitest.AssertHTTPStatus(t, "GET", "http://localhost:8080", nil, nil, "", http.StatusOK)
-	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/hello", nil, nil, "", http.StatusBadRequest)
-	okapitest.AssertHTTPStatus(t, "POST", "http://localhost:8080/json", nil, nil, "", http.StatusBadRequest)
+
+	okapitest.GET(t, "http://localhost:8080").ExpectStatusOK()
+	okapitest.POST(t, "http://localhost:8080/hello").ExpectStatusBadRequest()
+	okapitest.POST(t, "http://localhost:8080/json").ExpectStatusBadRequest()
 
 }

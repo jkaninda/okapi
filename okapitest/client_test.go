@@ -1,7 +1,7 @@
 /*
  *  MIT License
  *
- * Copyright (c) 2025 Jonas Kaninda
+ * Copyright (c) 2026 Jonas Kaninda
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,38 +22,16 @@
  *  SOFTWARE.
  */
 
-package okapi
+package okapitest
 
-import (
-	"errors"
-	"github.com/jkaninda/okapi/okapitest"
-	"net/http"
-	"testing"
-)
+import "testing"
 
-func TestRegisterDocRoutes(t *testing.T) {
-	o := New()
-	o.Get("/", func(c *Context) error {
-		return c.Text(http.StatusOK, "Hello World!")
-	})
-
-	o.registerDocRoutes(o.openAPI.Title)
-
-	// Start server in background
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Failed to start server: %v", err)
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/redoc").ExpectStatusOK()
+func TestNewClient(t *testing.T) {
+	client := NewClient(t, "http://example.com")
+	if client == nil {
+		t.Fatal("Expected client to be created, got nil")
+	}
+	if client.BaseURL != "http://example.com" {
+		t.Fatalf("Expected BaseURL to be 'http://example.com', got '%s'", client.BaseURL)
+	}
 }

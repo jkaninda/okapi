@@ -681,9 +681,22 @@ func validateStruct(v any) error {
 				return fmt.Errorf("field %s.%s: %w", sf.Name, sf.Name, err)
 			}
 		}
+		// MultipleOf validation
+		if multipleOfTag := sf.Tag.Get(tagMultipleOf); multipleOfTag != "" {
+			if err := checkMultipleOf(field, multipleOfTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+
 		// Format validation
 		if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
 			if err := checkFormat(field, formatTag, sf); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+		// Pattern validation
+		if patternTag := sf.Tag.Get(tagPattern); patternTag != "" {
+			if err := checkPattern(field, patternTag); err != nil {
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
 		}

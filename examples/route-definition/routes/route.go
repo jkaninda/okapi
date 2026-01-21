@@ -102,7 +102,7 @@ func (r *Route) RegisterRoutes() {
 	r.app.Register(r.bookRoutes()...)
 	r.app.Register(r.v1BookRoutes()...)
 	r.app.Register(r.authRoute())
-	r.app.Register(r.SecurityRoutes()...)
+	r.app.Register(r.securityRoutes()...)
 	r.app.Register(r.adminRoutes()...)
 
 }
@@ -243,7 +243,7 @@ func (r *Route) authRoute() okapi.RouteDefinition {
 
 // ************** Authenticated Routes **************
 
-func (r *Route) SecurityRoutes() []okapi.RouteDefinition {
+func (r *Route) securityRoutes() []okapi.RouteDefinition {
 	coreGroup := r.group.Group("/security").WithTags([]string{"SecurityService"})
 	coreGroup.Use(middlewares.JWTAuth.Middleware)
 	// Apply custom middleware

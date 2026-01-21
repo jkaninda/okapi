@@ -1346,19 +1346,8 @@ func handleAccessLog(next HandlerFunc) HandlerFunc {
 		startTime := time.Now()
 		err := next(c)
 		status := c.response.StatusCode()
-		duration := goutils.FormatDuration(time.Since(startTime), 2)
-
 		logger := c.okapi.logger
-		logFields := []any{
-			"method", c.request.Method,
-			"url", c.request.URL.Path,
-			"ip", c.RealIP(),
-			"host", c.request.Host,
-			"status", status,
-			"duration", duration,
-			"referer", c.request.Referer(),
-			"user_agent", c.request.UserAgent(),
-		}
+		logFields := buildBaseLogFields(c, status, time.Since(startTime))
 		if c.okapi.debug {
 			debugFields := buildDebugFields(c)
 			logFields = append(logFields, debugFields...)
@@ -1372,6 +1361,26 @@ func handleAccessLog(next HandlerFunc) HandlerFunc {
 			logger.Info("[okapi] Incoming request", logFields...)
 		}
 		return err
+	}
+}
+
+// buildBaseLogFields constructs the core log fields
+func buildBaseLogFields(c *Context, status int, duration time.Duration) []any {
+	bytesIn := c.request.ContentLength
+	if bytesIn < 0 {
+		bytesIn = 0
+	}
+	return []any{
+		"method", c.request.Method,
+		"path", c.request.URL.Path,
+		"status", status,
+		"duration", goutils.FormatDuration(duration, 2),
+		"ip", c.RealIP(),
+		"host", c.request.Host,
+		"bytes_in", bytesIn,
+		"bytes_out", c.response.BytesWritten(),
+		"referer", c.request.Referer(),
+		"user_agent", c.request.UserAgent(),
 	}
 }
 

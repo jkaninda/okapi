@@ -25,21 +25,75 @@
 package okapi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // *********** SSE ***********
 
 // Message represents a Server-Sent Events (SSE) message.
 type Message struct {
-	ID    string `json:"id" xml:"id"`
-	Data  any    `json:"message"`
+	// ID unique identifier for the message
+	ID string `json:"id"`
+	// Event type
 	Event string `json:"event"`
-	Retry uint   `json:"retry,omitempty"` // Retry interval in milliseconds
+	//  Data payload
+	Data any `json:"message"`
+	// Retry interval
+	Retry uint `json:"retry,omitempty"`
+	// Serializer to use for the message
+	Serializer Serializer `json:"-"`
+}
+type StreamOptions struct {
+	// Serializer to use for the stream messages
+	Serializer Serializer
+	// PingEnabled indicates whether to send periodic ping messages to keep the connection alive.
+	PingInterval time.Duration
+	// OnError is a callback function to handle errors during streaming.
+	OnError func(error)
+}
+
+// Serializer defines how to convert data to string format
+//
+//	Implement this interface to create custom serializers for SSE messages.
+type Serializer interface {
+	Serialize(data any) (string, error)
+}
+
+// JSONSerializer is the default JSON serializer
+type JSONSerializer struct{}
+
+func (j JSONSerializer) Serialize(data any) (string, error) {
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+	return string(jsonBytes), nil
+}
+
+// TextSerializer for plain text/string data
+type TextSerializer struct{}
+
+func (t TextSerializer) Serialize(data any) (string, error) {
+	return fmt.Sprintf("%v", data), nil
+}
+
+// Base64Serializer for binary data
+type Base64Serializer struct{}
+
+func (b Base64Serializer) Serialize(data any) (string, error) {
+	switch v := data.(type) {
+	case []byte:
+		return base64.StdEncoding.EncodeToString(v), nil
+	default:
+		return "", fmt.Errorf("base64 serializer requires []byte data")
+	}
 }
 
 // SendFunc defines the signature for a function that sends an SSE message.
@@ -108,25 +162,47 @@ func (m *Message) writeRetry(w http.ResponseWriter, retry uint) error {
 
 func (m *Message) writeData(w http.ResponseWriter, data any) error {
 	var output string
-
-	switch v := data.(type) {
-	case string:
-		output = v
-	default:
-		jsonBytes, err := json.Marshal(v)
-		if err != nil {
-			return fmt.Errorf("failed to encode data as JSON: %w", err)
-		}
-		output = string(jsonBytes)
+	var err error
+	if data == nil {
+		_, err = fmt.Fprint(w, "data: \n\n")
+		return err
 	}
 
+	// Use custom serializer if provided
+	if m.Serializer != nil {
+		output, err = m.Serializer.Serialize(data)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Default behavior
+		switch v := data.(type) {
+		case string:
+			output = v
+		case []byte:
+			output = string(v)
+		case io.Reader:
+			// stream data
+			buf := new(strings.Builder)
+			if _, err := io.Copy(buf, v); err != nil {
+				return fmt.Errorf("failed to read data: %w", err)
+			}
+			output = buf.String()
+		default:
+			jsonBytes, err := json.Marshal(v)
+			if err != nil {
+				return fmt.Errorf("failed to encode data as JSON: %w", err)
+			}
+			output = string(jsonBytes)
+		}
+	}
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
-		if _, err := fmt.Fprintf(w, "data: %s\n", line); err != nil {
+		if _, err = fmt.Fprintf(w, "data: %s\n", line); err != nil {
 			return err
 		}
 	}
-	_, err := fmt.Fprint(w, "\n")
+	_, err = fmt.Fprint(w, "\n")
 	return err
 }
 

@@ -27,6 +27,7 @@ package okapi
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -71,43 +72,89 @@ func fPrint(msg string, args ...interface{}) {
 }
 
 func buildDebugFields(c *Context) []any {
-	fields := []any{
-		"request_content_length", c.request.ContentLength,
+	var fields []any
+	fields = append(fields, "protocol", c.request.Proto)
+
+	if reqID := c.GetString("request_id"); reqID != "" {
+		fields = append(fields, "request_id", reqID)
 	}
 
 	if len(c.request.Header) > 0 {
 		fields = append(fields, "request_headers", sanitizeHeaders(c.request.Header))
 	}
-	if len(c.request.URL.Query()) > 0 {
-		fields = append(fields, "query_params", c.request.URL.Query())
+
+	if query := c.request.URL.Query(); len(query) > 0 {
+		fields = append(fields, "query_params", sanitizeQueryParams(query))
 	}
+
 	if len(c.response.Header()) > 0 {
 		fields = append(fields, "response_headers", sanitizeHeaders(c.response.Header()))
 	}
-	return fields
 
+	if params := c.Params(); len(params) > 0 {
+		fields = append(fields, "path_params", params)
+	}
+
+	return fields
 }
 
 // sanitizeHeaders removes sensitive headers from logging
-func sanitizeHeaders(headers http.Header) map[string][]string {
-	sanitized := make(map[string][]string)
-	sensitiveHeaders := map[string]bool{
-		"authorization": true,
-		"cookie":        true,
-		"set-cookie":    true,
-		"x-api-key":     true,
-		"x-auth-token":  true,
-	}
+func sanitizeHeaders(headers http.Header) map[string]string {
+	sanitized := make(map[string]string, len(headers))
 
 	for key, values := range headers {
 		lowerKey := strings.ToLower(key)
-		if sensitiveHeaders[lowerKey] {
-			sanitized[key] = []string{"[REDACTED]"}
+		if isSensitiveHeader(lowerKey) {
+			sanitized[key] = "[REDACTED]"
 		} else {
-			sanitized[key] = values
+			sanitized[key] = strings.Join(values, ", ")
 		}
 	}
+
 	return sanitized
+}
+
+// sanitizeQueryParams removes sensitive query parameters
+func sanitizeQueryParams(params url.Values) map[string]string {
+	sanitized := make(map[string]string, len(params))
+
+	for key, values := range params {
+		lowerKey := strings.ToLower(key)
+		if isSensitiveParam(lowerKey) {
+			sanitized[key] = "[REDACTED]"
+		} else {
+			sanitized[key] = strings.Join(values, ", ")
+		}
+	}
+
+	return sanitized
+}
+
+// isSensitiveHeader checks if a header should be redacted
+func isSensitiveHeader(key string) bool {
+	sensitiveHeaders := map[string]bool{
+		"authorization":       true,
+		"cookie":              true,
+		"set-cookie":          true,
+		"x-api-key":           true,
+		"x-auth-token":        true,
+		"x-csrf-token":        true,
+		"proxy-authorization": true,
+	}
+	return sensitiveHeaders[key]
+}
+
+// isSensitiveParam checks if a query parameter should be redacted
+func isSensitiveParam(key string) bool {
+	sensitiveParams := map[string]bool{
+		"token":        true,
+		"api_key":      true,
+		"apikey":       true,
+		"access_token": true,
+		"password":     true,
+		"secret":       true,
+	}
+	return sensitiveParams[key]
 }
 
 // capitalize capitalizes the first letter of a string

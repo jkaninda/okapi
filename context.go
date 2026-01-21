@@ -219,6 +219,11 @@ func (c *Context) Param(key string) string {
 	return mux.Vars(c.request)[key] // Get from router's path variables
 }
 
+// Params returns all URL path parameters as a map.
+func (c *Context) Params() map[string]string {
+	return mux.Vars(c.request)
+}
+
 // Query retrieves a URL query parameter value.
 // Returns empty string if parameter doesn't exist.
 func (c *Context) Query(key string) string {
@@ -424,11 +429,13 @@ func (c *Context) Text(code int, v any) error {
 	})
 }
 
+// ************* Server-Sent Events (SSE) ***************
+
 // sendSSE writes an SSE response with optional ID.
-func (c *Context) sendSSE(id, name string, message any) error {
+func (c *Context) sendSSE(id, eventType string, message any) error {
 	msg := Message{
 		ID:    id,
-		Event: name,
+		Event: eventType,
 		Data:  message,
 	}
 	_, err := msg.Send(c.response)
@@ -436,13 +443,19 @@ func (c *Context) sendSSE(id, name string, message any) error {
 }
 
 // SSEvent writes SSE response with optional ID.
-func (c *Context) SSEvent(name string, message any) error {
-	return c.sendSSE("", name, message)
+func (c *Context) SSEvent(eventType string, data any) error {
+	return c.sendSSE("", eventType, data)
 }
 
 // SendSSEvent writes SSE response with an ID.
-func (c *Context) SendSSEvent(id, name string, message any) error {
-	return c.sendSSE(id, name, message)
+// Deprecated: use SSESendEvent instead.
+func (c *Context) SendSSEvent(id, eventType string, data any) error {
+	return c.sendSSE(id, eventType, data)
+}
+
+// SSESendEvent writes SSE response with an ID.
+func (c *Context) SSESendEvent(id, eventType string, data any) error {
+	return c.sendSSE(id, eventType, data)
 }
 
 // SSEStream keeps connection open for multiple messages
@@ -453,6 +466,106 @@ func (c *Context) SSEStream(ctx context.Context, messageChan <-chan Message) err
 			return ctx.Err()
 		case msg := <-messageChan:
 			if _, err := msg.Send(c.response); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// SSESendData sends structured data as JSON
+func (c *Context) SSESendData(data any) error {
+	msg := Message{
+		Data: data,
+	}
+	_, err := msg.Send(c.response)
+	return err
+}
+
+// SSESendJSON sends JSON data with explicit JSON serialization
+func (c *Context) SSESendJSON(data any) error {
+	msg := Message{
+		Data:       data,
+		Serializer: JSONSerializer{},
+	}
+	_, err := msg.Send(c.response)
+	return err
+}
+
+// SSESendText sends plain text data
+func (c *Context) SSESendText(text string) error {
+	msg := Message{
+		Data:       text,
+		Serializer: TextSerializer{},
+	}
+	_, err := msg.Send(c.response)
+	return err
+}
+
+// SSESendBinary sends binary data as base64
+func (c *Context) SSESendBinary(data []byte) error {
+	msg := Message{
+		Data:       data,
+		Serializer: Base64Serializer{},
+	}
+	_, err := msg.Send(c.response)
+	return err
+}
+
+// SendSSECustom sends data with custom serializer
+func (c *Context) SendSSECustom(data any, serializer Serializer) error {
+	msg := Message{
+		Data:       data,
+		Serializer: serializer,
+	}
+	_, err := msg.Send(c.response)
+	return err
+}
+
+// SSEStreamWithOptions provides advanced streaming control
+func (c *Context) SSEStreamWithOptions(ctx context.Context, messageChan <-chan Message, opts *StreamOptions) error {
+	if opts == nil {
+		opts = &StreamOptions{}
+	}
+
+	var ticker *time.Ticker
+	var pingChan <-chan time.Time
+
+	if opts.PingInterval > 0 {
+		ticker = time.NewTicker(opts.PingInterval)
+		defer ticker.Stop()
+		pingChan = ticker.C
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-pingChan:
+			// Send comment line to keep connection alive
+			if _, err := fmt.Fprint(c.response, ": ping\n\n"); err != nil {
+				if opts.OnError != nil {
+					opts.OnError(err)
+				}
+				return err
+			}
+			if flusher, ok := c.response.(http.Flusher); ok {
+				flusher.Flush()
+			}
+
+		case msg, ok := <-messageChan:
+			if !ok {
+				return nil
+			}
+
+			if msg.Serializer == nil && opts.Serializer != nil {
+				msg.Serializer = opts.Serializer
+			}
+
+			if _, err := msg.Send(c.response); err != nil {
+				if opts.OnError != nil {
+					opts.OnError(err)
+				}
 				return err
 			}
 		}

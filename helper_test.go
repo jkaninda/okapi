@@ -56,10 +56,8 @@ func TestSanitizeHeaders(t *testing.T) {
 	sanitizedHeaders := sanitizeHeaders(headers)
 	slog.Info("Sanitized Headers:", "headers", sanitizedHeaders)
 	if authorization, exists := sanitizedHeaders["Authorization"]; exists {
-		for _, value := range authorization {
-			if strings.Contains(value, "Bearer token") {
-				t.Error("Authorization header should be sanitized")
-			}
+		if strings.Contains(authorization, "Bearer token") {
+			t.Error("Authorization header should be sanitized")
 		}
 
 	} else {
@@ -67,10 +65,8 @@ func TestSanitizeHeaders(t *testing.T) {
 	}
 
 	if cookie, exists := sanitizedHeaders["cookie"]; exists {
-		for _, value := range cookie {
-			if strings.Contains(value, "cookie-value") {
-				t.Error("Cookie header should be sanitized")
-			}
+		if strings.Contains(cookie, "cookie-value") {
+			t.Error("Cookie header should be sanitized")
 		}
 	} else {
 		t.Error("Cookie header not found in sanitized headers")
@@ -93,9 +89,6 @@ func TestBuildDebugFields(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("Expected status code 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "request_content_length") {
-		t.Error("Expected 'request_content_length' in response body")
 	}
 	if !strings.Contains(rec.Body.String(), "request_headers") {
 		t.Error("Expected 'request_headers' in response body")

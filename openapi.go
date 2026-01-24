@@ -62,13 +62,11 @@ type RouteOption func(*Route)
 // OpenAPI contains configuration for generating OpenAPI/Swagger documentation.
 // It includes metadata about the API and its documentation.
 type OpenAPI struct {
-	Title   string // Title of the API
-	Version string // Version of the API
-	// Deprecated: This field is deprecated.
-	PathPrefix string  // e.g., "/docs" (default)
-	Servers    Servers // List of server URLs where the API is hosted
-	License    License // License information for the API
-	Contact    Contact // Contact information for the API maintainers
+	Title   string  // Title of the API
+	Version string  // Version of the API
+	Servers Servers // List of server URLs where the API is hosted
+	License License // License information for the API
+	Contact Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
 	SecuritySchemes  SecuritySchemes
 	ExternalDocs     *ExternalDocs
@@ -77,14 +75,18 @@ type OpenAPI struct {
 type SecuritySchemes []SecurityScheme
 
 type SecurityScheme struct {
-	Name string
+	Extensions map[string]any `json:"-" yaml:"-"`
+	Origin     *Origin        `json:"__origin__,omitempty" yaml:"__origin__,omitempty"`
+	Name       string
 	// Type string // "http", "oauth2", "apiKey"
 	Type string
 	// Scheme string // "basic", "bearer", etc.
 	Scheme       string
 	BearerFormat string
-	Flows        *OAuthFlows
-	Description  string
+	// In string // "header", "query", "cookie"
+	In          string
+	Flows       *OAuthFlows
+	Description string
 }
 type ExternalDocs struct {
 	Extensions map[string]any `json:"-" yaml:"-"`
@@ -207,16 +209,50 @@ func (ss SecuritySchemes) ToOpenAPI() openapi3.SecuritySchemes {
 	for _, s := range ss {
 		result[s.Name] = &openapi3.SecuritySchemeRef{
 			Value: &openapi3.SecurityScheme{
+				Extensions:   s.Extensions,
+				Origin:       s.Origin.ToOpenAPI(),
 				Type:         s.Type,
+				Name:         s.Name,
 				Scheme:       s.Scheme,
 				BearerFormat: s.BearerFormat,
 				Flows:        s.Flows.ToOpenAPI(),
+				In:           s.In,
 				Description:  s.Description,
 			},
 		}
 	}
 	return result
 }
+func (l *Location) ToOpenAPI() openapi3.Location {
+	if l == nil {
+		return openapi3.Location{}
+	}
+	return openapi3.Location{
+		Line:   l.Line,
+		Column: l.Column,
+	}
+
+}
+func (o *Origin) ToOpenAPI() *openapi3.Origin {
+	if o == nil {
+		return nil
+	}
+	origin := &openapi3.Origin{}
+	if o.Key != nil {
+		origin.Key = &openapi3.Location{
+			Line:   o.Key.Line,
+			Column: o.Key.Column,
+		}
+	}
+	if len(o.Fields) > 0 {
+		origin.Fields = make(map[string]openapi3.Location)
+		for k, v := range o.Fields {
+			origin.Fields[k] = v.ToOpenAPI()
+		}
+	}
+	return origin
+}
+
 func (e *ExternalDocs) ToOpenAPI() *openapi3.ExternalDocs {
 	if e == nil {
 		return nil
@@ -1420,13 +1456,7 @@ func isRequiredFieldWithTag(field reflect.StructField) bool {
 		return true
 	}
 
-	// Check if field is a pointer (usually optional)
-	if field.Type.Kind() == reflect.Ptr {
-		return false
-	}
-
-	// Default to required for non-pointer fields without omitempty
-	return !strings.Contains(jsonTag, "omitempty")
+	return false
 }
 
 // applyValidationTags applies struct tag validations to a schema
@@ -1744,7 +1774,6 @@ func normalizeToStructPointer(input any, inputType string) reflect.Value {
 		v = _ptr
 	}
 
-	// Must now be a non-nil pointer
 	if v.Kind() != reflect.Ptr || v.IsNil() {
 		panic(fmt.Sprintf(
 			"Invalid %s: expected struct or non-nil pointer to struct, but got %T. "+

@@ -94,3 +94,86 @@ func TestBuildDebugFields(t *testing.T) {
 		t.Error("Expected 'request_headers' in response body")
 	}
 }
+func TestNormalizeEnvironment(t *testing.T) {
+	envs := []string{"development", "dev", "prod", "production", "staging", "stage"}
+	expected := []string{"development", "development", "production", "production", "staging", "staging"}
+
+	for i, env := range envs {
+		normalized := normalizeEnvironment(env)
+		if normalized != expected[i] {
+			t.Errorf("Expected %s, got %s for input %s", expected[i], normalized, env)
+		}
+	}
+
+}
+
+func TestHandleName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"HelloHandler", "HelloHandler"},
+	}
+
+	for _, test := range tests {
+		result := handleName(HelloHandler)
+		if result != test.expected {
+			t.Errorf("handleName(%s) = %s; want %s", test.input, result, test.expected)
+		}
+	}
+
+}
+func TestHasBodyField(t *testing.T) {
+	tests := []struct {
+		input    any
+		expected bool
+	}{
+		{map[string]any{"not_body": "value"}, false},
+		{struct{ Body string }{Body: "value"}, true},
+		{struct{ NotBody string }{NotBody: "value"}, false},
+		{"just a string", false},
+	}
+
+	for _, test := range tests {
+		result := hasBodyField(test.input)
+		if result != test.expected {
+			t.Errorf("hasBodyField(%v) = %v; want %v", test.input, result, test.expected)
+		}
+	}
+}
+func TestShortFuncName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"github.com/user/project/pkg.HandlerFunc-fm", "HandlerFunc"},
+		{"main.HelloHandler·fm", "HelloHandler"},
+		{"net/http.(*ServeMux).ServeHTTP", "ServeHTTP"},
+		{"simpleFunction", "simpleFunction"},
+	}
+
+	for _, test := range tests {
+		result := shortFuncName(test.input)
+		if result != test.expected {
+			t.Errorf("shortFuncName(%s) = %s; want %s", test.input, result, test.expected)
+		}
+	}
+}
+
+func TestIsSensitiveParam(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"password", true},
+		{"token", true},
+		{"username", false},
+		{"api_key", true},
+	}
+	for _, test := range tests {
+		result := isSensitiveParam(test.input)
+		if result != test.expected {
+			t.Errorf("isSensitiveParam(%s) = %v; want %v", test.input, result, test.expected)
+		}
+	}
+}

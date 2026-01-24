@@ -74,6 +74,18 @@ func TestServeFile(t *testing.T) {
 	okapitest.GET(t, "http://localhost:8080").ExpectStatusOK()
 
 }
+func TestNewTestContext(t *testing.T) {
+	ctx, rec := NewTestContext(http.MethodGet, "/test", nil)
+	if ctx.request.Method != http.MethodGet {
+		t.Errorf("Expected method %s, got %s", http.MethodGet, ctx.request.Method)
+	}
+	if ctx.request.URL.Path != "/test" {
+		t.Errorf("Expected URL path /test, got %s", ctx.request.URL.Path)
+	}
+	if rec.Code != 200 {
+		t.Errorf("Expected initial response code 200, got %d", rec.Code)
+	}
+}
 func HelloHandler(c *Context) error {
 	if c.IsWebSocketUpgrade() {
 		fmt.Println("WebSocket upgrade detected")

@@ -34,7 +34,7 @@ import (
 
 func TestBooksAPI(t *testing.T) {
 	// Setup test server
-	server := okapi.NewTestServerOn(t, 8000)
+	server := okapi.NewTestServer(t)
 	server.Get("/books", GetBooksHandler)
 	server.Get("/books/:id", GetBookHandler)
 	server.Post("/books", CreateBookHandler)

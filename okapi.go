@@ -36,7 +36,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -81,7 +80,6 @@ type (
 		openapiSpec        *openapi3.T
 		openAPI            *OpenAPI
 		openApiEnabled     bool
-		showBanner         bool
 		maxMultipartMemory int64 // Maximum memory for multipart forms
 		noRoute            HandlerFunc
 		noMethod           HandlerFunc
@@ -681,7 +679,6 @@ func Default() *Okapi {
 func withDefaultConfig() OptionFunc {
 	return func(o *Okapi) {
 		o.openApiEnabled = true
-		o.showBanner = true
 	}
 }
 
@@ -779,15 +776,12 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	if o.openApiEnabled {
 		o.WithOpenAPIDocs()
 	}
-	if o.showBanner {
-		printBanner()
-	}
 	o.server = server
 	server.Handler = o
 	o.router.muxRouter.StrictSlash(o.strictSlash)
 	o.context.okapi = o
 	o.applyCommon()
-	_, _ = fmt.Fprintf(defaultWriter, "Starting HTTP server at %s\n", o.server.Addr)
+	o.PrintServerInfo()
 	// Serve with TLS if configured
 	if server.TLSConfig != nil {
 		return server.ListenAndServeTLS("", "")
@@ -803,7 +797,6 @@ func (o *Okapi) StartServer(server *http.Server) error {
 		}()
 
 		o.tlsServer.Handler = o
-		_, _ = fmt.Fprintf(defaultWriter, "Starting HTTP server at %s\n", o.tlsServer.Addr)
 		return o.tlsServer.ListenAndServeTLS("", "")
 	}
 
@@ -1319,24 +1312,6 @@ func (o *Okapi) NoMethod(h HandlerFunc) {
 	o.noMethod = h
 }
 
-// handleName returns the name of the handler function.
-func handleName(h HandlerFunc) string {
-	t := reflect.ValueOf(h).Type()
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	if t.Kind() == reflect.Struct {
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-			if field.Type == reflect.TypeOf(http.HandlerFunc(nil)) {
-				return field.Name
-			}
-		}
-	}
-	return t.Name()
-
-}
-
 // handleAccessLog logs the access details of the request
 func handleAccessLog(next HandlerFunc) HandlerFunc {
 	return func(c *Context) error {
@@ -1383,10 +1358,6 @@ func buildBaseLogFields(c *Context, status int, duration time.Duration) []any {
 		"user_agent", c.request.UserAgent(),
 	}
 }
-
-func printBanner() {
-	fmt.Println(banner)
-}
 func (o *Okapi) wrapHandleFunc(h HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := NewContext(o, w, r)
@@ -1402,6 +1373,84 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandlerFunc {
 		h.ServeHTTP(ctx.response, ctx.request)
 		return nil
 	}
+}
+
+func (o *Okapi) PrintServerInfo() {
+	if o.server == nil {
+		fmt.Println("Server not initialized")
+		return
+	}
+
+	addr := o.server.Addr
+	if addr == "" {
+		addr = ":http"
+	}
+
+	host, port := parseAddr(addr)
+
+	separatorWidth := 56
+	fmt.Println(strings.Repeat("=", separatorWidth))
+
+	fmt.Println("Starting Okapi server...")
+
+	// Local HTTP
+	fmt.Printf("  • Local:       http://%s:%s\n", host, port)
+
+	// TLS (if enabled)
+	if o.withTlsServer && o.tlsServerConfig != nil {
+		tlsAddr := o.tlsServer.Addr
+		if tlsAddr == "" {
+			tlsAddr = ":https"
+		}
+		tlsHost, tlsPort := parseAddr(tlsAddr)
+		fmt.Printf("  • Local TLS:   https://%s:%s\n", tlsHost, tlsPort)
+	}
+
+	// Environment
+	env := o.environment()
+	if env == "" {
+		env = "development"
+	}
+	fmt.Printf("  • Environment: %s\n", env)
+
+	// Docs
+	if o.openApiEnabled {
+		fmt.Printf("  • Docs:        http://%s:%s/docs\n", host, port)
+	}
+	fmt.Println(strings.Repeat("-", separatorWidth))
+
+}
+
+// parseAddr parses the server address into host and port
+func parseAddr(addr string) (host, port string) {
+	// Handle different address formats
+	if addr == ":http" {
+		return constLocalhost, "80"
+	}
+	if addr == ":https" {
+		return constLocalhost, "443"
+	}
+
+	if strings.HasPrefix(addr, ":") {
+		return constLocalhost, strings.TrimPrefix(addr, ":")
+	}
+
+	// Split host:port
+	parts := strings.Split(addr, ":")
+	if len(parts) == 2 {
+		host = parts[0]
+		port = parts[1]
+
+		// If host is empty or 0.0.0.0, show localhost for clarity
+		if host == "" || host == "0.0.0.0" {
+			host = constLocalhost
+		}
+
+		return host, port
+	}
+
+	// Fallback
+	return constLocalhost, "8080"
 }
 
 // Register registers a list of RouteDefinition to the Okapi instance.
@@ -1455,4 +1504,23 @@ func (o *Okapi) RegisterSchemas(schemas map[string]*SchemaInfo) error {
 		o.openAPI.ComponentSchemas[name] = schema
 	}
 	return nil
+}
+
+// environment returns the current application environment
+func (o *Okapi) environment() string {
+	envVars := []string{
+		"OKAPI_ENV",
+		"GO_ENV",
+		"APP_ENV",
+		"ENV",
+		"ENVIRONMENT",
+		"NODE_ENV",
+	}
+	for _, envVar := range envVars {
+		if env := os.Getenv(envVar); env != "" {
+			return normalizeEnvironment(env)
+		}
+	}
+
+	return "development"
 }

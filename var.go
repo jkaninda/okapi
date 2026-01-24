@@ -24,7 +24,9 @@
 
 package okapi
 
-import "regexp"
+import (
+	"regexp"
+)
 
 var (
 	jwtAlgo       = []string{"RS256", "HS256", "ES256"}

@@ -1,0 +1,5 @@
+database_url: "postgresql://user:password@localhost:5432/mydb"
+secret_key: xxxxyzyxzyxzyxzyxzyxzyxzyxzyxzyxzyxzyxz
+allowed_hosts: "localhost,example.com"
+workers: 4
+timeout: 30.0

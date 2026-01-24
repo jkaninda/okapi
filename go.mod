@@ -13,6 +13,7 @@ require (
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/google/uuid v1.6.0
 	github.com/jkaninda/go-utils v0.1.4
+	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 )
 

@@ -30,6 +30,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -184,4 +185,54 @@ func hasBodyField(v any) bool {
 		}
 	}
 	return false
+}
+
+// handleName returns the name of the handler function.
+func handleName(h HandlerFunc) string {
+	if h == nil {
+		return "unknown"
+	}
+
+	fn := runtime.FuncForPC(reflect.ValueOf(h).Pointer())
+	if fn == nil {
+		return "unknown"
+	}
+
+	return shortFuncName(fn.Name())
+}
+
+func shortFuncName(full string) string {
+	// Drop full path
+	if i := strings.LastIndex(full, "/"); i != -1 {
+		full = full[i+1:]
+	}
+
+	// Drop package name
+	if i := strings.LastIndex(full, "."); i != -1 {
+		full = full[i+1:]
+	}
+
+	// Clean compiler artifacts
+	full = strings.TrimSuffix(full, "-fm")
+	full = strings.TrimSuffix(full, "·fm")
+	return full
+}
+
+// normalizeEnvironment standardizes environment names to common conventions
+func normalizeEnvironment(env string) string {
+	env = strings.ToLower(strings.TrimSpace(env))
+	switch env {
+	case "dev":
+		return constDevelopment
+	case "prod":
+		return "production"
+	case "stg", "stage":
+		return "staging"
+	case "test", "testing":
+		return "Staging"
+	case "local":
+		return constDevelopment
+	default:
+		return env
+	}
 }

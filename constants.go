@@ -101,8 +101,7 @@ const (
 	paramCookie = "cookie"
 
 	// Default HTTP status
-	defaultStatus = 200
+	defaultStatus    = 200
+	constLocalhost   = "localhost"
+	constDevelopment = "development"
 )
-const banner = `:::::::::::::: 🦒 ::::::::::::::
-    	Okapi Web Framework 
-::::::::::::::::::::::::::::::::`

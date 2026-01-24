@@ -155,19 +155,7 @@ func TestOpenAPI(t *testing.T) {
 	apiV3.Put("/books", anyHandler).WithInput(&input{})
 	apiV3.Get("/books/:id", anyHandler).WithOutput(&output{})
 
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	waitForServer()
+	o.StartForTest(t)
 
 	okapitest.GET(t, fmt.Sprintf("%s/docs", testBaseURL)).ExpectStatusOK()
 	okapitest.GET(t, fmt.Sprintf("%s/openapi.json", testBaseURL)).ExpectStatusOK()
@@ -194,6 +182,11 @@ func TestNew(t *testing.T) {
 				BearerFormat: "JWT",
 			},
 			{
+				Name: "X-API-KEY",
+				Type: "apiKey",
+				In:   "header",
+			},
+			{
 				Name: "OAuth2",
 				Type: "oauth2",
 				Flows: &OAuthFlows{
@@ -218,7 +211,18 @@ func TestNew(t *testing.T) {
 			Description: "OpenAPI 2",
 			Extensions:  map[string]interface{}{},
 			Origin: &Origin{
-				Key: &Location{},
+				Key: &Location{
+					Line:   1,
+					Column: 1,
+				},
+				Fields: map[string]Location{
+					"url": {
+						Line: 2,
+					},
+					"description": {
+						Line: 3,
+					},
+				},
 			},
 		},
 	})

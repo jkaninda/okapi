@@ -162,7 +162,7 @@ func defaultRunOptions() *RunOptions {
 	}
 }
 
-// RunServer starts app and waits for shutdown signals
+// RunServer starts Okapi and waits for shutdown signals.
 // It handles graceful shutdown automatically
 func (c *CLI) RunServer(opts ...*RunOptions) error {
 	options := defaultRunOptions()
@@ -224,7 +224,10 @@ func (c *CLI) RunServer(opts ...*RunOptions) error {
 	return nil
 }
 
-// Run runs with default options
+// Run starts Okapi using default options and waits for shutdown signals.
+// It handles graceful shutdown automatically.
+//
+//It is a shortcut for RunServer(nil)
 func (c *CLI) Run() error {
 	return c.RunServer(nil)
 }

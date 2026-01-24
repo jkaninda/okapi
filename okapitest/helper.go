@@ -24,9 +24,21 @@
 
 package okapitest
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+	"syscall"
+	"time"
+)
 
 func basicAuth(username, password string) string {
 	auth := username + ":" + password
 	return base64.StdEncoding.EncodeToString([]byte(auth))
+}
+func GracefulExitAfter(duration time.Duration) {
+	time.AfterFunc(duration, func() {
+		err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+		if err != nil {
+			return
+		}
+	})
 }

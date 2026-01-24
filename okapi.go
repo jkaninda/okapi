@@ -57,6 +57,7 @@ type (
 	// holding configuration, routers, middleware, server settings, and documentation components.
 	Okapi struct {
 		context            *Context
+		ctx                context.Context
 		router             *Router
 		middlewares        []Middleware
 		server             *http.Server
@@ -304,6 +305,15 @@ func WithTLS(tlsConfig *tls.Config) OptionFunc {
 	return func(o *Okapi) {
 		if tlsConfig != nil {
 			o.tlsConfig = tlsConfig
+		}
+	}
+}
+
+// WithContext sets the context for the Okapi instance
+func WithContext(ctx context.Context) OptionFunc {
+	return func(o *Okapi) {
+		if ctx != nil {
+			o.ctx = ctx
 		}
 	}
 }
@@ -805,10 +815,10 @@ func (o *Okapi) StartServer(server *http.Server) error {
 }
 
 // Stop gracefully shuts down the Okapi HTTP and HTTPS server(s)
-func (o *Okapi) Stop() error {
+func (o *Okapi) Stop(ctx ...context.Context) error {
 	if o.server != nil {
 		_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down HTTP server at %s\n", o.server.Addr)
-		if err := o.Shutdown(o.server); err != nil {
+		if err := o.Shutdown(o.server, ctx...); err != nil {
 			return fmt.Errorf("HTTP shutdown error at %s: %w", o.server.Addr, err)
 		}
 		o.server = nil
@@ -816,7 +826,7 @@ func (o *Okapi) Stop() error {
 
 	if o.withTlsServer && o.tlsServerConfig != nil && o.tlsServer != nil {
 		_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down HTTPS server at %s\n", o.tlsServer.Addr)
-		if err := o.Shutdown(o.tlsServer); err != nil {
+		if err := o.Shutdown(o.tlsServer, ctx...); err != nil {
 			return fmt.Errorf("HTTPS shutdown error at %s: %w", o.tlsServer.Addr, err)
 		}
 		o.tlsServer = nil
@@ -826,11 +836,17 @@ func (o *Okapi) Stop() error {
 }
 
 // Shutdown performs graceful shutdown of the provided server using a background context
-func (o *Okapi) Shutdown(server *http.Server) error {
+func (o *Okapi) Shutdown(server *http.Server, ctx ...context.Context) error {
 	if server == nil {
 		return nil
 	}
-	return server.Shutdown(context.Background())
+	return server.Shutdown(o.getContextOrBackground(ctx...))
+}
+func (o *Okapi) getContextOrBackground(ctx ...context.Context) context.Context {
+	if len(ctx) == 0 {
+		return o.ctx
+	}
+	return ctx[0]
 }
 
 // GetContext returns the current context
@@ -1248,6 +1264,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 		optionsRegistered:  make(map[string]bool),
 		maxMultipartMemory: defaultMaxMemory,
 		cors:               Cors{},
+		ctx:                context.Background(),
 		openAPI: &OpenAPI{
 			Title:            okapiName,
 			Version:          "1.0.0",

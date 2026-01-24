@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/jkaninda/okapi/okapitest"
@@ -340,7 +341,7 @@ func TestRegisterRoutes(t *testing.T) {
 		}
 	}()
 	defer func(o *Okapi) {
-		err := o.Stop()
+		err := o.Stop(context.Background())
 		if err != nil {
 			t.Errorf("Failed to stop server: %v", err)
 		}

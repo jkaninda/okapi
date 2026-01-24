@@ -781,7 +781,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	o.router.muxRouter.StrictSlash(o.strictSlash)
 	o.context.okapi = o
 	o.applyCommon()
-	o.PrintServerInfo()
+	o.printServerInfo()
 	// Serve with TLS if configured
 	if server.TLSConfig != nil {
 		return server.ListenAndServeTLS("", "")
@@ -1375,7 +1375,7 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandlerFunc {
 	}
 }
 
-func (o *Okapi) PrintServerInfo() {
+func (o *Okapi) printServerInfo() {
 	if o.server == nil {
 		fmt.Println("Server not initialized")
 		return
@@ -1416,6 +1416,7 @@ func (o *Okapi) PrintServerInfo() {
 	// Docs
 	if o.openApiEnabled {
 		fmt.Printf("  • Docs:        http://%s:%s/docs\n", host, port)
+		fmt.Printf("  • OpenAPI:     http://%s:%s/openapi.json\n", host, port)
 	}
 	fmt.Println(strings.Repeat("-", separatorWidth))
 

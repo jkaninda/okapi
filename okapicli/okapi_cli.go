@@ -47,7 +47,7 @@ const (
 )
 
 type CLI struct {
-	app     *okapi.Okapi
+	o       *okapi.Okapi
 	flagSet *pflag.FlagSet
 	flags   map[string]interface{}
 }
@@ -78,7 +78,7 @@ func New(o *okapi.Okapi, name ...string) *CLI {
 		appName = name[0]
 	}
 	return &CLI{
-		app:     o,
+		o:       o,
 		flagSet: pflag.NewFlagSet(appName, pflag.ExitOnError),
 		flags:   make(map[string]interface{}),
 	}
@@ -184,7 +184,7 @@ func (c *CLI) RunServer(opts ...*RunOptions) error {
 
 	// Start the server in a goroutine
 	go func() {
-		if err := c.app.Start(); err != nil {
+		if err := c.o.Start(); err != nil {
 			serverErrors <- err
 		}
 	}()
@@ -216,7 +216,7 @@ func (c *CLI) RunServer(opts ...*RunOptions) error {
 		defer cancel()
 
 		// Attempt a graceful shutdown
-		if err := c.app.StopWithContext(ctx); err != nil {
+		if err := c.o.StopWithContext(ctx); err != nil {
 			return fmt.Errorf("server shutdown failed: %w", err)
 		}
 	}

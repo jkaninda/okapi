@@ -80,8 +80,8 @@ func main() {
 
 	// Run server with lifecycle hooks
 	if err := cli.RunServer(&okapicli.RunOptions{
-		ShutdownTimeout: 30 * time.Second,
-		Signals:         []os.Signal{okapicli.SIGINT, okapicli.SIGTERM},
+		ShutdownTimeout: 30 * time.Second,                               // Optional: customize shutdown timeout
+		Signals:         []os.Signal{okapicli.SIGINT, okapicli.SIGTERM}, // Optional: customize shutdown signals
 		OnStart: func() {
 			slog.Info("Preparing resources before startup")
 			if config.DatabaseURL != "" {

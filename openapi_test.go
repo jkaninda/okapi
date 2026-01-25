@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/jkaninda/okapi/okapitest"
@@ -163,6 +164,7 @@ func TestOpenAPI(t *testing.T) {
 }
 func TestNew(t *testing.T) {
 	o := New()
+	o.WithContext(context.Background())
 	o.WithOpenAPIDocs(OpenAPI{
 		Title:   "Okapi Web Framework Example",
 		Version: "1.0.0",

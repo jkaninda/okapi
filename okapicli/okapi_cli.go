@@ -216,7 +216,7 @@ func (c *CLI) RunServer(opts ...*RunOptions) error {
 		defer cancel()
 
 		// Attempt a graceful shutdown
-		if err := c.app.Stop(ctx); err != nil {
+		if err := c.app.StopWithContext(ctx); err != nil {
 			return fmt.Errorf("server shutdown failed: %w", err)
 		}
 	}

@@ -219,17 +219,18 @@ func TestWithServer(t *testing.T) {
 	opts := &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}
-
-	// Initialize the appropriate handler based on format preference
-
+	server := &http.Server{
+		Addr: ":8081",
+	}
 	logger := slog.New(slog.NewJSONHandler(defaultWriter, opts))
 	cors := Cors{AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}, AllowedOrigins: []string{"*"}}
 	o := New()
 	o.With(WithPort(8081), WithIdleTimeout(15),
 		WithWriteTimeout(10), WithReadTimeout(15),
 		WithMaxMultipartMemory(20>>10), WithCors(cors),
-		WithLogger(logger))
-
+		WithLogger(logger), WithContext(context.Background()),
+		WithServer(server),
+	)
 	o.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			slog.Info("Hello Go standard HTTP middleware function")
@@ -341,7 +342,7 @@ func TestRegisterRoutes(t *testing.T) {
 		}
 	}()
 	defer func(o *Okapi) {
-		err := o.Stop(context.Background())
+		err := o.StopWithContext(context.Background())
 		if err != nil {
 			t.Errorf("Failed to stop server: %v", err)
 		}
@@ -499,7 +500,7 @@ func TestWithComponentSchemaRef(t *testing.T) {
 		}
 	}()
 	defer func(o *Okapi) {
-		err := o.Stop()
+		err = o.Stop()
 		if err != nil {
 			t.Errorf("Failed to stop server: %v", err)
 		}

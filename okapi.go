@@ -309,7 +309,7 @@ func WithTLS(tlsConfig *tls.Config) OptionFunc {
 	}
 }
 
-// WithContext sets the context for the Okapi instance
+// WithContext sets the default context for the Okapi instance
 func WithContext(ctx context.Context) OptionFunc {
 	return func(o *Okapi) {
 		if ctx != nil {
@@ -481,6 +481,10 @@ func (o *Okapi) WithLogger(logger *slog.Logger) *Okapi {
 	return o.apply(WithLogger(logger))
 }
 
+// WithContext sets the context for the Okapi instance
+func (o *Okapi) WithContext(ctx context.Context) *Okapi {
+	return o.apply(WithContext(ctx))
+}
 func (o *Okapi) WithCORS(cors Cors) *Okapi {
 	return o.apply(WithCors(cors))
 }
@@ -814,39 +818,75 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	return server.ListenAndServe()
 }
 
-// Stop gracefully shuts down the Okapi HTTP and HTTPS server(s)
-func (o *Okapi) Stop(ctx ...context.Context) error {
-	if o.server != nil {
-		_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down HTTP server at %s\n", o.server.Addr)
-		if err := o.Shutdown(o.server, ctx...); err != nil {
-			return fmt.Errorf("HTTP shutdown error at %s: %w", o.server.Addr, err)
-		}
-		o.server = nil
+// Stop gracefully shuts down all active Okapi servers (HTTP and HTTPS).
+func (o *Okapi) Stop() error {
+	return o.StopWithContext(o.ctx)
+}
+
+// StopWithContext gracefully shuts down all active Okapi servers with the provided context.
+func (o *Okapi) StopWithContext(ctx context.Context) error {
+	shutdownCtx := o.resolveContext(ctx)
+
+	if err := o.shutdownServer(shutdownCtx, o.server, "HTTP"); err != nil {
+		return err
 	}
 
-	if o.withTlsServer && o.tlsServerConfig != nil && o.tlsServer != nil {
-		_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down HTTPS server at %s\n", o.tlsServer.Addr)
-		if err := o.Shutdown(o.tlsServer, ctx...); err != nil {
-			return fmt.Errorf("HTTPS shutdown error at %s: %w", o.tlsServer.Addr, err)
+	if o.withTlsServer && o.tlsServerConfig != nil {
+		if err := o.shutdownServer(shutdownCtx, o.tlsServer, "HTTPS"); err != nil {
+			return err
 		}
+	}
+
+	return nil
+}
+
+// shutdownServer handles the shutdown logic for a single server.
+func (o *Okapi) shutdownServer(ctx context.Context, server *http.Server, serverType string) error {
+	if server == nil {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down %s server at %s\n", serverType, server.Addr)
+
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("%s shutdown error at %s: %w", serverType, server.Addr, err)
+	}
+	// Clear the server
+	if serverType == "HTTP" {
+		o.server = nil
+	} else {
 		o.tlsServer = nil
 	}
 
 	return nil
 }
 
+// resolveContext returns the most appropriate context to use.
+func (o *Okapi) resolveContext(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	if o.ctx != nil {
+		return o.ctx
+	}
+	return context.Background()
+}
+
 // Shutdown performs graceful shutdown of the provided server using a background context
+// Deprecated, please use StopCtx
 func (o *Okapi) Shutdown(server *http.Server, ctx ...context.Context) error {
 	if server == nil {
 		return nil
 	}
-	return server.Shutdown(o.getContextOrBackground(ctx...))
-}
-func (o *Okapi) getContextOrBackground(ctx ...context.Context) context.Context {
-	if len(ctx) == 0 {
-		return o.ctx
+
+	var shutdownCtx context.Context
+	if len(ctx) > 0 && ctx[0] != nil {
+		shutdownCtx = ctx[0]
+	} else {
+		shutdownCtx = o.resolveContext(context.TODO())
 	}
-	return ctx[0]
+
+	return server.Shutdown(shutdownCtx)
 }
 
 // GetContext returns the current context

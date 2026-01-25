@@ -43,66 +43,62 @@ type Config struct {
 func main() {
 	// Create default Okapi instance
 	o := okapi.Default()
+
 	// Create CLI instance
+	// Or cli := okapicli.New(o) // The name is optional
 	cli := okapicli.New(o, "Okapi CLI Example").
-		String("config", "c", "", "Path to provider configuration file").
+		String("config", "c", "config.yaml", "Path to configuration file").
 		Int("port", "p", 8000, "HTTP server port").
 		Bool("debug", "d", false, "Enable debug mode")
+
 	// Parse flags
-	err := cli.ParseFlags()
-	if err != nil {
+	if err := cli.ParseFlags(); err != nil {
 		panic(err)
 	}
-	// Apply flag values to Okapi options
+
+	// Apply CLI options
 	o.WithPort(cli.GetInt("port"))
 	if cli.GetBool("debug") {
 		o.WithDebug()
 	}
+
+	// Load configuration
 	config := &Config{}
-	// Example of loading config from file
-	configPath := cli.GetString("config")
-	if configPath != "" {
-		slog.Info("Loading configuration from file", "path", configPath)
-		// Load
-		if err = cli.LoadConfig(configPath, config); err != nil {
-			// Panic on error or handle gracefully
-			// panic(err)
+	if path := cli.GetString("config"); path != "" {
+		slog.Info("Loading configuration", "path", path)
+		if err := cli.LoadConfig(path, config); err != nil {
 			slog.Error("Failed to load configuration", "error", err)
 		}
 	}
 
-	// Use flags
+	// Define routes
 	o.Get("/", func(ctx *okapi.Context) error {
 		return ctx.OK(okapi.M{
 			"message": "Hello, Okapi!",
 		})
 	})
 
-	if err = cli.RunServer(&okapicli.RunOptions{
-		ShutdownTimeout: 30 * time.Second,                               // Optional: customize shutdown timeout
-		Signals:         []os.Signal{okapicli.SIGINT, okapicli.SIGTERM}, // Optional: customize shutdown signals
+	// Run server with lifecycle hooks
+	if err := cli.RunServer(&okapicli.RunOptions{
+		ShutdownTimeout: 30 * time.Second,
+		Signals:         []os.Signal{okapicli.SIGINT, okapicli.SIGTERM},
 		OnStart: func() {
-			slog.Info("Ensuring resources are ready before starting...")
-			if config != nil && config.DatabaseURL != "" {
-				// This is just an example of using loaded config
-				slog.Info("Connecting to database", "url", config.DatabaseURL)
-			} else {
-				slog.Error("No database URL provided in configuration")
+			slog.Info("Preparing resources before startup")
+			if config.DatabaseURL != "" {
+				slog.Info("Connecting to database")
 			}
 		},
 		OnStarted: func() {
 			slog.Info("Server started successfully")
-			// You can add additional startup logic here
 		},
 		OnShutdown: func() {
-			slog.Info("Cleanup before shutdown...")
-			// Close database connections, etc.
+			slog.Info("Cleaning up before shutdown")
 		},
 	}); err != nil {
 		panic(err)
 	}
 
-	// Or simply use defaults
+	// Or use defaults
 	// if err := cli.Run(); err != nil {
 	//	panic(err)
 	// }

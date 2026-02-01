@@ -113,6 +113,11 @@ func (c *CLI) ParseFlags() error {
 	return c.flagSet.Parse(os.Args[1:])
 }
 
+// Parse is an alias for ParseFlags
+func (c *CLI) Parse() error {
+	return c.ParseFlags()
+}
+
 // Get retrieves a flag value by name
 func (c *CLI) Get(name string) interface{} {
 	if val, ok := c.flags[name]; ok {

@@ -399,35 +399,55 @@ o.Post("/books", func(c *okapi.Context) error {
 | JSON body        | `json`          | Decodes when `Content-Type: application/json`.                                                |
 | XML body         | `xml`           | Decodes when `Content-Type: application/xml`.                                                 |
 
-### OpenAPI & Documentation Tags
 
-These tags influence generated OpenAPI documentation:
+## OpenAPI & Documentation Tags
 
-| Tag(s)               | Description                                                  |
-|----------------------|--------------------------------------------------------------|
-| `description`, `doc` | Adds documentation metadata to the field.                    |
-| `deprecated:"true"`  | Marks the field as deprecated in OpenAPI.                    |
-| `hidden:"true"`      | Excludes the field from the generated OpenAPI documentation. |
+These struct tags control how fields appear in the generated **OpenAPI 3 specification** and Swagger UI.
 
+| Tag(s)               | Description                                                                 |
+|----------------------|-----------------------------------------------------------------------------|
+| `description`, `doc` | Adds descriptive documentation for the field in the OpenAPI schema.         |
+| `deprecated:"true"`  | Marks the field as deprecated in the generated OpenAPI documentation.       |
+| `hidden:"true"`      | Excludes the field from the generated OpenAPI specification and Swagger UI. |
+| `example:"..."`      | Adds an example value for the field in the OpenAPI schema.                  |
+
+
+
+### Validation and Default Values
+
+Okapi supports **declarative validation** and **automatic default value assignment** using struct tags.
+This makes request validation explicit, consistent, and self-documented at the schema level.
+
+### Basic Validation Tags
+
+| Field Type | Tag                     | Description                                              |
+|------------|-------------------------|----------------------------------------------------------|
+| `string`   | `minLength:"10"`        | Ensures the string has at least 10 characters.           |
+| `string`   | `maxLength:"50"`        | Ensures the string does not exceed 50 characters.        |
+| `number`   | `min:"5"`               | Ensures the number is greater than or equal to 5.        |
+| `number`   | `max:"100"`             | Ensures the number is less than or equal to 100.         |
+| `number`   | `multipleOf:"5"`        | Ensures the number is a multiple of the given value.     |
+| `slice`    | `maxItems:"5"`          | Ensures the slice contains at most 5 items.              |
+| `slice`    | `minItems:"2"`          | Ensures the slice contains at least 2 items.             |
+| `slice`    | `uniqueItems:"true"`    | Ensures all items in the slice are unique.               |
+| `any`      | `required:"true"`       | Marks the field as required.                             |
+| `any`      | `default:"..."`         | Assigns a default value when the field is missing/empty. |
+| `any`      | `format:"email"`        | Enables format validation (e.g. `email`, `uuid`, etc.).  |
+| `any`      | `pattern:"^[a-zA-Z]+$"` | Validates the field against a regular expression.        |
 
 
 ---
 
-## Validation and Default Values
+#### Example
 
-Okapi provides declarative validation and automatic default value assignment using struct tags. This allows developers to enforce constraints on input data and ensure fields have sensible defaults.
-
-### Basic Validation Tags
-
-| Field Type | Tag               | Description                                       |
-|------------|-------------------|---------------------------------------------------|
-| `string`   | `minLength:"10"`  | Ensures the string has at least 10 characters.    |
-| `string`   | `maxLength:"50"`  | Ensures the string does not exceed 50 characters. |
-| `number`   | `min:"5"`         | Ensures the number is at least 5.                 |
-| `number`   | `max:"100"`       | Ensures the number does not exceed 100.           |
-| `any`      | `default:"..."`   | Assigns a default value if the field is empty.    |
-| `any`      | `required:"true"` | Marks the field as mandatory.                     |
-| `any`      | `format:""`       | Enables format validation for the field.          |
+```go
+type CreateUserRequest struct {
+    Email    string   `json:"email" required:"true" format:"email" example:"user@example.com"`
+    Password string   `json:"password" minLength:"8" description:"User password"`
+    Age      int      `json:"age" min:"18" max:"120" default:"18"`
+    Roles    []string `json:"roles" minItems:"1" uniqueItems:"true"`
+}
+```
 
 ### Data Type & Format Validation
 
@@ -1587,6 +1607,48 @@ func TestAuthMiddleware(t *testing.T) {
         Header("Authorization", "Bearer valid-token").
         ExpectStatusOK()
 }
+```
+### CLI
+
+Okapi includes a command-line interface (CLI) tool to help you quickly run and manage your Okapi applications.
+
+Example usage:
+
+```go
+	app := okapi.New()
+	// Create CLI instance
+	cli := okapicli.New(app, "Goma").
+		String("config", "c", "config.yaml", "Path to configuration file").
+		Int("port", "p", 8080, "HTTP server port").
+		Bool("debug", "d", false, "Enable debug mode")
+		
+    // Parse flags
+	if err := cli.ParseFlags(); err != nil {
+		panic(err)
+	}
+   
+	app.Get("/", func(ctx *okapi.Context) error {
+	return ctx.OK(okapi.M{
+			"status":  "ok",
+			"message": "CLI example",
+		})
+  })
+  
+  // Run server
+	if err := cli.RunServer(&okapicli.RunOptions{
+		OnStart: func() {
+			slog.Info("Preparing resources before startup")
+
+		},
+		OnStarted: func() {
+			slog.Info("Server started successfully")
+		},
+		OnShutdown: func() {
+			slog.Info("Cleaning up before shutdown")
+		},
+	}); err != nil {
+		panic(err)
+	}
 ```
 ---
 

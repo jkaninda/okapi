@@ -32,6 +32,10 @@ import (
 	"testing"
 )
 
+type SliceRequest struct {
+	Tags []string `json:"tags" minItems:"2" maxItems:"5" uniqueItems:"true"`
+}
+
 func TestValidateEmail(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -948,6 +952,60 @@ func TestEnumWithQueryParams(t *testing.T) {
 			}
 		})
 	}
+}
+func TestSliceValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid slice",
+			body: `{
+				"tags": ["go", "programming", "validation"]
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "invalid - too few items",
+			body: `{
+				"tags": ["go"]
+			}`,
+			wantErr:     true,
+			errContains: "must be at least 2 items",
+		},
+		{
+			name: "invalid - too many items",
+			body: `{
+				"tags": ["go", "programming", "validation", "code", "test", "extra"]
+			}`,
+			wantErr:     true,
+			errContains: "must be at most 5 items",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+
+			var sliceReq SliceRequest
+			err := c.Bind(&sliceReq)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Context.Bind() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Context.Bind() error = %v, should contain %v", err, tt.errContains)
+				}
+			}
+		})
+	}
+
 }
 
 func BenchmarkCheckEnum(b *testing.B) {

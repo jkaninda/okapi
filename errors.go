@@ -358,6 +358,16 @@ func (c *Context) AbortValidationErrors(errors []ValidationError, msg ...string)
 	})
 }
 
+// ErrorNotModified writes a 304 Not Modified response.
+func (c *Context) ErrorNotModified(message any) error {
+	return c.JSON(http.StatusNotModified, message)
+}
+
+// AbortNotModified writes a standardized 304 Not Modified response.
+func (c *Context) AbortNotModified(msg string, err ...error) error {
+	return c.abortWithStatus(http.StatusNotModified, "Not Modified", msg, err...)
+}
+
 // ErrorLocked writes a 423 Locked response.
 func (c *Context) ErrorLocked(message any) error {
 	return c.JSON(http.StatusLocked, message)

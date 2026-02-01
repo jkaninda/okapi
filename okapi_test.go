@@ -72,7 +72,7 @@ func TestStart(t *testing.T) {
 	o.NoRoute(func(c C) error {
 		return c.String(http.StatusNotFound, pageNotFound)
 	})
-	o.NoMethod(func(c C) error {
+	o.NoMethod(func(c Ctx) error {
 		return c.String(http.StatusMethodNotAllowed, methodNotAllowed)
 	})
 	o.Get("/", func(c C) error {

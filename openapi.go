@@ -1512,7 +1512,21 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 			schema.Enum[i] = strings.TrimSpace(v)
 		}
 	}
-
+	// Slice validations
+	if maxItems := tag.Get(tagMaxItems); maxItems != "" {
+		if val, err := strconv.ParseUint(maxItems, 10, 64); err == nil {
+			schema.MaxItems = ptr(val)
+		}
+	}
+	if minItems := tag.Get(tagMinItems); minItems != "" {
+		if val, err := strconv.ParseUint(minItems, 10, 64); err == nil {
+			schema.MinItems = val
+		}
+	}
+	// Unique items
+	if uniqueItems := tag.Get(tagUniqueItems); uniqueItems == constTRUE {
+		schema.UniqueItems = true
+	}
 	// Example
 	if example := tag.Get(tagExample); example != "" {
 		schema.Example = example

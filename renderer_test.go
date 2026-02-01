@@ -52,16 +52,16 @@ var content = `
 </html>
 `
 
-type Template struct {
+type templateTest struct {
 	templates *template.Template
 }
 
-func (t *Template) Render(w io.Writer, name string, data interface{}, c *Context) error {
+func (t *templateTest) Render(w io.Writer, name string, data interface{}, c *Context) error {
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 func TestWithRenderer(t *testing.T) {
 	createTemplate(t)
-	temp := &Template{
+	temp := &templateTest{
 		templates: template.Must(template.ParseGlob("public/*.html")),
 	}
 	o := New().WithRenderer(temp)
@@ -73,6 +73,7 @@ func TestWithRenderer(t *testing.T) {
 			"title":   title,
 			"message": message})
 	})
+	o.Static("/assets", "public/assets")
 
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -88,12 +89,12 @@ func TestWithRenderer(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.GET(t, fmt.Sprintf("%s/", testBaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/", testBaseURL)).ExpectBodyContains("Hello, World!").ExpectStatusOK()
 
 }
 
 func createTemplate(t *testing.T) {
-	err := os.MkdirAll("public", 0777)
+	err := os.MkdirAll("public/views", 0777)
 	if err != nil {
 		t.Errorf("Failed to create public directory: %v", err)
 	}

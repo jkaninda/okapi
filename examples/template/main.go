@@ -26,22 +26,25 @@ package main
 
 import (
 	"github.com/jkaninda/okapi"
-	"html/template"
-	"io"
 	"net/http"
 )
 
-type Template struct {
-	templates *template.Template
-}
+// type Template struct {
+//	templates *template.Template
+// }
+//
+// func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
+//	return t.templates.ExecuteTemplate(w, name, data)
+// }
 
-func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
-}
 func main() {
+	tmpl, _ := okapi.NewTemplateFromDirectory("public/views", ".html", ".tmpl")
+	// Or
+	// tmpl, _ := okapi.NewTemplateFromFiles("public/views/*.html")
+
 	// Example usage of the Okapi framework
 	// Create a new Okapi instance and set renderer
-	o := okapi.New().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
+	o := okapi.Default().WithRenderer(tmpl)
 	// or
 	// tmpl := &Template{
 	//	templates: template.Must(template.ParseGlob("templates/*.html")),

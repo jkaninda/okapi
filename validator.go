@@ -231,6 +231,23 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
 		}
+		// Slice validations
+		if minItemsTag := sf.Tag.Get(tagMinItems); minItemsTag != "" {
+			if err := checkMinItems(field, minItemsTag); err != nil {
+				return fmt.Errorf("field %s: %v", sf.Name, err)
+			}
+		}
+		if maxItemsTag := sf.Tag.Get(tagMaxItems); maxItemsTag != "" {
+			if err := checkMaxItems(field, maxItemsTag); err != nil {
+				return fmt.Errorf("field %s: %v", sf.Name, err)
+			}
+		}
+		// UniqueItems validation
+		if sf.Tag.Get(tagUniqueItems) == constTRUE {
+			if err := checkUniqueItems(field); err != nil {
+				return fmt.Errorf("field %s: %v", sf.Name, err)
+			}
+		}
 	}
 
 	return nil
@@ -592,7 +609,50 @@ func checkMultipleOf(field reflect.Value, tag string) error {
 	}
 	return nil
 }
+func checkUniqueItems(field reflect.Value) interface{} {
+	if field.Kind() == reflect.Slice {
+		seen := make(map[interface{}]bool)
+		for i := 0; i < field.Len(); i++ {
+			item := field.Index(i).Interface()
+			if seen[item] {
+				return fmt.Errorf("slice contains duplicate item: %v", item)
+			}
+			seen[item] = true
+		}
+	}
+	return nil
 
+}
+
+func checkMaxItems(field reflect.Value, tag string) interface{} {
+	maxItems, err := strconv.Atoi(tag)
+	if err != nil {
+		return fmt.Errorf("invalid maxItems value: %s", tag)
+	}
+
+	if field.Kind() == reflect.Slice {
+		if field.Len() > maxItems {
+			return fmt.Errorf("slice length %d must be at most %d items", field.Len(), maxItems)
+		}
+	}
+	return nil
+
+}
+
+func checkMinItems(field reflect.Value, tag string) interface{} {
+	minItems, err := strconv.Atoi(tag)
+	if err != nil {
+		return fmt.Errorf("invalid minItems value: %s", tag)
+	}
+
+	if field.Kind() == reflect.Slice {
+		if field.Len() < minItems {
+			return fmt.Errorf("slice length %d must be at least %d items", field.Len(), minItems)
+		}
+	}
+	return nil
+
+}
 func parseFloat(tag string) (float64, error) {
 	val, err := strconv.ParseFloat(tag, 64)
 	if err != nil {

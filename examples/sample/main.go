@@ -6,11 +6,12 @@ import (
 )
 
 type Book struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"  maxLength:"100" minLength:"2" required:"true" description:"Book name" pattern:"^[A-Za-z]+$"`
-	Price int    `json:"price" max:"100" min:"5"  yaml:"price" required:"true" description:"Book price"`
-	Year  int    `json:"year"  yaml:"year" description:"Book price" deprecated:"true" hidden:"true"`
-	Qty   int    `json:"qty" yaml:"qty" description:"Book quantity" `
+	ID    int      `json:"id"`
+	Name  string   `json:"name"  maxLength:"100" minLength:"2" required:"true" description:"Book name" pattern:"^[A-Za-z]+$"`
+	Price int      `json:"price" max:"100" min:"5"  yaml:"price" required:"true" description:"Book price"`
+	Year  int      `json:"year"  yaml:"year" description:"Book price" deprecated:"true" hidden:"true"`
+	Qty   int      `json:"qty" yaml:"qty" description:"Book quantity" `
+	Tags  []string `minItems:"2" maxItems:"5" uniqueItems:"true"`
 }
 type Books []Book
 type BookRequest struct {

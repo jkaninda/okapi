@@ -651,29 +651,9 @@ func validateStruct(v any) error {
 		if sf.Tag.Get(tagRequired) == "true" && isEmptyValue(field) {
 			return fmt.Errorf("field %s is required", sf.Name)
 		}
-
-		// Numeric min/max
-		if minTag := sf.Tag.Get(tagMin); minTag != "" {
-			if err := checkMin(field, minTag); err != nil {
-				return fmt.Errorf("field %s: %w", sf.Name, err)
-			}
-		}
-		if maxTag := sf.Tag.Get(tagMax); maxTag != "" {
-			if err := checkMax(field, maxTag); err != nil {
-				return fmt.Errorf("field %s: %w", sf.Name, err)
-			}
-		}
-
-		// String minLength/maxLength
-		if minLenTag := sf.Tag.Get(tagMinLength); minLenTag != "" {
-			if err := checkMinLength(field, minLenTag); err != nil {
-				return fmt.Errorf("field %s: %w", sf.Name, err)
-			}
-		}
-		if maxLenTag := sf.Tag.Get(tagMaxLength); maxLenTag != "" {
-			if err := checkMaxLength(field, maxLenTag); err != nil {
-				return fmt.Errorf("field %s: %w", sf.Name, err)
-			}
+		// Min/Max validation
+		if err := validateMinMax(field, sf); err != nil {
+			return err
 		}
 		// Enum validation
 		if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
@@ -699,6 +679,63 @@ func validateStruct(v any) error {
 			if err := checkPattern(field, patternTag); err != nil {
 				return fmt.Errorf("field %s: %w", sf.Name, err)
 			}
+		}
+		// Slice validations
+		if field.Kind() == reflect.Slice {
+			if err := validateSlice(field, sf); err != nil {
+				return err
+			}
+		}
+
+	}
+	return nil
+}
+
+// validateMinMax checks min/max and minLength/maxLength constraints
+func validateMinMax(field reflect.Value, sf reflect.StructField) error {
+	// Numeric min/max
+	if minTag := sf.Tag.Get(tagMin); minTag != "" {
+		if err := checkMin(field, minTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	if maxTag := sf.Tag.Get(tagMax); maxTag != "" {
+		if err := checkMax(field, maxTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+
+	// String minLength/maxLength
+	if minLenTag := sf.Tag.Get(tagMinLength); minLenTag != "" {
+		if err := checkMinLength(field, minLenTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	if maxLenTag := sf.Tag.Get(tagMaxLength); maxLenTag != "" {
+		if err := checkMaxLength(field, maxLenTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	return nil
+}
+
+// validateSlice maxItems and minItems
+func validateSlice(field reflect.Value, sf reflect.StructField) error {
+	// Slice minItems/maxItems
+	if minItemsTag := sf.Tag.Get(tagMinItems); minItemsTag != "" {
+		if err := checkMinItems(field, minItemsTag); err != nil {
+			return fmt.Errorf("field %s: %v", sf.Name, err)
+		}
+	}
+	if maxItemsTag := sf.Tag.Get(tagMaxItems); maxItemsTag != "" {
+		if err := checkMaxItems(field, maxItemsTag); err != nil {
+			return fmt.Errorf("field %s: %v", sf.Name, err)
+		}
+	}
+	// UniqueItems validation
+	if sf.Tag.Get(tagUniqueItems) == constTRUE {
+		if err := checkUniqueItems(field); err != nil {
+			return fmt.Errorf("field %s: %v", sf.Name, err)
 		}
 	}
 	return nil

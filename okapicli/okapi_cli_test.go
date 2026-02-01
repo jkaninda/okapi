@@ -69,7 +69,7 @@ func TestRun(t *testing.T) {
 		Int("port", "p", 8000, "HTTP server port").
 		Bool("debug", "d", false, "Enable debug mode")
 
-	err := cli.ParseFlags()
+	err := cli.Parse()
 	if err != nil {
 		t.Error(err)
 	}

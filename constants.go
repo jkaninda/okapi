@@ -81,6 +81,9 @@ const (
 	tagHidden      = "hidden"
 	tagMultipleOf  = "multipleOf"
 	tagExample     = "example"
+	tagMaxItems    = "maxItems"
+	tagMinItems    = "minItems"
+	tagUniqueItems = "uniqueItems"
 
 	// Format types
 	formatEmail    = "email"

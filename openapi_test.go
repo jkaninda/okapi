@@ -273,3 +273,42 @@ func anyHandler(c *Context) error {
 	return c.OK(M{"message": "Hello from Okapi!"})
 
 }
+
+func TestWithOpenAPIDocs(t *testing.T) {
+	o := Default().
+		WithOpenAPIDocs(OpenAPI{
+			Title:   "Okapi Web Framework Example",
+			Version: "1.0.0",
+			License: License{
+				Name: "MIT",
+			},
+			Servers: Servers{
+				{
+					URL: "http://localhost:8080",
+				},
+			},
+			ExternalDocs: &ExternalDocs{
+				URL: "http://localhost:8080/openapi.json",
+			},
+		})
+
+	o.Get("/", func(c *Context) error {
+		return c.Text(http.StatusOK, "Hello World!")
+	}).WithIO(&SliceRequest{}, &SliceRequest{})
+
+	go func() {
+		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server failed to start: %v", err)
+		}
+	}()
+	defer func(o *Okapi) {
+		err := o.Stop()
+		if err != nil {
+			t.Errorf("Failed to stop server: %v", err)
+		}
+	}(o)
+
+	waitForServer()
+	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
+}

@@ -59,7 +59,8 @@ type (
 		data map[string]any
 	}
 	// C is a shortcut of *Context
-	C = *Context
+	C   = *Context
+	Ctx = *Context
 )
 
 // Mime types

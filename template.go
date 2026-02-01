@@ -92,7 +92,7 @@ func NewTemplateFromDirectory(dir string, extensions ...string) (*Template, erro
 		extensions = []string{".html", ".tmpl"}
 	}
 
-	var patterns []string
+	patterns := make([]string, 0, len(extensions)*2)
 	for _, ext := range extensions {
 		patterns = append(patterns, filepath.Join(dir, "**/*"+ext))
 		patterns = append(patterns, filepath.Join(dir, "*"+ext))

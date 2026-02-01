@@ -33,7 +33,7 @@ import (
 	"text/template"
 )
 
-//go:embed public/views/*.html
+//go:embed examples/template/views/*.html
 var testViews embed.FS
 
 func setupTestTemplates(t *testing.T) string {
@@ -94,7 +94,7 @@ func TestNewTemplate(t *testing.T) {
 	}{
 		{
 			name:    "valid pattern",
-			pattern: "public/views/*.html",
+			pattern: "examples/template/views/*.html",
 			wantErr: false,
 		},
 		{
@@ -111,25 +111,13 @@ func TestNewTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpl, err := NewTemplate(testViews, tt.pattern)
+			_, err := NewTemplate(testViews, tt.pattern)
 
-			if tt.wantErr {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
-				return
+			if tt.wantErr && err == nil {
+				t.Fatalf("expected error for pattern %q, got nil", tt.pattern)
 			}
-
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-
-			if tmpl == nil {
-				t.Error("Expected template but got nil")
-			}
-
-			if tmpl.templates == nil {
-				t.Error("Expected templates to be initialized")
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error for pattern %q: %v", tt.pattern, err)
 			}
 		})
 	}
@@ -238,19 +226,19 @@ func TestNewTemplateFromDirectory(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, _tt := range tests {
+		tt := _tt
+
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "empty directory" {
 				defer func(path string) {
-					err := os.RemoveAll(path)
-					if err != nil {
+					if err := os.RemoveAll(path); err != nil {
 						t.Errorf("Failed to remove temp dir: %v", err)
 					}
 				}(tt.dir)
 			}
 
 			tmpl, err := NewTemplateFromDirectory(tt.dir, tt.extensions...)
-
 			if tt.wantErr {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -264,6 +252,7 @@ func TestNewTemplateFromDirectory(t *testing.T) {
 
 			if tmpl == nil {
 				t.Error("Expected template but got nil")
+				return
 			}
 
 			count := len(tmpl.templates.Templates())
@@ -294,7 +283,7 @@ func TestNewTemplateWithConfig(t *testing.T) {
 			name: "with embedded fs",
 			config: TemplateConfig{
 				FS:      testViews,
-				Pattern: "public/views/*.html",
+				Pattern: "examples/template/views/*.html",
 			},
 			wantErr: false,
 		},

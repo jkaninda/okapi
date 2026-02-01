@@ -26,18 +26,16 @@ package main
 
 import (
 	"github.com/jkaninda/okapi"
-	"html/template"
-	"io"
 	"net/http"
 )
 
-type Template struct {
-	templates *template.Template
-}
-
-func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
-}
+// type Template struct {
+//	templates *template.Template
+// }
+//
+// func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
+//	return t.templates.ExecuteTemplate(w, name, data)
+// }
 
 func main() {
 	tmpl, _ := okapi.NewTemplateFromDirectory("public/views", ".html", ".tmpl")

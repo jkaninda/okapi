@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -136,6 +137,21 @@ func (rb *RequestBuilder) Header(k, v string) *RequestBuilder {
 func (rb *RequestBuilder) Headers(headers map[string]string) *RequestBuilder {
 	for k, v := range headers {
 		rb.headers[k] = v
+	}
+	return rb
+}
+func (rb *RequestBuilder) QueryParam(key, value string) *RequestBuilder {
+	sep := "?"
+	if strings.Contains(rb.url, "?") {
+		sep = "&"
+	}
+	rb.url = rb.url + sep + url.QueryEscape(key) + "=" + url.QueryEscape(value)
+	return rb
+}
+
+func (rb *RequestBuilder) QueryParams(params map[string]string) *RequestBuilder {
+	for k, v := range params {
+		rb.QueryParam(k, v)
 	}
 	return rb
 }
@@ -474,6 +490,7 @@ func AssertHTTPResponse(
 }
 
 func doRequest(method, url string, headers map[string]string, contentType string, body io.Reader) (*http.Response, []byte, error) {
+	fmt.Println(url)
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating request: %w", err)

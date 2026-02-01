@@ -26,6 +26,7 @@ package okapitest
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,6 +40,7 @@ func setupTestServer() *httptest.Server {
 
 	// Simple GET endpoint
 	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf("Received query: %s\n\n", r.URL.RawQuery)
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("Hello, World!"))
 		if err != nil {
@@ -167,8 +169,13 @@ func TestGET(t *testing.T) {
 	defer server.Close()
 
 	GET(t, server.URL+"/hello").
-		ExpectStatusOK().
-		ExpectBody("Hello, World!")
+		QueryParam("message", "Hello, World!").
+		QueryParams(map[string]string{
+			"lang": "en",
+			"foo":  "bar",
+		}).
+		ExpectBody("Hello, World!").
+		ExpectStatusOK()
 }
 
 func TestPOST(t *testing.T) {

@@ -2,7 +2,7 @@
 title: CLI
 layout: default
 parent: Features
-nav_order: 9
+nav_order: 10
 ---
 
 # CLI

@@ -2,7 +2,7 @@
 title: CLI
 layout: default
 parent: Features
-nav_order: 8
+nav_order: 9
 ---
 
 # CLI
@@ -23,7 +23,10 @@ Example usage:
 	if err := cli.ParseFlags(); err != nil {
 		panic(err)
 	}
-   
+    // Retrieve flag values
+    port := cli.GetInt("port")
+    app.WithPort(port)
+       
 	app.Get("/", func(ctx *okapi.Context) error {
 	return ctx.OK(okapi.M{
 			"status":  "ok",

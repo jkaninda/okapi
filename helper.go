@@ -236,3 +236,19 @@ func normalizeEnvironment(env string) string {
 		return env
 	}
 }
+
+// Helper function for colored output
+func getMethodColor(method string) string {
+	colors := map[string]string{
+		"GET":    "\033[32m", // Green
+		"POST":   "\033[34m", // Blue
+		"PUT":    "\033[33m", // Yellow
+		"PATCH":  "\033[36m", // Cyan
+		"DELETE": "\033[31m", // Red
+	}
+
+	if color, ok := colors[method]; ok {
+		return color
+	}
+	return "\033[0m" // Default
+}

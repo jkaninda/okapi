@@ -1477,6 +1477,64 @@ func (o *Okapi) printServerInfo() {
 	}
 	fmt.Println(strings.Repeat("-", separatorWidth))
 
+	// Print registered routes if debug is enabled
+	if o.debug {
+		o.printRoutes()
+	}
+
+}
+
+// printRoutes prints all registered routes in a formatted table
+func (o *Okapi) printRoutes() {
+	routes := o.routes
+	if len(routes) == 0 {
+		fmt.Printf("No routes registered")
+		return
+	}
+
+	// Calculate column widths for better formatting
+	maxMethod := 0
+	maxPath := 0
+	maxName := 0
+
+	for _, route := range routes {
+		if len(route.Method) > maxMethod {
+			maxMethod = len(route.Method)
+		}
+		if len(route.Path) > maxPath {
+			maxPath = len(route.Path)
+		}
+		if len(route.Name) > maxName {
+			maxName = len(route.Name)
+		}
+	}
+
+	// Calculate total width for the separator
+	totalWidth := maxMethod + maxPath + maxName + 6
+	separatorWidth := totalWidth
+
+	// Print table header
+	fmt.Printf("%-*s | %-*s | %-*s\n",
+		maxMethod, "METHOD",
+		maxPath, "PATH",
+		maxName, "NAME")
+	fmt.Println(strings.Repeat("-", totalWidth))
+
+	// Print routes
+	for _, route := range routes {
+		if route.hidden || route.disabled {
+			continue // Skip hidden/disabled routes
+		}
+
+		methodColor := getMethodColor(route.Method)
+		fmt.Printf("%s%-*s\033[0m | %-*s | %-*s\n",
+			methodColor,
+			maxMethod, route.Method,
+			maxPath, route.Path,
+			maxName, route.Name)
+	}
+
+	fmt.Println(strings.Repeat("=", separatorWidth))
 }
 
 // parseAddr parses the server address into host and port

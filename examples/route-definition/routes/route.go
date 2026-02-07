@@ -44,14 +44,14 @@ var (
 	}
 )
 
-type Route struct {
+type Router struct {
 	// app is the Okapi application
 	app   *okapi.Okapi
 	group *okapi.Group
 }
 
-// NewRoute creates a new Route instance with the Okapi application
-func NewRoute(app *okapi.Okapi) *Route {
+// NewRouter creates a new Router instance with the Okapi application
+func NewRouter(app *okapi.Okapi) *Router {
 	// Update OpenAPI documentation with the application title and version
 	app.WithOpenAPIDocs(okapi.OpenAPI{
 		Title:   "Okapi Web Framework Example",
@@ -87,7 +87,7 @@ func NewRoute(app *okapi.Okapi) *Route {
 			},
 		},
 	})
-	return &Route{
+	return &Router{
 		app:   app,
 		group: &okapi.Group{Prefix: "/api/v1"},
 	}
@@ -95,7 +95,7 @@ func NewRoute(app *okapi.Okapi) *Route {
 
 // ************ Registering Routes ************
 
-func (r *Route) RegisterRoutes() {
+func (r *Router) RegisterRoutes() {
 	// Register all routes
 	r.app.Register(r.home())
 	r.app.Register(r.version())
@@ -110,7 +110,7 @@ func (r *Route) RegisterRoutes() {
 // ****************** Routes Definition ******************
 
 // home returns the route definition for the Home endpoint
-func (r *Route) home() okapi.RouteDefinition {
+func (r *Router) home() okapi.RouteDefinition {
 	return okapi.RouteDefinition{
 		Path:        "/",
 		Method:      http.MethodGet,
@@ -122,7 +122,7 @@ func (r *Route) home() okapi.RouteDefinition {
 }
 
 // version returns the route definition for the version endpoint
-func (r *Route) version() okapi.RouteDefinition {
+func (r *Router) version() okapi.RouteDefinition {
 	return okapi.RouteDefinition{
 		Path:        "/version",
 		Method:      http.MethodGet,
@@ -140,7 +140,7 @@ func (r *Route) version() okapi.RouteDefinition {
 // In this section, we will make bookRoutes deprecated and create BookV1Routes
 
 // bookRoutes returns the route definitions for the BookController
-func (r *Route) bookRoutes() []okapi.RouteDefinition {
+func (r *Router) bookRoutes() []okapi.RouteDefinition {
 	apiGroup := &okapi.Group{Prefix: "/api", Tags: []string{"BookService"}}
 	// Mark the group as deprecated
 	// But, it will still be available for use, it's just marked as deprecated on the OpenAPI documentation
@@ -183,7 +183,7 @@ func (r *Route) bookRoutes() []okapi.RouteDefinition {
 
 // *********************** Book v1 Routes ***********************
 
-func (r *Route) v1BookRoutes() []okapi.RouteDefinition {
+func (r *Router) v1BookRoutes() []okapi.RouteDefinition {
 	apiGroup := r.group.Group("/books").WithTags([]string{"V1BookService"})
 	// Apply custom middleware
 	// apiGroup.Use(middlewares.CustomMiddleware)
@@ -220,7 +220,7 @@ func (r *Route) v1BookRoutes() []okapi.RouteDefinition {
 // *************** Auth Routes ****************
 
 // authRoute returns the route definition for the AuthController
-func (r *Route) authRoute() okapi.RouteDefinition {
+func (r *Router) authRoute() okapi.RouteDefinition {
 	// Create a new group for the AuthController
 	apiGroup := r.group.Group("/auth").WithTags([]string{"AuthService"})
 
@@ -243,7 +243,7 @@ func (r *Route) authRoute() okapi.RouteDefinition {
 
 // ************** Authenticated Routes **************
 
-func (r *Route) securityRoutes() []okapi.RouteDefinition {
+func (r *Router) securityRoutes() []okapi.RouteDefinition {
 	coreGroup := r.group.Group("/security").WithTags([]string{"SecurityService"})
 	coreGroup.Use(middlewares.JWTAuth.Middleware)
 	// Apply custom middleware
@@ -266,7 +266,7 @@ func (r *Route) securityRoutes() []okapi.RouteDefinition {
 
 // ***************** Admin Routes *****************
 
-func (r *Route) adminRoutes() []okapi.RouteDefinition {
+func (r *Router) adminRoutes() []okapi.RouteDefinition {
 	apiGroup := r.group.Group("/admin").WithTags([]string{"AdminService"})
 	// Apply JWT authentication middleware to the admin group
 	apiGroup.Use(middlewares.JWTAuth.Middleware)

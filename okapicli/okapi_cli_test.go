@@ -35,6 +35,14 @@ import (
 	"time"
 )
 
+type serverConfig struct {
+	Port    int           `cli:"port"   short:"p" desc:"HTTP server port"        env:"APP_PORT"   default:"8080"`
+	Host    string        `cli:"host"   short:"h" desc:"Server hostname"        env:"APP_HOST"   default:"localhost"`
+	Debug   bool          `cli:"debug"  short:"d" desc:"Enable debug mode"      env:"APP_DEBUG" default:"false"`
+	Config  string        `cli:"config" short:"c" desc:"Path to config file"   default:"config.yaml"`
+	Timeout time.Duration `cli:"timeout" short:"t" desc:"Request timeout" default:"30s"`
+}
+
 func setOSArgs(args ...string) func() {
 	oldArgs := os.Args
 	os.Args = append([]string{os.Args[0]}, args...)
@@ -48,11 +56,16 @@ func TestNew(t *testing.T) {
 	cli := New(app, "Okapi").
 		String("config", "c", "", "Path to provider configuration file").
 		Int("port", "p", 8000, "HTTP server port").
-		Bool("debug", "d", false, "Enable debug mode")
+		Bool("debug", "d", false, "Enable debug mode").
+		Float("size", "s", -1e-1000, "Size of the server")
 
 	err := cli.ParseFlags()
 	if err != nil {
 		t.Error(err)
+	}
+	size := cli.GetFloat("size")
+	if size != -1e-1000 {
+		t.Error("Expected size -1e-1000, got", size)
 	}
 	restore := setOSArgs("--port", "7000", "--debug", "true", "--config", "config.yaml")
 	defer restore()
@@ -92,7 +105,8 @@ func TestCLI_RunServer(t *testing.T) {
 	cli := New(app, "Okapi Test").
 		String("config", "c", "", "Path to provider configuration file").
 		Int("port", "p", 8000, "HTTP server port").
-		Bool("debug", "d", false, "Enable debug mode")
+		Bool("debug", "d", false, "Enable debug mode").
+		Duration("timeout", "t", 30*time.Second, "Request timeout")
 
 	err := cli.ParseFlags()
 	if err != nil {
@@ -167,4 +181,59 @@ func TestCLI_LoadConfig(t *testing.T) {
 	if !config.Debug {
 		t.Error("Expected Debug to be true")
 	}
+}
+func TestCLI_FromStruct(t *testing.T) {
+	o := okapi.New()
+	config := &serverConfig{
+		Port: 8000,
+	}
+	cli := New(o, "Okapi Test").FromStruct(config)
+	err := cli.Parse()
+	if err != nil {
+		t.Error(err)
+	}
+	if config.Port != 8080 {
+		t.Error("Expected default port 8080, got", config.Port)
+	}
+}
+func TestCLI_WithConfig(t *testing.T) {
+	o := okapi.New()
+	config := &serverConfig{
+		Port: 8000,
+	}
+	// Set APP_DEBUG env
+	err := os.Setenv("APP_DEBUG", "true")
+	if err != nil {
+		t.Error("Failed to set environment variable", "error", err)
+	}
+	cli := New(o, "Okapi Test").WithConfig(config).MustParse()
+	if config.Port != 8080 {
+		t.Error("Expected default port 8080, got", config.Port)
+	}
+	// Check if debug flag is set from env
+	if !cli.GetBool("debug") {
+		t.Error("Expected debug to be true from environment variable")
+	}
+	// Check config debug value
+	if !config.Debug {
+		t.Error("Expected Debug to be true from environment variable")
+	}
+
+	port := cli.GetInt("port")
+	if port != 8080 {
+		t.Error("Expected port 8080, got", port)
+	}
+}
+
+func TestCLI_Default(t *testing.T) {
+	cli := Default().WithConfig(&serverConfig{Port: 8000}).MustParse()
+	if cli.GetInt("port") != 8080 {
+		t.Error("Expected default port 8080, got", cli.GetInt("port"))
+	}
+	if cli.Okapi() == nil {
+		t.Error("Expected Okapi instance, got nil")
+	}
+	cli.Okapi().Get("/", func(c *okapi.Context) error {
+		return c.String(200, "Hello, Okapi CLI!")
+	})
 }

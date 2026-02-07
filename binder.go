@@ -118,19 +118,19 @@ func (c *Context) bindRequest(out any) error {
 
 	// Decode body content based on content type (if any)
 	switch contentType := c.ContentType(); {
-	case strings.Contains(contentType, JSON):
+	case strings.Contains(contentType, constJSON):
 		_ = c.BindJSON(out) // ignore error for now
-	case strings.Contains(contentType, XML):
+	case strings.Contains(contentType, constXML):
 		_ = c.BindXML(out)
-	case strings.Contains(contentType, YAML),
-		strings.Contains(contentType, YamlX),
-		strings.Contains(contentType, YamlText):
+	case strings.Contains(contentType, constYAML),
+		strings.Contains(contentType, constYamlX),
+		strings.Contains(contentType, constYamlText):
 		_ = c.BindYAML(out)
-	case strings.Contains(contentType, PROTOBUF):
+	case strings.Contains(contentType, constPROTOBUF):
 		if msg, ok := out.(proto.Message); ok {
 			_ = c.BindProtoBuf(msg)
 		}
-	case strings.Contains(contentType, FormData):
+	case strings.Contains(contentType, constFormData):
 		// Handle multipart form data specially
 		return c.BindMultipart(out)
 	}
@@ -469,7 +469,7 @@ func (c *Context) bindFromFields(out any) error {
 		}
 
 		// Skip if this is a multipart form - already handled
-		if strings.Contains(c.ContentType(), FormData) {
+		if strings.Contains(c.ContentType(), constFormData) {
 			continue
 		}
 

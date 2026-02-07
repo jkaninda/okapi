@@ -146,6 +146,7 @@ o.Get("/welcome", func(c *okapi.Context) error {
 
 `templates/welcome.html`:
 ```html
+{{define "welcome"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -157,6 +158,7 @@ o.Get("/welcome", func(c *okapi.Context) error {
     <h1>{{.message}}</h1>
 </body>
 </html>
+{{end}}
 ```
 
 ---

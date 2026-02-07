@@ -36,6 +36,8 @@ type RouteDefinition struct {
 	Path string
 	// Handler is the function that will handle requests to this route
 	Handler HandlerFunc
+	// Group attach Route to a Group // Optional
+	Group *Group
 	// OperationId is an optional unique identifier for the route, primarily
 	// used in OpenAPI documentation to distinguish operations.
 	OperationId string
@@ -99,8 +101,6 @@ type RouteDefinition struct {
 	Options []RouteOption
 	// Middleware registers one or more middleware functions to the Route. // Optional
 	Middlewares []Middleware
-	// Group attach Route to a Group // Optional
-	Group *Group
 }
 
 // RegisterRoutes registers a slice of RouteDefinition with the given Okapi instance.

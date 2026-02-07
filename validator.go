@@ -344,32 +344,86 @@ func isEmptyValue(v reflect.Value) bool {
 }
 
 func checkMin(field reflect.Value, minTag string) error {
-	minValue, err := strconv.Atoi(minTag)
-	if err != nil {
-		return fmt.Errorf("invalid min value: %s", minTag)
-	}
-
 	switch field.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if field.Int() < int64(minValue) {
+		minValue, err := strconv.ParseInt(minTag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid min value: %s", minTag)
+		}
+		if field.Int() < minValue {
 			return fmt.Errorf("value %d must be >= %d", field.Int(), minValue)
 		}
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		minValue, err := strconv.ParseUint(minTag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid min value: %s", minTag)
+		}
+		if field.Uint() < minValue {
+			return fmt.Errorf("value %d must be >= %d", field.Uint(), minValue)
+		}
+
+	case reflect.Float32, reflect.Float64:
+		minValue, err := strconv.ParseFloat(minTag, 64)
+		if err != nil {
+			return fmt.Errorf("invalid min value: %s", minTag)
+		}
+		if field.Float() < minValue {
+			return fmt.Errorf("value %g must be >= %g", field.Float(), minValue)
+		}
+
+	case reflect.Slice, reflect.Array, reflect.Map:
+		minValue, err := strconv.Atoi(minTag)
+		if err != nil {
+			return fmt.Errorf("invalid min length: %s", minTag)
+		}
+		if field.Len() < minValue {
+			return fmt.Errorf("length %d must be >= %d", field.Len(), minValue)
+		}
 	}
+
 	return nil
 }
 
 func checkMax(field reflect.Value, maxTag string) error {
-	maxValue, err := strconv.Atoi(maxTag)
-	if err != nil {
-		return fmt.Errorf("invalid max value: %s", maxTag)
-	}
-
 	switch field.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if field.Int() > int64(maxValue) {
+		maxValue, err := strconv.ParseInt(maxTag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid max value: %s", maxTag)
+		}
+		if field.Int() > maxValue {
 			return fmt.Errorf("value %d must be <= %d", field.Int(), maxValue)
 		}
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		maxValue, err := strconv.ParseUint(maxTag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid max value: %s", maxTag)
+		}
+		if field.Uint() > maxValue {
+			return fmt.Errorf("value %d must be <= %d", field.Uint(), maxValue)
+		}
+
+	case reflect.Float32, reflect.Float64:
+		maxValue, err := strconv.ParseFloat(maxTag, 64)
+		if err != nil {
+			return fmt.Errorf("invalid max value: %s", maxTag)
+		}
+		if field.Float() > maxValue {
+			return fmt.Errorf("value %g must be <= %g", field.Float(), maxValue)
+		}
+
+	case reflect.Slice, reflect.Array, reflect.Map:
+		maxValue, err := strconv.Atoi(maxTag)
+		if err != nil {
+			return fmt.Errorf("invalid max length: %s", maxTag)
+		}
+		if field.Len() > maxValue {
+			return fmt.Errorf("length %d must be <= %d", field.Len(), maxValue)
+		}
 	}
+
 	return nil
 }
 
@@ -403,15 +457,19 @@ func checkMaxLength(field reflect.Value, maxTag string) error {
 
 // checkFormat validates field based on format type
 func checkFormat(field reflect.Value, formatTag string, sf reflect.StructField) error {
-	if field.Kind() != reflect.String {
-		return fmt.Errorf("format validation can only be applied to string fields")
-	}
-
-	value := field.String()
-
-	// Skip validation if value is empty
-	if value == "" {
-		return nil
+	var value string
+	if field.Type() == reflect.TypeOf(time.Time{}) {
+		if field.IsZero() {
+			return nil
+		}
+		t := field.Interface().(time.Time)
+		value = t.Format(time.RFC3339)
+	} else {
+		value = field.String()
+		// Skip validation if value is empty
+		if value == "" {
+			return nil
+		}
 	}
 
 	switch formatTag {
@@ -427,6 +485,10 @@ func checkFormat(field reflect.Value, formatTag string, sf reflect.StructField) 
 		return validateIPv4(value)
 	case formatIPv6:
 		return validateIPv6(value)
+	case formatHostname:
+		return validateHostname(value)
+	case formatUri:
+		return validateUri(value)
 	case formatUUID:
 		return validateUUID(value)
 	case formatRegex:
@@ -569,7 +631,28 @@ func validateRegex(value, pattern string) error {
 	}
 	return nil
 }
-
+func validateHostname(value string) error {
+	hostnameRegex := `^(?i:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?i:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*\.?$`
+	matched, err := regexp.MatchString(hostnameRegex, value)
+	if err != nil {
+		return fmt.Errorf("hostname validation error: %w", err)
+	}
+	if !matched {
+		return fmt.Errorf("invalid hostname format: %s", value)
+	}
+	return nil
+}
+func validateUri(value string) error {
+	uriRegex := `^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s]*$`
+	matched, err := regexp.MatchString(uriRegex, value)
+	if err != nil {
+		return fmt.Errorf("URI validation error: %w", err)
+	}
+	if !matched {
+		return fmt.Errorf("invalid URI format: %s", value)
+	}
+	return nil
+}
 func checkMultipleOf(field reflect.Value, tag string) error {
 	switch field.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

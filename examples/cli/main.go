@@ -32,6 +32,12 @@ import (
 	"time"
 )
 
+type ServerConfig struct {
+	Port   int    `cli:"port"   short:"p" desc:"HTTP server port"        env:"APP_PORT"   default:"8080"`
+	Debug  bool   `cli:"debug"  short:"d" desc:"Enable debug mode"      env:"APP_DEBUG"`
+	Config string `cli:"config" short:"c" desc:"Path to config file"   default:"config.yaml"`
+}
+
 type Config struct {
 	DatabaseURL  string  `yaml:"database_url"`
 	SecretKey    string  `yaml:"secret_key"`
@@ -41,23 +47,27 @@ type Config struct {
 }
 
 func main() {
+	cfg := &ServerConfig{}
 	// Create default Okapi instance
 	o := okapi.Default()
 
 	// Create CLI instance
-	// Or cli := okapicli.New(o) // The name is optional
-	cli := okapicli.New(o, "Okapi CLI Example").
-		String("config", "c", "config.yaml", "Path to configuration file").
-		Int("port", "p", 8000, "HTTP server port").
-		Bool("debug", "d", false, "Enable debug mode")
+	cli := okapicli.New(o, "Okapi CLI Example").FromStruct(cfg)
+	// Or
+	// cli := okapicli.New(o, "Okapi CLI Example").
+	//	String("config", "c", "config.yaml", "Path to configuration file").
+	//	Int("port", "p", 8000, "HTTP server port").
+	//	Bool("debug", "d", false, "Enable debug mode")
 
 	// Parse flags
-	if err := cli.ParseFlags(); err != nil {
+	if err := cli.Parse(); err != nil {
 		panic(err)
 	}
 
 	// Apply CLI options
-	o.WithPort(cli.GetInt("port"))
+	o.WithPort(cfg.Port)
+	// Or
+	// o.WithPort(cli.GetInt("port"))
 	if cli.GetBool("debug") {
 		o.WithDebug()
 	}

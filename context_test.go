@@ -103,5 +103,5 @@ func HelloHandler(c *Context) error {
 		return errors.New("isAdmin is not true")
 	}
 	hello := c.GetString("hello")
-	return c.Data(http.StatusOK, PLAINTEXT, []byte(hello))
+	return c.Data(http.StatusOK, constPLAINTEXT, []byte(hello))
 }

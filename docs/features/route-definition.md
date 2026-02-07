@@ -131,12 +131,12 @@ apiGroup.Register(bookService.BookRoutes()...)
 
 A complete, runnable example is available in:
 
-👉 [https://github.com/jkaninda/okapi/tree/main/examples/route-definition](https://github.com/jkaninda/okapi/tree/main/examples/route-definition)
+[https://github.com/jkaninda/okapi/tree/main/examples/route-definition](https://github.com/jkaninda/okapi/tree/main/examples/route-definition)
 ## Features Demonstrated
 
 A complete, runnable example with Docker images is available in:
 
-👉 [https://github.com/jkaninda/okapi-example](https://github.com/jkaninda/okapi-example)
+[https://github.com/jkaninda/okapi-example](https://github.com/jkaninda/okapi-example)
 
 
 This example demonstrates:
@@ -145,5 +145,4 @@ This example demonstrates:
 * Controllers/services
 * Middleware usage
 * OpenAPI documentation generation
-
----
+* Dynamic enabling/disabling of routes

@@ -350,6 +350,16 @@ func main() {
     }
 }
 ```
+## Swagger UI Preview
+
+Okapi automatically generates Swagger UI for all routes:
+
+
+![Okapi Swagger Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
+
+#### Redoc Preview
+
+![Okapi Redoc Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png)
 
 ---
 

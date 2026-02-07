@@ -19,9 +19,9 @@ type BookRequest struct {
 	Body Book
 }
 type BooksResponse struct {
-	Version string `header:"X-version"`
-	Status  int
-	Body    []Book
+	Version string `header:"X-version"` // Response header
+	Status  int    // Response status code
+	Body    []Book // Response body
 }
 
 var books = Books{

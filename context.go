@@ -65,19 +65,15 @@ type (
 
 // Mime types
 const (
-	JSON           = "application/json"
-	XML            = "application/xml"
-	HTML           = "text/html"
-	FORM           = "application/x-www-form-urlencoded"
-	FormData       = "multipart/form-data"
-	PLAINTEXT      = "text/plain"
-	CSV            = "text/csv"
-	JAVASCRIPT     = "application/javascript"
-	YAML           = "application/yaml"
-	YamlX          = "application/x-yaml"
-	YamlText       = "text/yaml"
-	PROTOBUF       = "application/protobuf"
-	FormURLEncoded = "application/x-www-form-urlencoded"
+	constJSON      = "application/json"
+	constXML       = "application/xml"
+	constHTML      = "text/html"
+	constFormData  = "multipart/form-data"
+	constPLAINTEXT = "text/plain"
+	constYAML      = "application/yaml"
+	constYamlX     = "application/x-yaml"
+	constYamlText  = "text/yaml"
+	constPROTOBUF  = "application/protobuf"
 )
 
 // ************** Accessors *************
@@ -100,6 +96,11 @@ func getAs[T any](c *Context, key string) (v T, ok bool) {
 // Request a new Context instance with the given request
 func (c *Context) Request() *http.Request {
 	return c.request // Return the request object
+}
+
+// Context returns the context.Context associated with the current request.
+func (c *Context) Context() context.Context {
+	return c.request.Context()
 }
 
 // Response returns the http.ResponseWriter for writing responses.
@@ -393,7 +394,7 @@ func (c *Context) writeResponse(code int, contentType string, writeFunc func() e
 
 // JSON writes a JSON response with the given status code.
 func (c *Context) JSON(code int, v any) error {
-	return c.writeResponse(code, JSON, func() error {
+	return c.writeResponse(code, constJSON, func() error {
 		return json.NewEncoder(c.response).Encode(v)
 	})
 }
@@ -410,21 +411,21 @@ func (c *Context) Created(v any) error {
 
 // XML writes an XML response with the given status code.
 func (c *Context) XML(code int, v any) error {
-	return c.writeResponse(code, XML, func() error {
+	return c.writeResponse(code, constXML, func() error {
 		return xml.NewEncoder(c.response).Encode(v)
 	})
 }
 
 // YAML writes a YAML response with the given status code.
 func (c *Context) YAML(code int, data any) error {
-	return c.writeResponse(code, YAML, func() error {
+	return c.writeResponse(code, constYAML, func() error {
 		return yaml.NewEncoder(c.response).Encode(data)
 	})
 }
 
 // Text writes a plain text response with the given status code.
 func (c *Context) Text(code int, v any) error {
-	return c.writeResponse(code, PLAINTEXT, func() error {
+	return c.writeResponse(code, constPLAINTEXT, func() error {
 		_, err := fmt.Fprint(c.response, v)
 		return err
 	})
@@ -610,18 +611,18 @@ func (c *Context) Render(code int, name string, data interface{}) error {
 		return ErrNoRenderer
 	}
 	if name == "" {
-		return c.writeResponse(code, HTML, func() error {
+		return c.writeResponse(code, constHTML, func() error {
 			return c.okapi.renderer.Render(c.response, "", nil, c)
 		})
 	}
-	return c.writeResponse(code, HTML, func() error {
+	return c.writeResponse(code, constHTML, func() error {
 		return c.okapi.renderer.Render(c.response, name, data, c)
 	})
 }
 
 // renderHTML is a helper for rendering HTML templates.
 func (c *Context) renderHTML(code int, tmpl *template.Template, data any) error {
-	return c.writeResponse(code, HTML, func() error {
+	return c.writeResponse(code, constHTML, func() error {
 		return tmpl.Execute(c.response, data) // Execute template with data
 	})
 }
@@ -781,13 +782,13 @@ func (c *Context) Respond(output any) error {
 
 	accept := c.request.Header.Get("Accept")
 	switch {
-	case strings.Contains(accept, XML):
+	case strings.Contains(accept, constXML):
 		return c.XML(status, body)
-	case strings.Contains(accept, YAML), strings.Contains(accept, YamlText), strings.Contains(accept, YamlX):
+	case strings.Contains(accept, constYAML), strings.Contains(accept, constYamlText), strings.Contains(accept, constYamlX):
 		return c.YAML(status, body)
-	case strings.Contains(accept, JSON):
+	case strings.Contains(accept, constJSON):
 		return c.JSON(status, body)
-	case strings.Contains(accept, PLAINTEXT), strings.Contains(accept, HTML):
+	case strings.Contains(accept, constPLAINTEXT), strings.Contains(accept, constHTML):
 		return c.String(status, body)
 	default:
 		return c.JSON(status, body)

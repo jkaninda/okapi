@@ -2,7 +2,7 @@
 title: Server Sent Events (SSE)
 layout: default
 parent: Features
-nav_order: 8
+nav_order: 9
 ---
 
 # Server Sent Events (SSE)

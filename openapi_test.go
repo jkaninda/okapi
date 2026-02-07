@@ -150,6 +150,14 @@ func TestOpenAPI(t *testing.T) {
 			Tags("Book Tags").
 			Response(http.StatusBadRequest, M{"": ""}).Build(),
 	)
+	v2.Post("/products", anyHandler,
+		Doc().Summary("Create a product").
+			BearerAuth().
+			Response(&TestProduct{}).
+			RequestBody(&TestProduct{}).
+			Tags("Product").
+			Response(http.StatusBadRequest, M{"": ""}).AsOption(),
+	)
 	// New Style
 	apiV3 := api.Group("v3")
 	apiV3.Post("/books", anyHandler).WithIO(&input{}, &output{})
@@ -245,7 +253,7 @@ func TestNew(t *testing.T) {
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
 }
 func TestWithOpenAPIDisabled(t *testing.T) {
-	o := Default().WithOpenAPIDisabled()
+	o := Default().WithOpenAPIDisabled().WithDebug()
 	o.Get("/", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	}).Hide()

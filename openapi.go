@@ -352,7 +352,7 @@ func (b *DocBuilder) Response(statusOrValue any, vOptional ...any) *DocBuilder {
 //   - v: a Go value (e.g., a struct instance) whose type will be used to generate
 //     the OpenAPI schema for the error response.
 func (b *DocBuilder) ErrorResponse(status int, v any) *DocBuilder {
-	b.options = append(b.options, DocErrorResponse(status, v))
+	b.options = append(b.options, DocResponse(status, v))
 	return b
 }
 
@@ -1011,7 +1011,7 @@ func (o *Okapi) buildOpenAPISpec() {
 
 			// Add example if available
 			if r.requestExample != nil {
-				requestBody.Content[JSON].Example = r.requestExample
+				requestBody.Content[constJSON].Example = r.requestExample
 			}
 
 			op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}

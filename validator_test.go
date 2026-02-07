@@ -1007,7 +1007,53 @@ func TestSliceValidation(t *testing.T) {
 	}
 
 }
+func TestUriValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		uri     string
+		wantErr bool
+	}{
+		{"valid URI", "https://example.com/resource", false},
+		{"valid URI - with query", "https://example.com/search?q=go", false},
+		{"valid URI - with port", "http://localhost:8080/api", false},
+		{"invalid - missing scheme", "example.com/resource", true},
+		{"invalid - invalid characters", "http://exa mple.com/resource", true},
+	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateUri(tt.uri)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateURI() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+func TestHostNameValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		host    string
+		wantErr bool
+	}{
+		{"valid hostname", "example.com", false},
+		{"valid hostname with subdomain", "sub.example.com", false},
+		{"valid hostname with hyphen", "my-site.com", false},
+		{"invalid - starts with hyphen", "-example.com", true},
+		{"invalid - ends with hyphen", "example-.com", true},
+		{"invalid - consecutive dots", "example..com", true},
+		{"invalid - invalid characters", "exa$mple.com", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateHostname(tt.host)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateHostName() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+
+	}
+}
 func BenchmarkCheckEnum(b *testing.B) {
 	field := reflect.ValueOf("processing")
 	enumTag := "pending,processing,shipped,delivered,cancelled"

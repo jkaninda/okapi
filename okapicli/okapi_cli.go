@@ -34,6 +34,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -50,6 +52,10 @@ type CLI struct {
 	o       *okapi.Okapi
 	flagSet *pflag.FlagSet
 	flags   map[string]interface{}
+	// structPtr holds a pointer to the struct being populated from CLI flags, used for writing back parsed values after resolution
+	structPtr interface{}
+	// envMappings maps CLI flag names to environment variable names for easy lookup during env var application
+	envMappings map[string]string
 }
 
 // RunOptions configures the Run behavior
@@ -78,10 +84,21 @@ func New(o *okapi.Okapi, name ...string) *CLI {
 		appName = name[0]
 	}
 	return &CLI{
-		o:       o,
-		flagSet: pflag.NewFlagSet(appName, pflag.ExitOnError),
-		flags:   make(map[string]interface{}),
+		o:           o,
+		flagSet:     pflag.NewFlagSet(appName, pflag.ExitOnError),
+		flags:       make(map[string]interface{}),
+		envMappings: make(map[string]string),
 	}
+}
+
+// Default creates a CLI manager with a default Okapi instance
+func Default() *CLI {
+	return New(okapi.Default())
+}
+
+// Okapi returns the underlying Okapi instance
+func (c *CLI) Okapi() *okapi.Okapi {
+	return c.o
 }
 
 // String adds a string flag with optional shorthand
@@ -108,14 +125,85 @@ func (c *CLI) Float(name, shorthand string, defaultValue float64, usage string) 
 	return c
 }
 
+// Duration adds a time.Duration flag with optional shorthand
+func (c *CLI) Duration(name, shorthand string, duration time.Duration, usage string) *CLI {
+	c.flagSet.DurationP(name, shorthand, duration, usage)
+	return c
+}
+
 // ParseFlags parses the command line flags
 func (c *CLI) ParseFlags() error {
-	return c.flagSet.Parse(os.Args[1:])
+	// First apply environment variables to override defaults
+	if err := c.applyEnvVars(); err != nil {
+		return err
+	}
+	// Parse command-line arguments
+	if err := c.flagSet.Parse(os.Args[1:]); err != nil {
+		return err
+	}
+
+	// Populate struct with final values (after env + CLI resolution)
+	if c.structPtr != nil {
+		if err := c.populateStruct(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Parse is an alias for ParseFlags
 func (c *CLI) Parse() error {
 	return c.ParseFlags()
+}
+
+func (c *CLI) MustParse() *CLI {
+	if err := c.Parse(); err != nil {
+		panic(fmt.Errorf("cli parse failed: %w", err))
+	}
+	return c
+}
+
+// populateStruct writes final flag values back into the struct
+func (c *CLI) populateStruct() error {
+	val := reflect.ValueOf(c.structPtr).Elem()
+	typ := val.Type()
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Field(i)
+
+		if !field.IsExported() {
+			continue
+		}
+
+		cliName := strings.TrimSpace(field.Tag.Get("cli"))
+		if cliName == "" {
+			continue
+		}
+
+		// Write parsed value back to struct
+		switch field.Type.Kind() {
+		case reflect.String:
+			if v, err := c.flagSet.GetString(cliName); err == nil {
+				fieldVal.SetString(v)
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if v, err := c.flagSet.GetInt(cliName); err == nil {
+				fieldVal.SetInt(int64(v))
+			}
+		case reflect.Bool:
+			if v, err := c.flagSet.GetBool(cliName); err == nil {
+				fieldVal.SetBool(v)
+			}
+		case reflect.Float32, reflect.Float64:
+			if v, err := c.flagSet.GetFloat64(cliName); err == nil {
+				fieldVal.SetFloat(v)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Get retrieves a flag value by name
@@ -157,6 +245,142 @@ func (c *CLI) GetBool(name string) bool {
 func (c *CLI) GetFloat(name string) float64 {
 	val, _ := c.flagSet.GetFloat64(name)
 	return val
+}
+
+// GetDuration retrieves a time.Duration flag value
+func (c *CLI) GetDuration(name string) time.Duration {
+	val, _ := c.flagSet.GetDuration(name)
+	return val
+}
+
+// FromStruct registers CLI flags from struct tags.
+// Supported tags:
+//   - cli:     flag name (required to register flag)
+//   - short:   shorthand letter (optional)
+//   - desc:    description text (optional)
+//   - env:     environment variable name to read from (optional)
+//   - default: default value (optional; otherwise uses field's current value)
+//
+// Supported types: string, int*, bool, float*
+func (c *CLI) FromStruct(v interface{}) *CLI {
+	val := reflect.ValueOf(v)
+	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Struct {
+		panic("FromStruct requires a non-nil pointer to a struct")
+	}
+
+	c.structPtr = v
+	typ := val.Elem().Type()
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Elem().Field(i)
+
+		if !field.IsExported() {
+			continue // Skip unexported fields
+		}
+
+		cliName := strings.TrimSpace(field.Tag.Get("cli"))
+		if cliName == "" {
+			continue // Skip fields without a cli tag
+		}
+
+		shorthand := strings.TrimSpace(field.Tag.Get("short"))
+		description := strings.TrimSpace(field.Tag.Get("desc"))
+		envVar := strings.TrimSpace(field.Tag.Get("env"))
+		defaultTag := strings.TrimSpace(field.Tag.Get("default"))
+
+		// Register flag + capture env mapping
+		switch field.Type.Kind() {
+		case reflect.String:
+			defValue := defaultTag
+			if defValue == "" && fieldVal.Kind() == reflect.String {
+				defValue = fieldVal.String()
+			}
+			c.flagSet.StringP(cliName, shorthand, defValue, description)
+			if envVar != "" {
+				c.envMappings[cliName] = envVar
+			}
+
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			// Check if it's time.Duration
+			if field.Type == reflect.TypeOf(time.Duration(0)) {
+				defValue := time.Duration(0)
+				if defaultTag != "" {
+					if v, err := time.ParseDuration(defaultTag); err == nil {
+						defValue = v
+					}
+				} else if fieldVal.Type() == reflect.TypeOf(time.Duration(0)) {
+					defValue = fieldVal.Interface().(time.Duration)
+				}
+				c.flagSet.DurationP(cliName, shorthand, defValue, description)
+				if envVar != "" {
+					c.envMappings[cliName] = envVar
+				}
+			} else {
+				defValue := 0
+				if defaultTag != "" {
+					if v, err := strconv.Atoi(defaultTag); err == nil {
+						defValue = v
+					}
+				} else if fieldVal.Kind() == reflect.Int {
+					defValue = int(fieldVal.Int())
+				}
+				c.flagSet.IntP(cliName, shorthand, defValue, description)
+				if envVar != "" {
+					c.envMappings[cliName] = envVar
+				}
+			}
+
+		case reflect.Bool:
+			defValue := false
+			if defaultTag != "" {
+				if v, err := strconv.ParseBool(defaultTag); err == nil {
+					defValue = v
+				}
+			} else if fieldVal.Kind() == reflect.Bool {
+				defValue = fieldVal.Bool()
+			}
+			c.flagSet.BoolP(cliName, shorthand, defValue, description)
+			if envVar != "" {
+				c.envMappings[cliName] = envVar
+			}
+
+		case reflect.Float32, reflect.Float64:
+			defValue := 0.0
+			if defaultTag != "" {
+				if v, err := strconv.ParseFloat(defaultTag, 64); err == nil {
+					defValue = v
+				}
+			} else if fieldVal.Kind() == reflect.Float64 {
+				defValue = fieldVal.Float()
+			}
+			c.flagSet.Float64P(cliName, shorthand, defValue, description)
+			if envVar != "" {
+				c.envMappings[cliName] = envVar
+			}
+
+		default:
+			// Skip unsupported types
+			continue
+		}
+	}
+
+	return c
+}
+
+// WithConfig registers CLI flags from struct tags.
+// Supported tags:
+//   - cli:     flag name (required to register flag)
+//   - short:   shorthand letter (optional)
+//   - desc:    description text (optional)
+//   - env:     environment variable name to read from (optional)
+//   - default: default value (optional; otherwise uses field's current value)
+//
+// Supported types: string, int*, bool, float*
+func (c *CLI) WithConfig(cfg interface{}) *CLI {
+	c.structPtr = cfg
+	c.FromStruct(cfg)
+	return c
 }
 
 // DefaultRunOptions returns default run options
@@ -237,7 +461,20 @@ func (c *CLI) Run() error {
 	return c.RunServer(nil)
 }
 
-// LoadConfig loads configuration from a file (JSON or YAML) into a struct
+// applyEnvVars reads environment variables and sets corresponding flags
+func (c *CLI) applyEnvVars() error {
+	for flagName, envVar := range c.envMappings {
+		if envValue := os.Getenv(envVar); envValue != "" {
+			if err := c.flagSet.Set(flagName, envValue); err != nil {
+				return fmt.Errorf("failed to set flag %q from env %s=%q: %w",
+					flagName, envVar, envValue, err)
+			}
+		}
+	}
+	return nil
+}
+
+// LoadConfig loads configuration from a JSON or YAML file into a struct.
 func (c *CLI) LoadConfig(path string, v interface{}) error {
 	if path == "" {
 		return fmt.Errorf("config path is empty")

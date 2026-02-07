@@ -54,8 +54,6 @@ const (
 	methodPost    = http.MethodPost
 	methodPut     = http.MethodPut
 	methodPatch   = http.MethodPatch
-	methodConnect = http.MethodConnect
-	methodTrace   = http.MethodTrace
 )
 const (
 	// Tag names
@@ -94,6 +92,8 @@ const (
 	formatIPv6     = "ipv6"
 	formatUUID     = "uuid"
 	formatRegex    = "regex"
+	formatHostname = "hostname"
+	formatUri      = "uri"
 	// Special values
 	bodyValue = "body"
 	bodyField = "Body"

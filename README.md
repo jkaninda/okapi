@@ -1,1712 +1,403 @@
-# OKAPI - Lightweight Go Web Framework with OpenAPI 3 & Swagger UI
+# OKAPI - Modern Go Web Framework
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
-[![Go](https://img.shields.io/github/go-mod/go-version/jkaninda/okapi)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jkaninda/okapi.svg)](https://pkg.go.dev/github.com/jkaninda/okapi)
 [![codecov](https://codecov.io/gh/jkaninda/okapi/branch/main/graph/badge.svg?token=JHTW49M1LF)](https://codecov.io/gh/jkaninda/okapi)
 [![GitHub Release](https://img.shields.io/github/v/release/jkaninda/okapi)](https://github.com/jkaninda/okapi/releases)
 
-**Okapi** is a modern, minimalist HTTP web framework for Go, inspired by **FastAPI**'s elegance. Designed for simplicity, performance, and developer happiness, it helps you build **fast, scalable, and well-documented APIs** with minimal boilerplate.
-
-The framework is named after the okapi (/oʊˈkɑːpiː/),
-a rare and graceful mammal native to the rainforests of the northeastern Democratic Republic of the Congo.
-Just like its namesake, which resembles a blend of giraffe and zebra. Okapi blends simplicity and strength in a unique, powerful package.
+**Okapi** is a modern, minimalist HTTP web framework for Go inspired by **FastAPI**'s elegant design philosophy. Build fast, scalable, and well-documented APIs with minimal boilerplate while maintaining full control over your application.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/jkaninda/okapi/main/logo.png" width="150" alt="Okapi logo">
 </p>
 
----
-
-### ✨ **Key Features**
-
-✔ **Intuitive & Expressive API** – Clean, declarative syntax for effortless route and middleware definition.
-
-✔ **Automatic Request Binding** – Seamlessly parse **JSON, XML, form data, query params, headers, and path variables** into structs.
-
-✔ **Built-in Auth & Security** – Native support for **JWT, Basic Auth**, and custom middleware.
-
-✔ **Standard Library Compatibility** - Integrates seamlessly with Go’s net/http standard library.
-
-✔ **Blazing Fast Routing** – Optimized HTTP router with low overhead for high-performance applications.
-
-✔ **First-Class Documentation** – **OpenAPI 3.0 & Swagger UI** integrated out of the box—auto-generate API docs with minimal effort.
-
-✔ Dynamic Route Management – Easily enable or disable individual routes or groups, with automatic Swagger sync and no code commenting.
-
-✔ **Modern Tooling**
-- Route grouping & middleware chaining
-- Static file serving
-- Templating engine support
-- CORS management
-- Fine-grained timeout controls
-
-✔ **Developer Experience**
-- Minimal boilerplate
-- Clear error handling
-- Structured logging
-- Easy testing
-
-Built for **speed, simplicity, and real-world use** whether you're prototyping or running in production.
+Named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to the rainforests of northeastern Democratic Republic of the Congo—just like its namesake, Okapi blends simplicity and strength in a unique, powerful package.
 
 ---
 
-###  Why Choose Okapi?
+## ✨ Key Features
 
-* **Easy to Learn**: With familiar Go syntax and intuitive APIs, you can be productive in minutes—even on your first project.
-* **Lightweight and Unopinionated**: Okapi is built from the ground up and doesn’t wrap or build on top of another framework. It gives you full control without unnecessary abstraction or bloat.
-* **Highly Flexible**: Designed to adapt to your architecture and workflow—not the other way around.
-* **Built for Production**: Fast, reliable, and efficient under real-world load. Okapi is optimized for performance without sacrificing developer experience.
-* **Standard Library Compatibility**: Integrates seamlessly with Go’s net/http standard library, making it easy to combine Okapi with existing Go code and tools.
-* **Automatic OpenAPI Documentation**: Generate comprehensive OpenAPI specs automatically for every route, keeping your API documentation always up to date with your code.
-* **Dynamic Route Management**: Enable or disable routes and route groups at runtime. No need to comment out code, just toggle behavior cleanly and efficiently.
+-  **Intuitive API Design** – Clean, declarative syntax for routes and middleware
+-  **Automatic Request Binding** – Seamlessly parse JSON, XML, forms, query params, headers, and path variables into structs
+-  **Built-in Security** – Native JWT, Basic Auth, and extensible custom middleware support
+-  **Standard Library Compatible** – Works seamlessly with Go's `net/http` and existing codebases
+-  **High-Performance Routing** – Optimized HTTP router with minimal overhead
+-  **Auto-Generated OpenAPI Docs** – OpenAPI 3.0 & Swagger UI automatically synced with your code
+- ️ **Dynamic Route Management** – Enable/disable routes or groups at runtime without code changes
+-  **Production Ready** – CORS, templating, static files, TLS, graceful shutdown, and comprehensive middleware
 
-Ideal for:
+**Perfect for:** REST APIs, microservices, rapid prototyping, and learning modern Go web development.
 
-*  **High-performance REST APIs**
-*  **Composable microservices**
-*  **Rapid prototyping**
-*  **Learning & teaching Go web development**
+---
 
-Whether you're building your next startup, internal tools, or side projects, **Okapi scales with you.**
+##  Why Choose Okapi?
 
+| Feature                      | Benefit                                                    |
+|------------------------------|------------------------------------------------------------|
+| **Easy to Learn**            | Familiar Go idioms, productive in minutes                  |
+| **Lightweight**              | Full control with minimal abstraction overhead             |
+| **Production Battle-Tested** | Fast, reliable, and efficient under real-world load        |
+| **Standard Library First**   | Zero friction with existing Go code                        |
+| **Self-Documenting**         | OpenAPI specs always in sync with implementation           |
+| **Dynamic Control**          | Toggle routes and groups at runtime—no code changes needed |
 
 ---
 
 ## Installation
-
 ```bash
-mkdir myapi && cd myapi
-go mod init myapi
-```
-
-```sh
 go get github.com/jkaninda/okapi@latest
 ```
 
----
 
-## Quick Start
-
-Create a file named `main.go`:
-
-### Example
-
-#### Hello
-
+##  Quick Start
 ```go
 package main
 
-import (
-  "github.com/jkaninda/okapi"
-)
-func main() {
+import "github.com/jkaninda/okapi"
 
-	o := okapi.Default()
-	
-	o.Get("/", func(c *okapi.Context) error {
-		return c.OK(okapi.M{"message": "Hello from Okapi Web Framework!","License":"MIT"})
-	})
-	// Start the server
-	if err := o.Start(); err != nil {
-		panic(err)
-	}
+func main() {
+    o := okapi.Default()
+    
+    o.Get("/", func(c *okapi.Context) error {
+        return c.OK(okapi.M{
+            "message": "Hello from Okapi!",
+            "license": "MIT",
+        })
+    })
+    
+    if err := o.Start(); err != nil {
+        panic(err)
+    }
 }
 ```
-Run your server:
 
+**Run your app:**
 ```bash
 go run main.go
 ```
 
-Visit [`http://localhost:8080`](http://localhost:8080) to see the response.
+**Access your API:**
+- Application: http://localhost:8080
+- API Documentation: http://localhost:8080/docs
 
-```json
-{
-  "License": "MIT",
-  "message": "Hello from Okapi Web Framework!"
+---
+
+##  Core Concepts
+
+### Request Handling & Validation
+```go
+// Path parameters with type constraints
+o.Get("/books/{id:int}", func(c *okapi.Context) error {
+    id := c.Param("id")
+    return c.JSON(200, okapi.M{"book_id": id})
+})
+
+// Struct binding with automatic validation
+type Book struct {
+    Name  string `json:"name" minLength:"5" maxLength:"50" required:"true"`
+    Price int    `json:"price" min:"1" max:"100" required:"true"`
 }
+
+// Method 1: Using WithIO for cleaner syntax
+o.Put("/books", func(c *okapi.Context) error {
+    book := &Book{}
+    if err := c.Bind(book); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.OK(book)
+}).WithIO(&Book{}, &Book{})
+
+// Method 2: Using RouteOptions for more control
+o.Post("/books", func(c *okapi.Context) error {
+    book := &Book{}
+    if err := c.Bind(book); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.Created(book)
+}, 
+    okapi.DocSummary("Create a new book"),
+    okapi.DocRequestBody(Book{}),
+    okapi.DocResponse(Book{}),
+)
 ```
 
-####  Simple HTTP POST
+### Advanced Request/Response Patterns
+
+Separate your payload from metadata using the `Body` field pattern for cleaner, more maintainable code:
 ```go
-package main
-
-import (
-  "github.com/jkaninda/okapi"
-  "net/http"
-)
-
-type Response struct {
-  Success bool   `json:"success"`
-  Message string `json:"message"`
-  Data    Book   `json:"data"`
-}
 type Book struct {
-  Name  string `json:"name"  maxLength:"50" minLength:"5" required:"true" description:"Book name"`
-  Price int    `json:"price" min:"1" max:"100" required:"true" description:"Book price"`
+    Name   string `json:"name" minLength:"4" maxLength:"50" required:"true" pattern:"^[A-Za-z]+$"`
+    Price  int    `json:"price" required:"true" min:"5" max:"100"`
+    Year   int    `json:"year" deprecated:"true"`
+    Status string `json:"status" enum:"available,out_of_stock,discontinued" default:"available"`
 }
-type ErrorResponse struct {
-  Success bool        `json:"success"`
-  Status  int         `json:"status"`
-  Details any `json:"details"`
+
+type BookRequest struct {
+    Body   Book   `json:"body"`
+    ID     int    `param:"id" query:"id"`
+    APIKey string `header:"X-API-Key" required:"true"`
+}
+
+type BookResponse struct {
+    Status    int    // HTTP status code
+    Body      Book   // Response payload
+    RequestID string `header:"X-Request-ID"` // Custom response header
 }
 
 func main() {
-  // Create a new Okapi instance with default config
-  o := okapi.Default()
-
-  o.Post("/books", func(c *okapi.Context) error {
-    book := Book{}
-    err := c.Bind(&book)
-    if err != nil {
-      return c.ErrorBadRequest(ErrorResponse{Success: false, Status: http.StatusBadRequest, Details: err.Error()})
+    o := okapi.Default()
+    
+    o.Post("/books", func(c *okapi.Context) error {
+        var req BookRequest
+        if err := c.Bind(&req); err != nil {
+            return c.ErrorBadRequest(err)
+        }
+        
+        res := &BookResponse{
+            Status:    201,
+            RequestID: uuid.New().String(),
+            Body:      req.Body,
+        }
+        return c.Respond(res) // Automatically sets status, headers, and body based on struct tags
+		// Alternative: return c.Return(res) to use the Status field as the HTTP status code
+    },
+        okapi.DocSummary("Create a new book"),
+        okapi.Request(&BookRequest{}),
+        okapi.Response(BookResponse{}),
+    )
+	// or using WithIO for cleaner syntax
+	// o.Post("/books", createBookHandler).WithIO(&BookRequest{}, &BookResponse{})
+    
+    if err := o.Start(); err != nil {
+        panic(err)
     }
-    response := Response{
-      Success: true,
-      Message: "This is a simple HTTP POST",
-      Data:    book,
-    }
-    return c.OK(response)
-  },
-    // OpenAPI Documentation
-    okapi.DocSummary("Create a new Book"), // Route Summary
-    okapi.DocRequestBody(Book{}),                                   //  Request body
-    okapi.DocResponse(Response{}),                                  // Success Response body
-    okapi.DocResponse(http.StatusBadRequest, ErrorResponse{}), // Error response body
-
-  )
-  o.Get("/books/{id:int}", func(c *okapi.Context) error {
-        bookId := c.Param("id") 
-		return c.JSON(200, okapi.M{"book_id": bookId})
-	})
-
-    // Start the server
-  if err := o.Start(); err != nil {
-    panic(err)
-  }
 }
 ```
 
-#### Interactive API docs
-
-Now go to [`http://localhost:8080/docs`](http://localhost:8080/docs) to see the interactive API documentation generated by Okapi.
-
-#### Alternative API docs
-
-And now, go to [`http://localhost:8080/redoc`](http://localhost:8080/redoc) to see the Redoc documentation.
-
-
----
-
-## Routing
-
-Okapi supports all standard HTTP methods:
-
+### Route Groups & Middleware
 ```go
-o.Get("/books", getBooks)
-o.Post("/books", createBook)
-o.Get("/books/:id", getBook)
-o.Put("/books/:id", updateBook)
-o.Delete("/books/:id", deleteBook)
-```
-
-### Route Groups
-
-Route groups in Okapi allow you to organize your routes under a common path prefix, apply middleware selectively, and control group-level behaviors like deprecation or disabling. 
-This feature makes it easy to manage API versioning, logical route separation, and access control.
-
-#### Features:
-
-* **Nesting**: Define sub-groups within a parent group to build hierarchical route structures.
-* **Middleware**: Attach middleware to a group to apply it to all nested routes.
-* **Deprecation**: Mark a group as deprecated to indicate it's being phased out (useful for OpenAPI documentation).
-* **Disabling**: Temporarily disable a group to return `404 Not Found` for all its routes.
-* **Tagging**: Automatically tag routes in OpenAPI documentation based on group names.
-
-#### Example:
-
-```go
-o := okapi.Default()
-
-// Create the main API group
 api := o.Group("/api")
 
-// Versioned subgroups
-v1 := api.Group("/v1").Deprecated()        // Marked as deprecated
-v2 := api.Group("/v2")                     // Active version
-v3 := api.Group("v3", testMiddleware).Disable() // Disabled, returns 404
+// Version management with deprecation markers
+v1 := api.Group("/v1", authMiddleware).Deprecated()
+v2 := api.Group("/v2")
+v3 := api.Group("/v3")
 
-// Define routes
 v1.Get("/books", getBooks)
 v2.Get("/books", v2GetBooks)
-v3.Get("/books", v3GetBooks) // Will not be accessible
 
-// Admin subgroup with middleware
+// Dynamically disable specific routes
+v3.Get("/books", v2GetBooks).Disable()
+
+// Apply middleware to individual routes
+v2.Get("/books/:id", v2GetBookByID).Use(customMiddleware)
+
+// Protected admin routes
 admin := api.Group("/admin", adminMiddleware)
 admin.Get("/dashboard", getDashboard)
 ```
-This structure improves route readability and maintainability, especially in larger APIs.
 
+### Declarative Route Definition
 
----
-
-### Path Syntax Examples
-
-Okapi supports flexible and expressive route path patterns, including named parameters and wildcards:
-
-```go
-o.Get("/books/{id}", getBook)       // Named path parameter using curly braces
-o.Get("/books/{id:int}", getBook)    // Named path parameter using curly braces, "id" documented as integer in OpenAPI
-o.Get("/books/:id", getBook)        // Named path parameter using colon prefix
-o.Get("/*", getBook)                // Catch-all wildcard (matches everything)
-o.Get("/*any", getBook)             // Catch-all with named parameter (name is ignored)
-o.Get("/*path", getBook)            // Catch-all with named parameter
-```
-
-Use whichever syntax feels most natural — Okapi normalizes both `{}` and `:` styles for named parameters and supports glob-style wildcards for flexible matching.
-
----
-
-## Request Handling
-
-### Path Parameters
-
-```go
-o.Get("/books/:id", func(c *okapi.Context) error {
-	id := c.Param("id")
-	return c.String(http.StatusOK, id)
-})
-```
-
-### Query Parameters
-
-```go
-o.Get("/books", func(c *okapi.Context) error {
-	name := c.Query("name")
-	return c.String(http.StatusOK, name)
-})
-```
-
----
-
-## Handling Form Data
-
-### Multipart Form (`multipart/form-data`)
-
-Handle standard form fields and file uploads:
-
-```go
-o.Post("/books", func(c *okapi.Context) error {
-	name := c.FormValue("name")
-	price := c.FormValue("price")
-
-	logo, err := c.FormFile("logo")
-	if err != nil {
-        return c.AbortBadRequest("Bad request", err)
-	}
-	file, err := logo.Open()
-	if err != nil {
-            return c.AbortBadRequest("Bad request", err)
-	}
-	defer file.Close()
-	// You can now read or save the uploaded file
-	return c.String(http.StatusOK, "File uploaded successfully")
-})
-```
----
-
-## Struct Binding
-
-Okapi provides powerful and flexible request binding that automatically maps incoming request data into Go structs.
-It supports two complementary binding styles:
-
----
-
-### 1. **Flat Binding**
-
-In `Flat Binding`, you define a single struct where each field can be sourced from any part of the request.
-
-This style allows you to mix request body fields (JSON, XML, YAML, Protobuf, Form) with query parameters, headers, cookies, and path parameters — all within a single struct.
-
-```go
-type Book struct {
-	ID     int    `json:"id" path:"id" query:"id" form:"id"`
-	Name   string `json:"name" xml:"name" form:"name" minLength:"4" maxLength:"50" required:"true"`
-	Price  int    `json:"price" form:"price" required:"true"`
-	Logo   *multipart.FileHeader `form:"logo" required:"true"`
-	Content string `header:"Content-Type" json:"content-type" xml:"content-type" required:"true"`
-	// Supports both ?tags=a&tags=b and ?tags=a,b
-	Tags []string `form:"tags" query:"tags" default:"a,b"`
-    Year  int    `json:"year"  yaml:"year" description:"Book price" deprecated:"true"`
-
-}
-
-o.Post("/books", func(c *okapi.Context) error {
-	book := &Book{}
-	if err := c.Bind(book); err != nil {
-		return c.ErrorBadRequest(err)
-	}
-	return c.JSON(http.StatusOK, book)
-})
-```
-
----
-
-### 2. **Body Field Binding (Recommended)**
-
-In `Body Field Binding`, your struct defines a dedicated `Body` field (or a field tagged as `body`) that represents the main request payload.
-Other fields in the struct represent `query params`, `headers`, `cookies`, or `path parameters`.
-
-This pattern promotes a clean separation between metadata and the request content, making it ideal for larger APIs and OpenAPI generation.
-
-```go
-type BookRequest struct {
-	Body struct {
-		Name  string `json:"name" minLength:"4" maxLength:"50" required:"true"`
-		Price int    `json:"price" required:"true"`
-		Logo  *multipart.FileHeader `form:"logo" required:"true"`
-	} `json:"body"` // Request body
-
-	ID        int      `json:"id" param:"id" query:"id"`        // from path or query
-	Tags      []string `query:"tags" default:"a,b"`             // supports ?tags=a&tags=b and ?tags=a,b
-	APIKey    string   `header:"X-API-Key" required:"true"`     // from header
-	SessionID string   `cookie:"session_id" json:"session_id"`  // from cookie
-}
-
-o.Post("/books", func(c *okapi.Context) error {
-	bookReq := &BookRequest{}
-	if err := c.Bind(bookReq); err != nil {
-		return c.ErrorBadRequest(err)
-	}
-	return c.Respond(bookReq)
-})
-```
-
----
-
-## Supported Sources
-
-
-| Source           | Tag(s)          | Description                                                                                   |
-|------------------|-----------------|-----------------------------------------------------------------------------------------------|
-| Path parameters  | `path`, `param` | Extracted from path variables (e.g. `/books/:id` or `/books/{id:int}`).                       |
-| Query parameters | `query`         | Parses query strings; supports repeated arrays (`?tags=a&tags=b`) and comma-separated values. |
-| Headers          | `header`        | Reads values from HTTP request headers.                                                       |
-| Cookies          | `cookie`        | Reads values from cookies.                                                                    |
-| Form fields      | `form`          | Supports both `application/x-www-form-urlencoded` and `multipart/form-data` (file uploads).   |
-| JSON body        | `json`          | Decodes when `Content-Type: application/json`.                                                |
-| XML body         | `xml`           | Decodes when `Content-Type: application/xml`.                                                 |
-
-
-## OpenAPI & Documentation Tags
-
-These struct tags control how fields appear in the generated **OpenAPI 3 specification** and Swagger UI.
-
-| Tag(s)               | Description                                                                 |
-|----------------------|-----------------------------------------------------------------------------|
-| `description`, `doc` | Adds descriptive documentation for the field in the OpenAPI schema.         |
-| `deprecated:"true"`  | Marks the field as deprecated in the generated OpenAPI documentation.       |
-| `hidden:"true"`      | Excludes the field from the generated OpenAPI specification and Swagger UI. |
-| `example:"..."`      | Adds an example value for the field in the OpenAPI schema.                  |
-
-
-
-### Validation and Default Values
-
-Okapi supports **declarative validation** and **automatic default value assignment** using struct tags.
-This makes request validation explicit, consistent, and self-documented at the schema level.
-
-### Basic Validation Tags
-
-| Field Type | Tag                     | Description                                              |
-|------------|-------------------------|----------------------------------------------------------|
-| `string`   | `minLength:"10"`        | Ensures the string has at least 10 characters.           |
-| `string`   | `maxLength:"50"`        | Ensures the string does not exceed 50 characters.        |
-| `number`   | `min:"5"`               | Ensures the number is greater than or equal to 5.        |
-| `number`   | `max:"100"`             | Ensures the number is less than or equal to 100.         |
-| `number`   | `multipleOf:"5"`        | Ensures the number is a multiple of the given value.     |
-| `slice`    | `maxItems:"5"`          | Ensures the slice contains at most 5 items.              |
-| `slice`    | `minItems:"2"`          | Ensures the slice contains at least 2 items.             |
-| `slice`    | `uniqueItems:"true"`    | Ensures all items in the slice are unique.               |
-| `any`      | `required:"true"`       | Marks the field as required.                             |
-| `any`      | `default:"..."`         | Assigns a default value when the field is missing/empty. |
-| `any`      | `format:"email"`        | Enables format validation (e.g. `email`, `uuid`, etc.).  |
-| `any`      | `pattern:"^[a-zA-Z]+$"` | Validates the field against a regular expression.        |
-
-
----
-
-#### Example
-
-```go
-type CreateUserRequest struct {
-    Email    string   `json:"email" required:"true" format:"email" example:"user@example.com"`
-    Password string   `json:"password" minLength:"8" description:"User password"`
-    Age      int      `json:"age" min:"18" max:"120" default:"18"`
-    Roles    []string `json:"roles" minItems:"1" uniqueItems:"true"`
-}
-```
-
-### Data Type & Format Validation
-
-| Field Type  | Tag / Attribute                               | Description                                            |
-|-------------|-----------------------------------------------|--------------------------------------------------------|
-| `date`      | `format:"date"`                               | Validates the field as a date (YYYY-MM-DD).            |
-| `date-time` | `format:"date-time"`                          | Validates the field as a date and time (RFC3339).      |
-| `email`     | `format:"email"`                              | Validates the field as a valid email address.          |
-| `duration`  | `format:"duration"`                           | Validates the field as a Go duration (e.g., `1h30m`).  |
-| `regex`     | `format:"regex" pattern="^\+?[1-9]\d{1,14}$"` | Validates the field using a custom regular expression. |
-| `enum`      | `enum:"pending,paid,canceled"`                | Restricts the field to one of the listed values.       |
-
-
-
-## Response Struct Binding
-
-When using `c.Respond()`, Okapi automatically serializes the response struct into the HTTP response.
-
-It inspects struct tags to determine:
-
-* the **HTTP status code**
-* **response headers**
-* **cookies**
-* and the **response body** (encoded according to the `Accept` header).
-
-```go
-type BookResponse struct {
-	// HTTP status code (default: 200)
-	Status int `status:"true" json:"status"`
-
-	// Response body
-	Body struct {
-		ID    int    `json:"id"`
-		Name  string `json:"name"`
-		Price int    `json:"price"`
-	} `json:"body"`
-
-	// Custom headers
-	XRequestID string `header:"X-Request-ID" json:"x-request-id"`
-
-	// Cookies
-	SessionID string `cookie:"session_id" json:"session_id"`
-}
-
-o.Get("/books/:id", func(c *okapi.Context) error {
-	book := BookResponse{
-		Status: http.StatusOK,
-		Body: struct {
-			ID    int    `json:"id"`
-			Name  string `json:"name"`
-			Price int    `json:"price"`
-		}{
-			ID:    1,
-			Name:  "The Great Go Book",
-			Price: 20,
-		},
-		XRequestID: "req-12345",
-		SessionID:  "sess-67890",
-	}
-	return c.Respond(book)
-})
-```
-
----
-
-## Middleware
-
-### Built-in Example (Basic Auth)
-
-```go
-auth := okapi.BasicAuth{
-	Username: "admin",
-	Password: "password",
-	Realm:    "Restricted",
-    ContextKey: "user",// where to store the username e.g. "user", default(username)
-
-}
-// Global middleware
-o.Use(auth.Middleware)
-// Attach SingleRouteMiddleware to this route only, without affecting others
-o.Get("/", SingleRouteMiddlewareHandler).Use(SingleRouteMiddleware)
-
-// Group middleware
-o.Get("/admin", adminHandler)
-```
----
-
-### JWT Middleware
-
-Okapi includes powerful and flexible JWT middleware to secure your routes with JSON Web Tokens. It supports multiple signing mechanisms, key sources, claim validation strategies, and OpenAPI integration.
-
-####  Features
-
-* **HS256** symmetric signing via `SigningSecret`
-* **RS256** and other asymmetric algorithms via `RSAKey`
-* **Remote JWKS** discovery via `JwksUrl` (e.g., OIDC or Auth0)
-* **Local JWKS** via `JwksFile`
-* **Claims validation** with `ClaimsExpression` or `ValidateClaims`
-* **OpenAPI integration** with `.WithBearerAuth()`
-* **Selective claim forwarding** using `ForwardClaims`
-
-
-
-#### Example: Basic HS256 Authentication
-
-```go
-jwtAuth := okapi.JWTAuth{
-    SigningSecret: []byte("supersecret"),      // Shared secret for HS256
-    TokenLookup:   "header:Authorization",     // Token source: header, query, or cookie (default: header:Authorization)
-    ContextKey:    "user",                     // Key under which claims are stored in context
-}
-```
-
-
-#### Example: Remote JWKS (OIDC, Auth0)
-
-```go
-jwtAuth := okapi.JWTAuth{
-    JwksUrl:     "https://example.com/.well-known/jwks.json",  // Remote JWKS URL
-    TokenLookup: "header:Authorization",
-    ContextKey:  "user",
-}
-```
-
-
-#### Claims Expression (Optional)
-
-Use `ClaimsExpression` to define rules for validating claims using simple expressions. This is ideal for access control based on roles, scopes, or other custom claim logic.
-
-##### Supported Functions
-
-* `Equals(field, value)`
-* `Prefix(field, prefix)`
-* `Contains(field, val1, val2, ...)`
-* `OneOf(field, val1, val2, ...)`
-
-#### Logical Operators
-
-* `!` — NOT
-* `&&` — AND (evaluated before OR)
-* `||` — OR (evaluated after AND)
-
-Example:
-
-```go
-jwtAuth := okapi.JWTAuth{
-    SigningSecret:    []byte("supersecret"),
-    ClaimsExpression: "Equals(`email_verified`, `true`) && Equals(`user.role`, `admin`) && Contains(`tags`, `gold`, `silver`)",
-    TokenLookup:      "header:Authorization",
-    ContextKey:       "user",
-    ForwardClaims: map[string]string{
-        "email": "user.email",
-        "role":  "user.role",
-        "name":  "user.name",
-    },
-}
-```
-
-
-#### Forwarding Claims to Context
-
-`ForwardClaims` lets you expose specific claims to your handlers via the request context. This keeps handlers decoupled from the full JWT while retaining useful information.
-
-> Supports **dot notation** for nested claims.
-
-Example:
-
-```go
-jwtAuth.ForwardClaims = map[string]string{
-    "email": "user.email",
-    "role":  "user.role",
-    "name":  "user.name",
-}
-```
-Get these claims in your handler:
-
-```go
-func whoAmIHandler(c *okapi.Context) error {
-    email := c.GetString("email")
-    if email == "" {
-        return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
-    }
-	slog.Info("Who am I am ", "email", email, "role", c.GetString("role"), "name", c.GetString("name"))
-// Respond with the current user information
-    return c.JSON(http.StatusOK, M{
-                "email": email,
-                "role":  c.GetString("role"),
-                "name":  c.GetString("name"),
-		}, )
-}
-```
-
-#### Custom Claim Validation
-
-You can define your own `ValidateClaims` function to fully control claim checks. Use this for advanced logic beyond what `ClaimsExpression` supports.
-You can combine this with `ClaimsExpression` for more complex scenarios.
-
-Example:
-
-```go
-jwtAuth.ValidateClaims = func(c *Context, claims jwt.Claims) error {
-    method := c.Request().Method
-    slog.Info("Request method,", "method", method)
-    mapClaims, ok := claims.(jwt.MapClaims)
-    if !ok {
-        return errors.New("invalid claims type")
-    }
-
-    if emailVerified, _ := mapClaims["email_verified"].(bool); !emailVerified {
-        return errors.New("email not verified")
-    }
-
-    if role, _ := mapClaims["role"].(string); role != "admin" {
-        return errors.New("unauthorized role")
-    }
-
-    return nil
-}
-```
-
-#### Custom Error Handling
-
-The `OnUnauthorized` handler lets you customize responses for failed JWT validations, including:
-
-- Missing or malformed tokens
-- Expired tokens
-- Failed claims validation (via either `ClaimsExpression` or `ValidateClaims`)
-
-Example Implementation:
-
-```go
-auth := okapi.JWTAuth{
-    Audience:      "okapi.example.com",
-    SigningSecret: SigningSecret,
-    // ... other configurations
-    OnUnauthorized: func(c *okapi.Context) error {
-        // Return custom unauthorized response
-        return c.ErrorUnauthorized("Unauthorized")
-    },
-}
-```
-
-#### Protecting Routes
-
-Apply the JWT middleware to route groups or individual routes to require authentication.
-
-```go
-// Apply middleware globally (optional)
-o.Use(jwtAuth.Middleware)
-
-admin := o.Group("/admin", jwtAuth.Middleware). // Protect /admin routes
-    WithBearerAuth()                            // Adds Bearer auth to OpenAPI docs
-
-admin.Get("/users", adminGetUsersHandler)       // Secured route
-
-// Attach SingleRouteMiddleware to this route only, without affecting others
-o.Get("/", SingleRouteMiddlewareHandler).Use(SingleRouteMiddleware)
-```
-
----
-
-### CORS middleware
-
-```go
-cors := okapi.Cors{AllowedOrigins: []string{"http://localhost:8080", "https://example.com"}, AllowedHeaders: []string{}}
-o := okapi.New(okapi.WithCors(cors))
-	o.Get("/", func(c *okapi.Context) error {
-		return c.String(http.StatusOK, "Hello World!")
-	})
-```
-
-### Custom Middleware
-
-```go
-func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
-	return func(c *okapi.Context) error {
-		start := time.Now()
-		err := next(c)
-		log.Printf("Request took %v", time.Since(start))
-		return err
-	}
-}
-
-o.Use(customMiddleware)
-```
-
-### Std Middleware
-
-```go
-o.UseMiddleware(func(handler http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Hello Go standard HTTP middleware function")
-			handler.ServeHTTP(w, r)
-		})
-
-	})
-```
-
----
-
-## OpenAPI / Swagger Integration
-
-Okapi provides **automatic OpenAPI (Swagger) documentation generation** with a built-in interactive UI.
-The documentation is **dynamically generated** from your route definitions, ensuring it always stays in sync with your API implementation.
-
-
-### Quick Start
-
-* **Using `okapi.Default()`**
-  Documentation is enabled by default and served at `/docs`.
-
-```go
-o := okapi.Default() // Docs available at /docs
-```
-
-* **Using `okapi.New()` with `WithOpenAPIDocs()`**
-  If you initialize Okapi with `okapi.New()`, documentation is **disabled by default**.
-  You can enable it with `WithOpenAPIDocs()`, this approach also allows you to **dynamically disable the documentation at runtime** (e.g., in production) based on environment variables or configuration.
-
-```go
-o := okapi.New() // Disabled
-if os.Getenv("ENABLE_DOCS") == "true" {
-	o.WithOpenAPIDocs() 
-}
-```
-
-### Enabling with Custom Configuration
-
-You can customize the OpenAPI documentation by passing a configuration object to `WithOpenAPIDocs()`.
-
-```go
-o := okapi.New().WithOpenAPIDocs(
-    okapi.OpenAPI{
-        Title:      "Example API",
-        Version:    "1.0.0",
-        Contact: okapi.Contact{
-            Name:  "API Support",
-            Email: "support@example.com",
-        },
-    },
-)
-```
-
-
-### Security Schemes
-
-You can define **authentication mechanisms** for your API, such as **Basic Auth**, **Bearer tokens**, and **OAuth2 flows**.
-
-```go
-o.WithOpenAPIDocs(okapi.OpenAPI{
-    Title:   "Okapi Web Framework Example",
-    Version: "1.0.0",
-    License: okapi.License{Name: "MIT"},
-    SecuritySchemes: okapi.SecuritySchemes{
-        {
-            Name:   "basicAuth",
-            Type:   "http",
-            Scheme: "basic",
-        },
-        {
-            Name:         "bearerAuth",
-            Type:         "http",
-            Scheme:       "bearer",
-            BearerFormat: "JWT",
-        },
-        {
-            Name: "OAuth2",
-            Type: "oauth2",
-            Flows: &okapi.OAuthFlows{
-                AuthorizationCode: &okapi.OAuthFlow{
-                    AuthorizationURL: "https://auth.example.com/authorize",
-                    TokenURL:         "https://auth.example.com/token",
-                    Scopes: map[string]string{
-                        "read":  "Read access",
-                        "write": "Write access",
-                    },
-                },
-            },
-        },
-    },
-})
-```
-
-### Applying Security Schemes to Routes
-
-You can **apply security schemes** to individual routes or entire route groups.
-
-#### Example – Applying to a Single Route
-
-```go
-var bearerAuthSecurity = []map[string][]string{
-    {"bearerAuth": {}},
-}
-
-o.Get("/books", getBooksHandler).WithSecurity(bearerAuthSecurity...)
-```
-
-#### Example Applying to a Group of Routes
-
-```go
-api := o.Group("/api", jwtMiddleware).WithSecurity(bearerAuthSecurity)
-api.Get("/", apiHandler)
-```
-
-> **Tip:** If you are defining routes using `RouteDefinition`, you can also set security directly using the `Security` field.
-
----
-
-## Documenting Routes in Okapi
-
-Okapi makes it simple to attach **OpenAPI documentation** to your routes.
-You can choose between **composable functions** for concise definitions or a **fluent builder** for more flexibility.
-
----
-
-### 1. Composable Functions (Direct Style)
-
-This is the simplest and most readable approach — ideal for small or medium routes.
-Each `okapi.Doc*` function documents a specific part of your endpoint.
-
-```go
-o.Get("/books", getBooksHandler,
-    okapi.DocSummary("List all available books"),
-    okapi.DocTags("Books"),
-    okapi.DocQueryParam("author", "string", "Filter by author name", false),
-    okapi.DocQueryParam("limit", "int", "Maximum results to return (default 20)", false),
-    okapi.DocResponseHeader("X-Client-Id", "string", "Client ID of the request"),
-    okapi.DocResponse([]Book{}), // Shorthand for DocResponse(200, value)
-    okapi.DocResponse(400, ErrorResponse{}),
-    okapi.DocResponse(401, ErrorResponse{}),
-)
-```
-
-**When to use:**
-Use this style for routes with straightforward request/response documentation.
-
----
-
-### 2. Fluent Builder Style
-
-For more complex or dynamic documentation setups, use the **builder pattern** via `okapi.Doc()`.
-
-This approach allows chaining multiple configuration methods and calling `.Build()` (or `.AsOption()`) at the end.
-
-```go
-o.Post("/books", createBookHandler,
-    okapi.Doc().
-        Summary("Add a new book to the inventory").
-        Tags("Books").
-        BearerAuth().
-        ResponseHeader("X-Client-Id", "string", "Client ID of the request").
-        RequestBody(BookRequest{}).
-        Response(201, Book{}).
-        Response(400, ErrorResponse{}).
-        Response(401, ErrorResponse{}).
-        Build(),
-)
-```
-
-**When to use:**
-Use this style for advanced or reusable route documentation — for example, when generating parts dynamically or reusing shared doc definitions.
-
----
-
-### 3. Available Documentation Options
-
-| Method                                           | Description                              |
-|--------------------------------------------------|------------------------------------------|
-| `DocSummary()` / `Doc().Summary()`               | Short endpoint summary                   |
-| `DocTags()` / `Doc().Tags()`                     | Group endpoints under tags               |
-| `DocBearerAuth()` / `Doc().BearerAuth()`         | Enable Bearer token authentication       |
-| `DocRequestBody()` / `Doc().RequestBody()`       | Document request body schema             |
-| `DocResponse()` / `Doc().Response()`             | Document response schema or status codes |
-| `DocPathParam()` / `Doc().PathParam()`           | Document path parameters                 |
-| `DocQueryParam()` / `Doc().QueryParam()`         | Document query parameters                |
-| `DocHeader()` / `Doc().Header()`                 | Document request headers                 |
-| `DocResponseHeader()` / `Doc().ResponseHeader()` | Document response headers                |
-| `DocDeprecated()` / `Doc().Deprecated()`         | Mark route as deprecated                 |
-
----
-
-### 4. Body Field Style (Advanced Struct Binding)
-
-The **Body Field Style** allows you to define a struct where a dedicated `Body` field (or a field tagged as `body`) represents the main request payload.
-Other fields in the same struct can represent query parameters, headers, cookies, or path parameters.
-
-```go
-// BookRequest defines a request with structured fields and validations.
-type BookRequest struct {
-  Body struct {
-    Name  string                `json:"name" minLength:"4" maxLength:"50" required:"true"`
-    Price int                   `json:"price" required:"true"`
-    Logo  *multipart.FileHeader `form:"logo" required:"true"`
-  } `json:"body"` // Request body section
-
-  ID        int      `param:"id" query:"id"`             // from path or query
-  Tags      []string `query:"tags" default:"a,b"`        // supports ?tags=a&tags=b and ?tags=a,b
-  APIKey    string   `header:"X-API-Key" required:"true"`// from header
-  SessionID string   `cookie:"session_id"`               // from cookie
-}
-```
-
-```go
-type BookResponse struct {
-	Version string `header:"X-Version"`
-	Status  int // Response Status Code
-	Body    Book // Response Body
-}
-```
----
-
-### 5. Registering Routes with Body Field Style
-
-#### Using `okapi.Request()` and `okapi.Response()`
-
-```go
-o.Post("/books", func(c *okapi.Context) error {
-    req := &BookRequest{}
-	// Validate request body
-    if err := c.Bind(req); err != nil {
-        return c.ErrorBadRequest(err)
-    }
-	// Respond
-    return c.Respond(req)
-},
-    okapi.Request(&BookRequest{}),  // Request body
-    okapi.Response(&BookResponse{}), // Response body
-)
-```
-
-`Respond` serializes the output struct into the HTTP response.
-It inspects struct tags to automatically set headers, cookies, and status code, and encodes the response body in the format requested by the `Accept` header.
-
-#### Using `.WithIO()` for request and response
-
-```go
-o.Post("/books", func(c *okapi.Context) error {
-    req := &BookRequest{}
-    if err := c.Bind(req); err != nil {
-        return c.ErrorBadRequest(err)
-    }
-    return c.Respond(req)
-}).WithIO(&BookRequest{}, &BookRequest{}) // Both request & response
-```
-
-#### Using `.WithInput()` for request only
-
-```go
-o.Post("/books", func(c *okapi.Context) error {
-    req := &BookRequest{}
-    if err := c.Bind(req); err != nil {
-        return c.ErrorBadRequest(err)
-    }
-    return c.Respond(req)
-}).WithInput(&BookRequest{}) // Request only
-```
-
-#### Using `.WithOutput()` for response only
-
-```go
-o.Post("/books", func(c *okapi.Context) error {
-    req := &BookRequest{}
-    if err := c.Bind(req); err != nil {
-        return c.ErrorBadRequest(err)
-    }
-    return c.Respond(req)
-}).WithOutput(&BookRequest{}) // Response only
-```
-
----
-
-###  Summary
-
-| Style                               | Best For                               |
-|-------------------------------------|----------------------------------------|
-| **Composable Functions**            | Simple, direct, quick to write         |
-| **Fluent Builder (`Doc()`)**        | Complex or reusable route docs         |
-| **Body Field Style**                | Declarative binding & validation       |
-| **WithIO / WithInput / WithOutput** | Auto-document request/response schemas |
-
----
-
-
-
-#### Swagger UI Preview
-
-Okapi automatically generates Swagger UI for all routes:
-
-
-![Okapi Swagger Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
-
-#### Redoc Preview
-
-![Okapi Redoc Interface](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png)
-
----
-
-### Enabling and Disabling Routes & Groups
-
-Okapi gives you flexible control over your API by allowing routes and route groups to be **dynamically enabled or disabled**. This is a clean and efficient alternative to commenting out code when you want to temporarily remove endpoints.
-
-#### Overview
-
-You can disable:
-
-* **Individual routes** — blocks access to a specific endpoint
-* **Route groups** — disables an entire section of your API, including all nested routes
-
-This behavior is reflected both in runtime responses and API documentation.
-
-| Type               | HTTP Response   | Swagger Docs | Affects Child Routes |
-|--------------------|-----------------|--------------|----------------------|
-| **Disabled Route** | `404 Not Found` | Hidden       | N/A                  |
-| **Disabled Group** | `404 Not Found` | Hidden       | Yes — all nested     |
-
-#### Key Features
-
-* Disabled routes/groups return a `404 Not Found`
-* Automatically excluded from Swagger/OpenAPI documentation
-* Disabling a group recursively disables all nested routes and sub-groups
-* No need to comment out code — just call `.Disable()` or `.Enable()`
-
-#### Use Cases
-
-* Temporarily removing endpoints during maintenance
-* Controlling access based on feature flags
-* Deprecating old API versions
-* Creating toggleable test or staging routes
-
-#### Usage Example
-
-```go
-app := okapi.Default()
-
-// Create the root API group
-api := app.Group("api")
-
-// Define and disable v1 group
-v1 := api.Group("v1").Disable() // All v1 routes return 404 and are hidden from docs
-v1.Get("/", func(c *okapi.Context) error {
-    return c.OK(okapi.M{"version": "v1"})
-})
-
-// Define active v2 group
-v2 := api.Group("v2")
-v2.Get("/", func(c *okapi.Context) error {
-    return c.OK(okapi.M{"version": "v2"})
-})
-
-// Start the server
-if err := app.Start(); err != nil {
-    panic(err)
-}
-```
-
-#### Behavior Details
-
-* **Disabled Route:**
-
-    * Responds with `404 Not Found`
-    * Excluded from Swagger docs
-
-* **Disabled Group:**
-
-    * All nested routes and sub-groups are recursively disabled
-    * All affected routes are hidden from Swagger
-
-To re-enable any route or group, simply call the `.Enable()` method or remove the `.Disable()` call.
-
----
-## Templating
-
-### Using a Custom Renderer
-
-```go
-o.Renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
-	tmpl, err := template.ParseFiles("templates/" + name + ".html")
-	if err != nil {
-		return err
-	}
-	return tmpl.ExecuteTemplate(w, name, data)
-})
-```
-
-### Or Using a Struct-Based Renderer
-
-```go
-type Template struct {
-	templates *template.Template
-}
-
-func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
-	return t.templates.ExecuteTemplate(w, name, data)
-}
-
-tmpl := &Template{
-	templates: template.Must(template.ParseGlob("templates/*.html")),
-}
-o.With().WithRenderer(&Template{templates: template.Must(template.ParseGlob("public/views/*.html"))})
-
-// or
-// o.With().WithRenderer(tmpl)
-
-```
-
-### Rendering a View
-
-```go
-o.Get("/", func(c *okapi.Context) error {
-	return c.Render(http.StatusOK, "welcome", okapi.M{
-		"title":   "Welcome Page",
-		"message": "Hello from Okapi!",
-	})
-})
-```
-
----
-
-## Static File Serving
-
-Serve static assets and individual files:
-
-```go
-// Serve a single file
-o.Get("/favicon.ico", func(c *okapi.Context) error {
-	c.ServeFile("public/favicon.ico")
-	return nil
-})
-
-// Serve an entire directory
-o.Static("/static", "public/assets")
-```
-
-## TLS Server
-
-```go
-// Initialize TLS configuration for secure HTTPS connections
-    tls, err := okapi.LoadTLSConfig("path/to/cert.pem", "path/to/key.pem", "", false)
-    if err != nil {
-    panic(fmt.Sprintf("Failed to load TLS configuration: %v", err))
-    }
-    // Create a new Okapi instance with default config
-    // With OpenAPI enabled, /docs
-    o := okapi.Default()
-    // Use HTTPS
-    // o := okapi.New(okapi.WithTLS(tls))
-    
-    // Configure a secondary HTTPS server listening on port 8443
-    // This creates both HTTP (8080) and HTTPS (8443) endpoints
-    o.With(okapi.WithTLSServer(":8443", tls))
-    
-    // Register application routes and handlers
-    o.Get("/", func(c *okapi.Context) error {
-    return c.JSON(http.StatusOK, okapi.M{
-    "message": "Welcome to Okapi!",
-    "status":  "operational",
-    })
-    })
-    // Start the servers
-    // This will launch both HTTP and HTTPS listeners in separate goroutines
-    log.Println("Starting server on :8080 (HTTP) and :8443 (HTTPS)")
-    if err := o.Start(); err != nil {
-    panic(fmt.Sprintf("Server failed to start: %v", err))
-    }
-    }
-```
----
-
-## Context
-
-Okapi provides a powerful and lightweight `Context` object that wraps the HTTP request and response. It is designed to simplify handling HTTP requests by offering a clean and expressive API for accessing request data, binding parameters, sending responses, and managing errors.
-
-The `Context` is passed to all route handlers and supports:
-
-* Accessing path parameters, query parameters, form values, file uploads, and headers
-* Binding request data to structs using various formats (JSON, XML, YAML, form data, etc.)
-* Sending structured responses (JSON, text, HTML, XML, file)
-* Handling cookies, headers, and other request metadata
-* Managing the request lifecycle (e.g., aborting early)
-* Built-in helpers for standardized error responses
-* Access to the underlying `*http.Request` and `http.ResponseWriter` for low-level control
-
-This makes it easy to focus on business logic without worrying about low-level HTTP details.
-
-
-### Context Fields
-
-| Method       | Description                                                |
-|--------------|------------------------------------------------------------|
-| `Request()`  | The underlying `*http.Request` for accessing request data  |
-| `Response()` | The underlying `http.ResponseWriter` for sending responses |
-
-
-
-### Binding Methods
-
-The context supports multiple binding mechanisms depending on content type and request source
-
----
-
-### Response Methods
-
-Okapi provides a rich set of response methods to send various types of responses back to the client. These methods automatically set the appropriate HTTP status codes and content types.
-
----
-
-## Error Handling
-
-Okapi provides a comprehensive error-handling system. You can return an `error` directly from your route handler, and Okapi will format the response automatically.
-
-Additionally, the `Context` includes many helper methods to send standardized HTTP error responses with custom messages and optional wrapped errors.
-
-
-These helpers provide consistency and reduce boilerplate when handling errors in your handlers or middleware.
-
----
-
-## Route Definition
-
-Okapi provides a clean, declarative way to define and register routes. It supports all standard HTTP methods, including `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, and `OPTIONS`.
-
-You can define routes individually or register multiple routes at once using the `okapi.RegisterRoutes` function and the `RouteDefinition` struct, which is especially useful when organizing routes by controller or feature module.
-
-
-
-### Defining Routes with `RouteDefinition`
-
-To group and manage routes more effectively, you can define them as a slice of `okapi.RouteDefinition`. This pattern is ideal for structuring routes in controllers or services layers.
-
-#### Example: Book Service
-
+For better organization, define routes using the `RouteDefinition` struct—ideal for controller-based architectures:
 ```go
 type BookService struct{}
 
-func (bc *BookService) GetBooks(c *okapi.Context) error {
-	// Simulate fetching books from a database
-	return c.OK(okapi.M{"success": true, "message": "Books retrieved successfully"})
+func (s *BookService) List(c *okapi.Context) error {
+    return c.OK(okapi.M{"success": true, "message": "Books retrieved"})
 }
 
-func (bc *BookService) CreateBook(c *okapi.Context) error {
-	// Simulate creating a book in a database
-	return c.Created(okapi.M{
-		"success": true,
-		"message": "Book created successfully",
-	})
+func (s *BookService) Create(c *okapi.Context) error {
+    return c.Created(okapi.M{"success": true, "message": "Book created"})
 }
-```
 
-
-### Defining Service Routes
-
-```go
-func (bc *BookService) BookRoutes() []okapi.RouteDefinition {
-	apiGroup := &okapi.Group{Prefix: "/api"}
-	return []okapi.RouteDefinition{
-		{
-			Method:  http.MethodGet,
-			Path:    "/books",
-			Handler: bc.GetBooks,
-			Group:   apiGroup,
-            Summary:     "List Books",
-            Description: `Retrieve a list of all books in the inventory.`,
-            Request:     &BookRequest{}, // OpenAPI documentation using Body field style
-			Response:    &BooksResponse{}, // OpenAPI documentation using Body field style
-		},
-		{
-			Method:  http.MethodPost,
-			Path:    "/books",
-			Handler: bc.CreateBook,
-			Group:   apiGroup,
-			Middlewares: []okapi.Middleware{customMiddleware}
-			Security: bearerAuthSecurity, // Apply Bearer Auth security scheme
-			// Using RouteOption
+func (s *BookService) bookRoutes() []okapi.RouteDefinition {
+    apiGroup := &okapi.Group{Prefix: "/api"}
+    return []okapi.RouteDefinition{
+        {
+            Method:      http.MethodPut,
+            Path:        "/books",
+            Handler:     s.Update,
+            Group:       apiGroup,
+			OperationId: "updateBook", // OpenAPI operationId
+            Summary:     "Update Book", // OpenAPI summary
+            Description: "Update an existing book in the inventory", // OpenAPI description
+            Request:     &BookRequest{}, // OpenAPI request body (if applicable)
+            Response:    &BooksResponse{}, // OpenAPI success response (if applicable)
+        },
+        {
+            Method:      http.MethodPost,
+            Path:        "/books",
+            Handler:     s.Create,
+            Group:       apiGroup,
+            Middlewares: []okapi.Middleware{customMiddleware},
+            Security:    bearerAuthSecurity,
+			// Using RouteOptions for more control over OpenAPI metadata
             Options: []okapi.RouteOption{
-            okapi.DocSummary("Create Book"), // OpenAPI documentation
-            okapi.DocDescription("Create Book"),
-            okapi.DocRequestBody(&models.Book{}),
-            okapi.DocResponse(&models.Book{}), // Success Response
-            okapi.DocResponse(http.StatusUnauthorized, models.AuthResponse{}), // Error response
-        
+                okapi.DocSummary("Create Book"),
+                okapi.DocDescription("Add a new book to the inventory"),
+                okapi.DocRequestBody(&Book{}),
+                okapi.DocResponse(&Book{}),
+                okapi.DocResponse(http.StatusUnauthorized, AuthError{}),
+            },
         },
-
-        },
-	}
+    }
 }
 ```
 
-
-### Registering Routes
-
-You can register routes using one of the following approaches:
-
+**Register routes:**
 ```go
 app := okapi.Default()
-bookController := &BookController{}
+bookService := &BookService{}
 
-// Method 1: Register directly to the app instance
-app.Register(bookController.Routes()...)
+// Method 1: Direct registration
+app.Register(bookService.bookRoutes()...)
 
-// Using a route group
-// apiGroup := app.Group("/api")
-// apiGroup.Register(bookController.Routes()...)
-
-
-// Method 2: Use the global helper to register with the target instance
-okapi.RegisterRoutes(app, bookController.Routes())
+// Method 2: Using helper function
+okapi.RegisterRoutes(app, bookService.Routes())
 ```
 
-Both methods achieve the same result, choose the one that best fits your project’s style.
-
-#### See the example in the [examples/route-definition](https://github.com/jkaninda/okapi/tree/main/examples/route-definition) directory for a complete application using this pattern.
+See the complete example in [examples/route-definition](https://github.com/jkaninda/okapi/tree/main/examples/route-definition).
 
 ---
 
-
-##  Standard Library Compatibility
-
-**Okapi** integrates seamlessly with Go’s `net/http` standard library, enabling you to:
-
-1. Use existing `http.Handler` middleware
-2. Register standard `http.HandlerFunc` handlers
-3. Combine Okapi-style routes with standard library handlers
-
-This makes Okapi ideal for gradual adoption or hybrid use in existing Go projects.
-
-
-### Middleware Compatibility
-
-Okapi’s `UseMiddleware` bridges standard `http.Handler` middleware into Okapi’s middleware system. This lets you reuse the wide ecosystem of community-built middleware—such as logging, metrics, tracing, compression, and more.
-
-#### Signature
-
+###  Authentication & Security
 ```go
-func (o *Okapi) UseMiddleware(middleware func(http.Handler) http.Handler)
-```
+// JWT Authentication
+jwtAuth := okapi.JWTAuth{
+    SigningSecret: []byte("your-secret-key"),
+    TokenLookup:   "header:Authorization",
+}
 
-#### Example: Injecting a Custom Header
+protected := o.Group("/api", jwtAuth.Middleware).WithBearerAuth()
+protected.Get("/profile", getProfile)
+protected.Post("/logout", logout)
 
-```go
-o := okapi.Default()
-
-// Add a custom version header to all responses
-o.UseMiddleware(func(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("X-Version", "v1.2.0")
-        next.ServeHTTP(w, r)
-    })
-})
-```
-
-### Handler Compatibility
-
-You can register any `http.HandlerFunc` using `HandleStd`, or use full `http.Handler` instances via `HandleHTTP`. These retain Okapi’s routing and middleware features while supporting familiar handler signatures.
-
-#### HandleStd Signature
-
-```go
-func (o *Okapi) HandleStd(method, path string, handler http.HandlerFunc, opts ...RouteOption)
-```
-
-#### Example: Basic Standard Library Handler
-
-```go
-o := okapi.Default()
-
-o.HandleStd("GET", "/greeting", func(w http.ResponseWriter, r *http.Request) {
-    w.Write([]byte("Hello from Okapi!"))
-})
+// Basic Authentication
+basicAuth := okapi.BasicAuth{
+    Username: "admin",
+    Password: "secure-password",
+}
+admin := o.Group("/admin", basicAuth.Middleware)
+admin.Get("/dashboard", getDashboard)
 ```
 
 ---
-
-### Migration Tips
-
-Migrating an existing `net/http` application? Okapi makes it painless.
-
-#### Mixed Routing Support
-
-You can mix Okapi and standard handlers in the same application:
-
-```go
-// Okapi-style route
-o.Handle("GET", "/okapi", func(c *okapi.Context) error {
-    return c.OK(okapi.M{"status": "ok"})
-})
-
-// Standard library handler
-o.HandleStd("GET", "/standard", func(w http.ResponseWriter, r *http.Request) {
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("standard response"))
-})
-```
-
-
-#### Error Handling Differences
-* `http.HandlerFunc`: must manually call `w.WriteHeader(...)`
-* `okapi.Handle`: can return an error or use helpers like `c.JSON`, `c.Text`, `c.OK`, `c.ErrorNotFound()` or `c.AbortBadRequest()`
 
 ## Testing
 
-Okapi provides comprehensive testing utilities to help you write robust tests for your handlers and middleware. The `okapitest` package offers two approaches: a fluent client API and standalone request helpers.
-
-### Quick Start
+Built-in testing utilities for comprehensive test coverage:
 ```go
-import (
-    "testing"
-    "github.com/jkaninda/okapi"
-    "github.com/jkaninda/okapi/okapitest"
-)
+import "github.com/jkaninda/okapi/okapitest"
 
-func TestGetBooksHandler(t *testing.T) {
-    // Create a test server
+func TestGetBooks(t *testing.T) {
     server := okapi.NewTestServer(t)
     server.Get("/books", GetBooksHandler)
     
-    // Make request and assert response
     okapitest.GET(t, server.BaseURL+"/books").
         ExpectStatusOK().
-        ExpectBodyContains("The Go Programming Language")
+        ExpectBodyContains("Go Programming").
+        ExpectHeader("Content-Type", "application/json")
 }
 ```
 
-### Testing Approaches
-
-#### 1. Using the Test Client (Recommended)
-
-The test client provides a fluent API for making multiple requests with shared configuration:
-```go
-func TestBooksAPI(t *testing.T) {
-    // Setup test server
-    server := okapi.NewTestServer(t)
-    server.Get("/books", GetBooksHandler)
-    server.Get("/books/:id", GetBookHandler)
-    server.Post("/books", CreateBookHandler)
-    
-    // Create reusable client
-    client := okapitest.NewClient(t, server.BaseURL)
-    
-    // Test listing books
-    client.GET("/books").
-        ExpectStatusOK().
-        ExpectBodyContains("The Go Programming Language").
-        ExpectHeader("X-Version", "1.0.0")
-
-
-// Test getting a specific book
-    client.GET("/books/1").
-        ExpectStatusOK().
-        ExpectBodyContains("The Go Programming Language")
-    
-    // Test book not found
-    client.GET("/books/999").
-        ExpectStatusNotFound().
-        ExpectBodyContains("Book not found")
-    
-    // Test creating a book
-    newBook := Book{
-        ID:    6,
-        Name:  "Sample Book",
-        Price: 20,
-        Year:  2024,
-        Qty:   5,
-    }
-    client.POST("/books").
-        JSONBody(newBook).
-        ExpectStatusCreated().
-        ExpectBodyContains("Sample Book")
-}
-```
-
-#### 2. Using Standalone Request Helpers
-
-For simpler test cases or one off requests:
-```go
-func TestGetBookHandler(t *testing.T) {
-    server := okapi.NewTestServer(t)
-    server.Get("/books/:id", GetBookHandler)
-    
-    // Test successful retrieval
-    okapitest.GET(t, server.BaseURL+"/books/1").
-        ExpectStatusOK().
-        ExpectBodyContains("The Go Programming Language")
-    
-    // Test not found scenario
-    okapitest.GET(t, server.BaseURL+"/books/999").
-        ExpectStatusNotFound().
-        ExpectBodyContains("Book not found")
-}
-
-func TestCreateBookHandler(t *testing.T) {
-    server := okapi.NewTestServer(t)
-    server.Post("/books", CreateBookHandler)
-    
-    book := Book{
-        ID:    6,
-        Name:  "Sample Book",
-        Price: 20,
-        Year:  2024,
-        Qty:   5,
-    }
-    
-    okapitest.POST(t, server.BaseURL+"/books").
-        JSONBody(book).
-        ExpectStatusCreated().
-        ExpectBodyContains("Sample Book")
-}
-```
-
-### Available Assertions
-
-The test utilities support various assertions:
-```go
-// Status code assertions
-.ExpectStatusOK()           // 200
-.ExpectStatusCreated()      // 201
-.ExpectStatusNotFound()     // 404
-.ExpectStatus(code int)     // Custom status code
-
-// Body assertions
-.ExpectBodyContains(text string)
-.ExpectBodyEquals(text string)
-.ExpectJSONBody(expected interface{})
-
-// Header assertions
-.ExpectHeader(key, value string)
-```
-
-### Testing with Custom Headers
-```go
-func TestAuthenticatedRequest(t *testing.T) {
-    server := okapi.NewTestServer(t)
-    server.Get("/protected", ProtectedHandler)
-    
-    client := okapitest.NewClient(t, server.BaseURL)
-    
-    client.GET("/protected").
-        Header("Authorization", "Bearer token123").
-        ExpectStatusOK()
-}
-```
-
-### Testing Middleware
-```go
-func TestAuthMiddleware(t *testing.T) {
-    server := okapi.NewTestServer(t)
-    server.Use(AuthMiddleware)
-    server.Get("/protected", ProtectedHandler)
-    
-    client := okapitest.NewClient(t, server.BaseURL)
-    
-    // Test without auth - should fail
-    client.GET("/protected").
-        ExpectStatus(401)
-    
-    // Test with auth - should succeed
-    client.GET("/protected").
-        Header("Authorization", "Bearer valid-token").
-        ExpectStatusOK()
-}
-```
-### CLI
-
-Okapi includes a command-line interface (CLI) tool to help you quickly run and manage your Okapi applications.
-
-Example usage:
-
-```go
-	app := okapi.New()
-	// Create CLI instance
-	cli := okapicli.New(app, "Goma").
-		String("config", "c", "config.yaml", "Path to configuration file").
-		Int("port", "p", 8080, "HTTP server port").
-		Bool("debug", "d", false, "Enable debug mode")
-		
-    // Parse flags
-	if err := cli.ParseFlags(); err != nil {
-		panic(err)
-	}
-   
-	app.Get("/", func(ctx *okapi.Context) error {
-	return ctx.OK(okapi.M{
-			"status":  "ok",
-			"message": "CLI example",
-		})
-  })
-  
-  // Run server
-	if err := cli.RunServer(&okapicli.RunOptions{
-		OnStart: func() {
-			slog.Info("Preparing resources before startup")
-
-		},
-		OnStarted: func() {
-			slog.Info("Server started successfully")
-		},
-		OnShutdown: func() {
-			slog.Info("Cleaning up before shutdown")
-		},
-	}); err != nil {
-		panic(err)
-	}
-```
 ---
 
-### Explore Another Project: Goma Gateway
+##  CLI Integration
 
-Are you building a microservices architecture?
-Do you need a powerful yet lightweight API Gateway or a high-performance reverse proxy to secure and manage your services effortlessly?
+Build production-ready command-line applications:
+```go
+import "github.com/jkaninda/okapi/okapicli"
 
-Check out my other project — **[Goma Gateway](https://github.com/jkaninda/goma-gateway)**.
+func main() {
+    o := okapi.Default()
+    
+    cli := okapicli.New(o, "Okapi CLI Application").
+        String("config", "c", "config.yaml", "Configuration file path").
+        Int("port", "p", 8000, "HTTP server port").
+        Bool("debug", "d", false, "Enable debug mode")
+    
+    if err := cli.Parse(); err != nil {
+        panic(err)
+    }
+    
+    // Apply CLI options
+    o.WithPort(cli.GetInt("port"))
+    if cli.GetBool("debug") {
+        o.WithDebug()
+    }
+    
+    o.Get("/", func(ctx *okapi.Context) error {
+        return ctx.OK(okapi.M{"message": "Hello, Okapi!"})
+    })
+    
+    if err := cli.Run(); err != nil {
+        panic(err)
+    }
+}
+```
 
-**Goma Gateway** is a high-performance, declarative API Gateway built for modern microservices. It comes with a rich set of built-in middleware, including:
+---
 
-* Basic, JWT, OAuth2, LDAP, and ForwardAuth authentication
-* Caching and rate limiting
-* Canary deployment
-* Bot detection
-* Built-in load balancing
-* Simple configuration with minimal overhead
-* ...and more!
+## Documentation
 
-**Protocol support:** REST, GraphQL, gRPC, TCP, and UDP
+**Complete documentation:** [okapi.jkaninda.dev](https://okapi.jkaninda.dev)
 
-**Security:** Automatic HTTPS via Let’s Encrypt or use your own TLS certificates
+### Topics Covered:
+- **Routing** – Path patterns, groups, dynamic management
+- **Request Binding** – JSON, XML, forms, validation
+- **Responses** – JSON, XML, templates, file serving
+- **Middleware** – Built-in and custom middleware
+- **Authentication** – JWT, Basic Auth, OAuth2
+- **OpenAPI/Swagger** – Auto-generated documentation
+- **Testing** – Comprehensive testing utilities
+- **Advanced Features** – TLS, CORS, graceful shutdown, CLI integration
 
-Whether you're managing internal APIs or exposing public endpoints, **Goma Gateway** helps you do it efficiently, securely, and with minimal complexity.
+---
+
+## Related Projects
+
+Building microservices? Check out **[Goma Gateway](https://github.com/jkaninda/goma-gateway)** – a high-performance API Gateway featuring:
+- Authentication & authorization
+- HTTP caching & rate limiting
+- Load balancing
+- Support for REST, GraphQL, gRPC, TCP, and UDP
 
 ---
 
 ## Contributing
 
-Contributions are welcome!
+We welcome contributions! Here's how to get started:
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to your fork
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+Please read our [Contributing Guide](CONTRIBUTING.md) for detailed guidelines.
 
 ---
 
-## 🌟 Star History
-
-⭐ If you find Okapi useful, please consider giving it a star on [GitHub](https://github.com/jkaninda/okapi)!
+## ⭐ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=jkaninda/okapi&type=Date)](https://star-history.com/#jkaninda/okapi&Date)
 
+---
+
 ##  Support & Community
 
-- **Bug Reports:** [GitHub Issues](https://github.com/jkaninda/okapi/issues)
-- **Feature Requests:** [GitHub Discussions](https://github.com/jkaninda/okapi/discussions)
-- **Contact:** Open an issue for any questions
-- **LinkedIn:** [Jonas Kaninda](https://www.linkedin.com/in/jkaninda/)
+-  **Documentation:** [okapi.jkaninda.dev](https://okapi.jkaninda.dev)
+-  **Bug Reports:** [GitHub Issues](https://github.com/jkaninda/okapi/issues)
+-  **Discussions:** [GitHub Discussions](https://github.com/jkaninda/okapi/discussions)
+-  **LinkedIn:** [Jonas Kaninda](https://www.linkedin.com/in/jkaninda/)
 
+---
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
@@ -1714,9 +405,8 @@ This project is licensed under the MIT License. See the LICENSE file for details
 
 **Made with ❤️ for the Go community**
 
-**⭐ Star us on GitHub — it helps!**
+**⭐ Star us on GitHub — it motivates us to keep improving!**
 
-**Copyright (c) 2025 Jonas Kaninda**
-
+Copyright © 2025 Jonas Kaninda
 
 </div>

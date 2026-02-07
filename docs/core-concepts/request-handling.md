@@ -76,6 +76,7 @@ type Book struct {
     // Supports both ?tags=a&tags=b and ?tags=a,b
     Tags    []string `form:"tags" query:"tags" default:"a,b"`
     Year    int      `json:"year" yaml:"year" description:"Book year" deprecated:"true"`
+	SessionID string   `cookie:"session_id"`
 }
 
 o.Post("/books", func(c *okapi.Context) error {
@@ -137,47 +138,3 @@ These struct tags control how fields appear in the generated **OpenAPI 3 specifi
 | `hidden:"true"`      | Excludes the field from the generated OpenAPI specification and Swagger UI. |
 | `example:"..."`      | Adds an example value for the field in the OpenAPI schema.                  |
 
-
-
-## Validation and Default Values
-
-Okapi provides declarative validation and automatic default value assignment using struct tags.
-
-### Basic Validation Tags
-
-| Field Type | Tag                  | Description                                              |
-|------------|----------------------|----------------------------------------------------------|
-| `string`   | `minLength:"10"`     | Ensures the string has at least 10 characters.           |
-| `string`   | `maxLength:"50"`     | Ensures the string does not exceed 50 characters.        |
-| `number`   | `min:"5"`            | Ensures the number is greater than or equal to 5.        |
-| `number`   | `max:"100"`          | Ensures the number is less than or equal to 100.         |
-| `number`   | `multipleOf:"5"`     | Ensures the number is a multiple of the given value.     |
-| `slice`    | `maxItems:"5"`       | Ensures the slice contains at most 5 items.              |
-| `slice`    | `minItems:"2"`       | Ensures the slice contains at least 2 items.             |
-| `slice`    | `uniqueItems:"true"` | Ensures all items in the slice are unique.               |
-| `any`      | `required:"true"`    | Marks the field as required.                             |
-| `any`      | `default:"..."`      | Assigns a default value when the field is missing/empty. |
-| `any`      | `format:"email"`     | Enables format validation (e.g. `email`, `uuid`, etc.).  |
-
-
-### Example
-
-```go
-type CreateUserRequest struct {
-    Email    string   `json:"email" required:"true" format:"email" example:"user@example.com"`
-    Password string   `json:"password" minLength:"8" description:"User password"`
-    Age      int      `json:"age" min:"18" max:"120" default:"18"`
-    Roles    []string `json:"roles" minItems:"1" uniqueItems:"true"`
-}
-```
-
-### Data Type & Format Validation
-
-| Field Type  | Tag / Attribute                               | Description                                            |
-|-------------|-----------------------------------------------|--------------------------------------------------------|
-| `date`      | `format:"date"`                               | Validates the field as a date (YYYY-MM-DD).            |
-| `date-time` | `format:"date-time"`                          | Validates the field as a date and time (RFC3339).      |
-| `email`     | `format:"email"`                              | Validates the field as a valid email address.          |
-| `duration`  | `format:"duration"`                           | Validates the field as a Go duration (e.g., `1h30m`).  |
-| `regex`     | `format:"regex" pattern="^\+?[1-9]\d{1,14}$"` | Validates the field using a custom regular expression. |
-| `enum`      | `enum:"pending,paid,canceled"`                | Restricts the field to one of the listed values.       |

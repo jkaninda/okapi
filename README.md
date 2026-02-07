@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
+[![Go](https://img.shields.io/github/go-mod/go-version/jkaninda/okapi)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jkaninda/okapi.svg)](https://pkg.go.dev/github.com/jkaninda/okapi)
 [![codecov](https://codecov.io/gh/jkaninda/okapi/branch/main/graph/badge.svg?token=JHTW49M1LF)](https://codecov.io/gh/jkaninda/okapi)
 [![GitHub Release](https://img.shields.io/github/v/release/jkaninda/okapi)](https://github.com/jkaninda/okapi/releases)
@@ -29,28 +30,40 @@ Named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to t
 
 **Perfect for:** REST APIs, microservices, rapid prototyping, and learning modern Go web development.
 
----
+
 
 ##  Why Choose Okapi?
 
-| Feature                      | Benefit                                                    |
-|------------------------------|------------------------------------------------------------|
-| **Easy to Learn**            | Familiar Go idioms, productive in minutes                  |
-| **Lightweight**              | Full control with minimal abstraction overhead             |
-| **Production Battle-Tested** | Fast, reliable, and efficient under real-world load        |
-| **Standard Library First**   | Zero friction with existing Go code                        |
-| **Self-Documenting**         | OpenAPI specs always in sync with implementation           |
-| **Dynamic Control**          | Toggle routes and groups at runtime—no code changes needed |
+
+- **Easy to Learn** - Familiar Go idioms, productive in minutes                  
+- **Lightweight** - Full control with minimal abstraction overhead             
+- **Production Battle-Tested** - Fast, reliable, and efficient under real-world load        
+- **Standard Library First** - Zero friction with existing Go code                        
+- **Self-Documenting** - OpenAPI specs always in sync with implementation           
+- **Dynamic Control** - Toggle routes and groups at runtime—no code changes needed 
 
 ---
 
 ## Installation
+
+Create a New Project
+
+```shell
+mkdir myapi && cd myapi
+go mod init myapi
+
+```
+### Install Okapi
+
 ```bash
 go get github.com/jkaninda/okapi@latest
 ```
 
 
 ##  Quick Start
+
+Create a simple API in just a few lines of code:
+
 ```go
 package main
 

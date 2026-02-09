@@ -174,7 +174,7 @@ func ProblemDetailErrorHandler(config *ErrorHandlerConfig) ErrorHandler {
 		if config.Format == ErrorFormatProblemXML {
 			return c.xmlProblemError(code, problem)
 		}
-		return c.JSON(code, problem)
+		return c.jsonProblemError(code, problem)
 	}
 }
 

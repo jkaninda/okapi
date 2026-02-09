@@ -177,3 +177,13 @@ func TestIsSensitiveParam(t *testing.T) {
 		}
 	}
 }
+func TestParseAddr(t *testing.T) {
+	host, port := parseAddr("http://localhost:8080")
+	if host != "localhost" {
+		t.Errorf("parseAddr(\"http:localhost:8080\") = %s; want http", host)
+	}
+	if port != "8080" {
+		t.Errorf("parseAddr(\"http:localhost:8080\") = %s; want http", port)
+	}
+
+}

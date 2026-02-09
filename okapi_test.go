@@ -436,7 +436,6 @@ func customMiddleware(next HandlerFunc) HandlerFunc {
 			slog.Error("Error in custom middleware", "error", err)
 			return c.JSON(http.StatusInternalServerError, M{"error": "Internal Server Error"})
 		}
-		slog.Info("============= Response sent", "status", c.Response().StatusCode())
 		slog.Info("request took", "duration", time.Since(start))
 		return nil
 	}
@@ -509,4 +508,66 @@ func TestWithComponentSchemaRef(t *testing.T) {
 	waitForServer()
 	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
+}
+
+type BookTest struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name" form:"name"  maxLength:"50" example:"The Go Programming Language" yaml:"name" required:"true"`
+	Price  int    `json:"price" form:"price" query:"price" yaml:"price" min:"0" default:"0" max:"500"`
+	Qty    int    `json:"qty" form:"qty" query:"qty" yaml:"qty" default:"0"`
+	Status string `json:"status" form:"status" query:"status" yaml:"status" enum:"paid,unpaid,canceled"  required:"true" example:"available"`
+}
+type BooksResponse struct {
+	Body []BookTest `json:"books"`
+}
+type BookDetailReq struct {
+	ID int `json:"id" path:"id"`
+}
+type BookOutPut struct {
+	Status int
+	Body   BookTest
+}
+
+var bookTest = BookTest{ID: 1, Name: "The Go Programming Language", Price: 30, Qty: 100, Status: "paid"}
+
+func TestHandle(t *testing.T) {
+	o := NewTestServer(t)
+	o.Post("/books", Handle(func(c *Context, book *BookTest) error {
+		return c.Created(book)
+	}))
+	o.Put("/books", HandleIO(func(c *Context, book *BookTest) (*BookOutPut, error) {
+		return &BookOutPut{Body: *book}, nil
+	}))
+	o.Get("/books/:id", H(func(c *Context, book *BookDetailReq) error {
+		if book.ID != 1 {
+			fmt.Println("ID", book.ID)
+			return c.AbortNotFound("Book not found")
+		}
+		return c.OK(bookTest)
+	}))
+	o.Delete("/books/:id", H(func(c *Context, book *BookDetailReq) error {
+		if book.ID != 1 {
+			fmt.Println("ID", book.ID)
+			return c.AbortNotFound("Book not found")
+		}
+		return c.NoContent()
+	}))
+	o.Get("/books", HandleO(func(c *Context) (*BooksResponse, error) {
+		books := make([]BookTest, 0, 1)
+		books = append(books, bookTest)
+		return &BooksResponse{Body: books}, nil
+	}))
+	okapitest.POST(t, o.BaseURL+"/books").ExpectStatusBadRequest()
+	okapitest.POST(t, o.BaseURL+"/books").JSONBody(&BookTest{
+		Name: "The Go Programming Language"}).ExpectStatusBadRequest()
+
+	okapitest.POST(t, o.BaseURL+"/books").JSONBody(bookTest).ExpectStatusCreated()
+
+	okapitest.PUT(t, o.BaseURL+"/books").JSONBody(&BookTest{}).ExpectStatusBadRequest()
+	okapitest.PUT(t, o.BaseURL+"/books").JSONBody(bookTest).ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
+
+	okapitest.GET(t, o.BaseURL+"/books/1").ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
+	okapitest.DELETE(t, o.BaseURL+"/books/1").ExpectStatusNoContent().ExpectEmptyBody()
+	okapitest.GET(t, o.BaseURL+"/books/1").ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
+
 }

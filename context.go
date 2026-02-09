@@ -404,6 +404,11 @@ func (c *Context) OK(v any) error {
 	return c.JSON(http.StatusOK, v)
 }
 
+// NoContent returns an empty response body with status code 204
+func (c *Context) NoContent() error {
+	return c.String(http.StatusNoContent, "")
+}
+
 // Created writes a JSON response with 201 status code.
 func (c *Context) Created(v any) error {
 	return c.JSON(http.StatusCreated, v)

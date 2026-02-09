@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
@@ -518,7 +519,9 @@ type BookTest struct {
 	Status string `json:"status" form:"status" query:"status" yaml:"status" enum:"paid,unpaid,canceled"  required:"true" example:"available"`
 }
 type BooksResponse struct {
-	Body []BookTest `json:"books"`
+	Body       []BookTest `json:"books"`
+	XRequestId string     `header:"X-Request-Id"`
+	Session    string     `cookie:"session"`
 }
 type BookDetailReq struct {
 	ID int `json:"id" path:"id"`
@@ -555,8 +558,9 @@ func TestHandle(t *testing.T) {
 	o.Get("/books", HandleO(func(c *Context) (*BooksResponse, error) {
 		books := make([]BookTest, 0, 1)
 		books = append(books, bookTest)
-		return &BooksResponse{Body: books}, nil
+		return &BooksResponse{Body: books, XRequestId: uuid.NewString(), Session: "1234"}, nil
 	}))
+
 	okapitest.POST(t, o.BaseURL+"/books").ExpectStatusBadRequest()
 	okapitest.POST(t, o.BaseURL+"/books").JSONBody(&BookTest{
 		Name: "The Go Programming Language"}).ExpectStatusBadRequest()
@@ -569,5 +573,6 @@ func TestHandle(t *testing.T) {
 	okapitest.GET(t, o.BaseURL+"/books/1").ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
 	okapitest.DELETE(t, o.BaseURL+"/books/1").ExpectStatusNoContent().ExpectEmptyBody()
 	okapitest.GET(t, o.BaseURL+"/books/1").ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
+	okapitest.GET(t, o.BaseURL+"/books").ExpectStatusOK().ExpectBodyContains("The Go Programming Language").ExpectHeaderExists("X-Request-Id").ExpectCookie("session", "1234")
 
 }

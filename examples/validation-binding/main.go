@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/jkaninda/okapi"
 )
 
@@ -32,7 +33,9 @@ type BookOutput struct {
 }
 
 type BooksResponse struct {
-	Body []Book `json:"books"`
+	Status     int    // Default 200
+	Body       []Book `json:"books"`
+	XRequestId string `header:"X-Request-Id"`
 }
 
 var books = []Book{
@@ -67,7 +70,7 @@ func main() {
 
 	// READ ALL - Using okapi.HandleO for custom output
 	api.Get("/books", okapi.HandleO(func(c *okapi.Context) (*BooksResponse, error) {
-		return &BooksResponse{Body: books}, nil
+		return &BooksResponse{Body: books, XRequestId: uuid.NewString()}, nil
 	})).WithOutput(&BooksResponse{})
 
 	// UPDATE - Using okapi.HandleIO for input/output

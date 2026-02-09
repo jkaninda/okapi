@@ -100,7 +100,19 @@ func setupTestServer() *httptest.Server {
 			return
 		}
 	})
+	mux.HandleFunc("/cookies", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:  "session",
+			Value: "abc123",
+		})
 
+		w.Header().Set("X-Custom-Header", "custom-value")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("OK"))
+		if err != nil {
+			return
+		}
+	})
 	// Status code endpoint
 	mux.HandleFunc("/status/", func(w http.ResponseWriter, r *http.Request) {
 		code := http.StatusOK
@@ -426,6 +438,18 @@ func TestRequestBuilder_ExpectHeaderExists(t *testing.T) {
 	GET(t, server.URL+"/headers").
 		ExpectStatusOK().
 		ExpectHeaderExists("X-Custom-Header")
+}
+func TestRequestBuilder_ExpectCookie(t *testing.T) {
+	server := setupTestServer()
+	defer server.Close()
+
+	GET(t, server.URL+"/cookies").
+		ExpectStatusOK().
+		ExpectCookieExist("session")
+
+	GET(t, server.URL+"/cookies").
+		ExpectStatusOK().
+		ExpectCookie("session", "abc123")
 }
 
 func TestRequestBuilder_ExpectHeaderContains(t *testing.T) {

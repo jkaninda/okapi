@@ -1611,9 +1611,9 @@ func (o *Okapi) Register(routes ...RouteDefinition) {
 //	o.Post("/books", okapi.Handle(func(c *okapi.Context, in *Book) error {
 //	    return c.Created(in)
 //	}))
-func Handle[TInput any](h func(*Context, *TInput) error) HandlerFunc {
+func Handle[I any](h func(*Context, *I) error) HandlerFunc {
 	return func(c *Context) error {
-		var in TInput
+		var in I
 		if err := c.Bind(&in); err != nil {
 			return c.AbortBadRequest("Bad Request", err)
 		}
@@ -1634,7 +1634,7 @@ func H[I any](h func(*Context, *I) error) HandlerFunc {
 	return Handle(h)
 }
 
-// HandleIO binds and validates the request body into the input type TInput,
+// HandleIO binds and validates the request body into the input type I,
 // then executes the handler and writes the response based on content negotiation.
 //
 // The response format is determined by the Accept request header:
@@ -1668,9 +1668,9 @@ func H[I any](h func(*Context, *I) error) HandlerFunc {
 //
 //	// Client requests with Accept: application/json -> JSON response
 //	// Client requests with Accept: application/xml -> XML response
-func HandleIO[TInput any, TOutput any](h func(*Context, *TInput) (*TOutput, error)) HandlerFunc {
+func HandleIO[I any, O any](h func(*Context, *I) (*O, error)) HandlerFunc {
 	return func(c *Context) error {
-		var in TInput
+		var in I
 		if err := c.Bind(&in); err != nil {
 			return c.AbortBadRequest("Bad Request", err)
 		}
@@ -1698,7 +1698,7 @@ func HandleIO[TInput any, TOutput any](h func(*Context, *TInput) (*TOutput, erro
 //	}))
 //
 //	// Client can request JSON, XML, HTML, etc. via Accept header
-func HandleO[TOutput any](h func(*Context) (*TOutput, error)) HandlerFunc {
+func HandleO[O any](h func(*Context) (*O, error)) HandlerFunc {
 	return func(c *Context) error {
 		out, err := h(c)
 		if err != nil {

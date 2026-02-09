@@ -84,6 +84,7 @@ type (
 		maxMultipartMemory int64 // Maximum memory for multipart forms
 		noRoute            HandlerFunc
 		noMethod           HandlerFunc
+		errorHandler       ErrorHandler
 	}
 
 	Router struct {
@@ -592,6 +593,26 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	// Register the OpenAPI JSON and Swagger UI routes
 	o.registerDocRoutes(o.openAPI.Title)
 	return o
+}
+
+// WithErrorHandler sets a custom error handler
+func (o *Okapi) WithErrorHandler(handler ErrorHandler) *Okapi {
+	return o.apply(WithErrorHandler(handler))
+}
+
+// WithDefaultErrorHandler sets the default error handler
+func (o *Okapi) WithDefaultErrorHandler() *Okapi {
+	return o.apply(WithDefaultErrorHandler())
+}
+
+// WithProblemDetailErrorHandler sets RFC 7807 Problem Details error handler
+func (o *Okapi) WithProblemDetailErrorHandler(config *ErrorHandlerConfig) *Okapi {
+	return o.apply(WithProblemDetailErrorHandler(config))
+}
+
+// WithSimpleProblemDetailErrorHandler sets RFC 7807 Problem Details with default config
+func (o *Okapi) WithSimpleProblemDetailErrorHandler() *Okapi {
+	return o.apply(WithSimpleProblemDetailErrorHandler())
 }
 
 // ****** END OKAPI OPTIONS ******
@@ -1305,6 +1326,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 		maxMultipartMemory: defaultMaxMemory,
 		cors:               Cors{},
 		ctx:                context.Background(),
+		errorHandler:       DefaultErrorHandler,
 		openAPI: &OpenAPI{
 			Title:            okapiName,
 			Version:          "1.0.0",

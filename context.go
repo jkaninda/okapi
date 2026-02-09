@@ -51,8 +51,8 @@ type (
 		// response http.ResponseWriter
 		response ResponseWriter
 		// store is a key/value store for storing data in the context
-		store *Store
-		// params *Params
+		store        *Store
+		errorHandler ErrorHandler
 	}
 	Store struct {
 		mu   sync.RWMutex
@@ -65,15 +65,17 @@ type (
 
 // Mime types
 const (
-	constJSON      = "application/json"
-	constXML       = "application/xml"
-	constHTML      = "text/html"
-	constFormData  = "multipart/form-data"
-	constPLAINTEXT = "text/plain"
-	constYAML      = "application/yaml"
-	constYamlX     = "application/x-yaml"
-	constYamlText  = "text/yaml"
-	constPROTOBUF  = "application/protobuf"
+	constJSON        = "application/json"
+	constJSONProblem = "application/problem+json"
+	constXML         = "application/xml"
+	constXMLProblem  = "application/problem+xml"
+	constHTML        = "text/html"
+	constFormData    = "multipart/form-data"
+	constPLAINTEXT   = "text/plain"
+	constYAML        = "application/yaml"
+	constYamlX       = "application/x-yaml"
+	constYamlText    = "text/yaml"
+	constPROTOBUF    = "application/protobuf"
 )
 
 // ************** Accessors *************
@@ -216,9 +218,19 @@ func (c *Context) Referer() string {
 	return c.request.Referer() // Get Referer header
 }
 
-// Param retrieves a URL path parameter value.
+// PathParam retrieves a URL path parameter value.
+func (c *Context) PathParam(key string) string {
+	return mux.Vars(c.request)[key]
+}
+
+// Param is a short alias for PathParam.
 func (c *Context) Param(key string) string {
-	return mux.Vars(c.request)[key] // Get from router's path variables
+	return c.PathParam(key)
+}
+
+// Path returns the raw request path (e.g. "/users/123").
+func (c *Context) Path() string {
+	return c.request.URL.Path
 }
 
 // Params returns all URL path parameters as a map.
@@ -396,6 +408,17 @@ func (c *Context) writeResponse(code int, contentType string, writeFunc func() e
 func (c *Context) JSON(code int, v any) error {
 	return c.writeResponse(code, constJSON, func() error {
 		return json.NewEncoder(c.response).Encode(v)
+	})
+}
+
+func (c *Context) jsonProblemError(code int, v any) error {
+	return c.writeResponse(code, constJSONProblem, func() error {
+		return json.NewEncoder(c.response).Encode(v)
+	})
+}
+func (c *Context) xmlProblemError(code int, v any) error {
+	return c.writeResponse(code, constXMLProblem, func() error {
+		return xml.NewEncoder(c.response).Encode(v)
 	})
 }
 

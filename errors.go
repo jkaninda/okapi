@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -52,6 +53,209 @@ type ValidationErrorResponse struct {
 	Errors []ValidationError `json:"errors"`
 }
 
+// ProblemDetail represents RFC 7807 Problem Details for HTTP APIs
+// See: https://tools.ietf.org/html/rfc7807
+type ProblemDetail struct {
+	Type       string         `json:"type" xml:"type"`
+	Title      string         `json:"title" xml:"title"`
+	Status     int            `json:"status" xml:"status"`
+	Detail     string         `json:"detail,omitempty" xml:"detail,omitempty"`
+	Instance   string         `json:"instance,omitempty" xml:"instance,omitempty"`
+	Extensions map[string]any `json:"-" xml:"-"`
+}
+
+// MarshalJSON implements custom JSON marshaling to include extensions
+func (p ProblemDetail) MarshalJSON() ([]byte, error) {
+	type Alias ProblemDetail
+	base := struct {
+		Alias
+	}{
+		Alias: (Alias)(p),
+	}
+
+	baseMap := make(map[string]any)
+	data, err := json.Marshal(base)
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(data, &baseMap); err != nil {
+		return nil, err
+	}
+
+	for k, v := range p.Extensions {
+		baseMap[k] = v
+	}
+
+	return json.Marshal(baseMap)
+}
+
+// ErrorHandler is a function type that formats error responses
+type ErrorHandler func(c *Context, code int, message string, err error) error
+
+// ErrorFormat defines the format for error responses
+type ErrorFormat string
+
+const (
+	// ErrorFormatDefault uses the standard ErrorResponse format
+	ErrorFormatDefault ErrorFormat = "default"
+	// ErrorFormatProblemJSON uses RFC 7807 Problem Details (application/problem+json)
+	ErrorFormatProblemJSON ErrorFormat = "problem+json"
+	// ErrorFormatProblemXML uses RFC 7807 Problem Details (application/problem+xml)
+	ErrorFormatProblemXML ErrorFormat = "problem+xml"
+)
+
+// ErrorHandlerConfig configures the error handler behavior
+type ErrorHandlerConfig struct {
+	// Format specifies the error response format
+	Format ErrorFormat
+	// TypePrefix is the base URI for problem types (e.g., "https://api.example.com/errors/")
+	TypePrefix       string
+	IncludeInstance  bool
+	IncludeTimestamp bool
+	// CustomFields allows adding custom fields to all error responses
+	CustomFields map[string]any
+}
+
+// DefaultErrorHandler provides the standard error response format
+func DefaultErrorHandler(c *Context, code int, message string, err error) error {
+	details := ""
+	if err != nil {
+		details = err.Error()
+	}
+
+	return c.JSON(code, ErrorResponse{
+		Code:      code,
+		Message:   message,
+		Details:   details,
+		Timestamp: time.Now(),
+	})
+}
+
+// ProblemDetailErrorHandler creates an error handler that returns RFC 7807 Problem Details
+func ProblemDetailErrorHandler(config *ErrorHandlerConfig) ErrorHandler {
+	if config == nil {
+		config = &ErrorHandlerConfig{
+			Format:           ErrorFormatProblemJSON,
+			TypePrefix:       "about:blank",
+			IncludeInstance:  true,
+			IncludeTimestamp: true,
+		}
+	}
+
+	return func(c *Context, code int, message string, err error) error {
+		problem := ProblemDetail{
+			Type:       config.TypePrefix,
+			Title:      http.StatusText(code),
+			Status:     code,
+			Extensions: make(map[string]any),
+		}
+
+		// Add detail if provided
+		if message != "" && message != http.StatusText(code) {
+			problem.Detail = message
+		} else if err != nil {
+			problem.Detail = err.Error()
+		}
+
+		// Add instance (request path)
+		if config.IncludeInstance {
+			problem.Instance = c.Path()
+		}
+
+		// Add timestamp
+		if config.IncludeTimestamp {
+			problem.Extensions["timestamp"] = time.Now().Format(time.RFC3339)
+		}
+
+		// Add custom fields
+		for k, v := range config.CustomFields {
+			problem.Extensions[k] = v
+		}
+		if config.Format == ErrorFormatProblemXML {
+			return c.xmlProblemError(code, problem)
+		}
+		return c.jsonProblemError(code, problem)
+	}
+}
+
+// NewProblemDetail creates a new ProblemDetail with common defaults
+func NewProblemDetail(code int, typeURI, detail string) *ProblemDetail {
+	return &ProblemDetail{
+		Type:       typeURI,
+		Title:      http.StatusText(code),
+		Status:     code,
+		Detail:     detail,
+		Extensions: make(map[string]any),
+	}
+}
+
+// WithInstance adds an instance URI to the problem detail
+func (p *ProblemDetail) WithInstance(instance string) *ProblemDetail {
+	p.Instance = instance
+	return p
+}
+
+// WithExtension adds a custom extension field
+func (p *ProblemDetail) WithExtension(key string, value any) *ProblemDetail {
+	if p.Extensions == nil {
+		p.Extensions = make(map[string]any)
+	}
+	p.Extensions[key] = value
+	return p
+}
+
+// WithTimestamp adds a timestamp extension
+func (p *ProblemDetail) WithTimestamp() *ProblemDetail {
+	return p.WithExtension("timestamp", time.Now().Format(time.RFC3339))
+}
+
+// ********** Error Handler Configuration Options **********
+
+// WithErrorHandler sets a custom error handler for the application
+func WithErrorHandler(handler ErrorHandler) OptionFunc {
+	return func(o *Okapi) {
+		o.errorHandler = handler
+	}
+}
+
+// WithDefaultErrorHandler sets the default error handler (useful for resetting)
+func WithDefaultErrorHandler() OptionFunc {
+	return func(o *Okapi) {
+		o.errorHandler = DefaultErrorHandler
+	}
+}
+
+// WithProblemDetailErrorHandler sets RFC 7807 Problem Details error handler
+func WithProblemDetailErrorHandler(config *ErrorHandlerConfig) OptionFunc {
+	return func(o *Okapi) {
+		o.errorHandler = ProblemDetailErrorHandler(config)
+	}
+}
+
+// WithSimpleProblemDetailErrorHandler sets RFC 7807 Problem Details with default config
+func WithSimpleProblemDetailErrorHandler() OptionFunc {
+	return WithProblemDetailErrorHandler(nil)
+}
+
+// SetErrorHandler allows setting a custom error handler at the context level
+// This overrides the global error handler for this specific request
+func (c *Context) SetErrorHandler(handler ErrorHandler) {
+	c.errorHandler = handler
+}
+
+// getContextErrorHandler returns context-level handler, then global, then default
+func (c *Context) getContextErrorHandler() ErrorHandler {
+	if c.errorHandler != nil {
+		return c.errorHandler
+	}
+	if c.okapi != nil {
+		if c.okapi.errorHandler != nil {
+			return c.okapi.errorHandler
+		}
+	}
+	return DefaultErrorHandler
+}
+
 // ************* Context Errors ****************
 
 // ********** Core Error Methods *************
@@ -66,34 +270,15 @@ func (c *Context) Error(code int, message string) error {
 	return nil
 }
 
-// AbortWithError writes a standardized error response and stops execution.
+// AbortWithError writes a standardized error response using the configured error handler.
 func (c *Context) AbortWithError(code int, err error) error {
-	details := ""
-	if err != nil {
-		details = err.Error()
-	}
-
-	return c.JSON(code, ErrorResponse{
-		Code:      code,
-		Message:   http.StatusText(code),
-		Details:   details,
-		Timestamp: time.Now(),
-	})
+	message := http.StatusText(code)
+	return c.getContextErrorHandler()(c, code, message, err)
 }
 
-// abortWithError writes a standardized error response and stops execution.
+// abortWithError writes a standardized error response with custom message using the configured error handler.
 func (c *Context) abortWithError(code int, msg string, err error) error {
-	details := ""
-	if err != nil {
-		details = err.Error()
-	}
-
-	return c.JSON(code, ErrorResponse{
-		Code:      code,
-		Message:   msg,
-		Details:   details,
-		Timestamp: time.Now(),
-	})
+	return c.getContextErrorHandler()(c, code, msg, err)
 }
 
 // AbortWithJSON writes a custom JSON error response.
@@ -101,7 +286,14 @@ func (c *Context) AbortWithJSON(code int, jsonObj interface{}) error {
 	return c.JSON(code, jsonObj)
 }
 
+// AbortWithProblemDetail writes an RFC 7807 Problem Details response.
+func (c *Context) AbortWithProblemDetail(problem *ProblemDetail) error {
+	return c.jsonProblemError(problem.Status, problem)
+}
+
 // AbortWithStatus writes an error response with status code and custom message.
+// Note: This method maintains backward compatibility by using the default ErrorResponse structure.
+// For full customization, use AbortWithError or set a custom ErrorHandler.
 func (c *Context) AbortWithStatus(code int, message string) error {
 	return c.JSON(code, ErrorResponse{
 		Code:      code,
@@ -117,10 +309,10 @@ func (c *Context) AbortWithStatus(code int, message string) error {
 func (c *Context) abortWithStatus(code int, defaultMsg string, msg string, err ...error) error {
 	var internalErr error
 	message := defaultMsg
-	if len(msg) > 0 {
+	if len(msg) > 0 && msg != "" {
 		message = msg
 	}
-	// TODO
+
 	if len(err) > 0 && err[0] != nil {
 		internalErr = err[0]
 	} else {
@@ -342,6 +534,8 @@ func (c *Context) AbortValidationError(msg string, err ...error) error {
 }
 
 // AbortValidationErrors writes a detailed validation error response.
+// Note: This method always uses the default ValidationErrorResponse structure
+// regardless of custom error handlers, as it has a specific format for validation errors.
 func (c *Context) AbortValidationErrors(errors []ValidationError, msg ...string) error {
 	message := "Validation failed"
 	if len(msg) > 0 && msg[0] != "" {
@@ -356,6 +550,24 @@ func (c *Context) AbortValidationErrors(errors []ValidationError, msg ...string)
 		},
 		Errors: errors,
 	})
+}
+
+// AbortValidationErrorsWithProblemDetail writes validation errors as RFC 7807 Problem Details
+func (c *Context) AbortValidationErrorsWithProblemDetail(errors []ValidationError, msg ...string) error {
+	message := "Validation failed"
+	if len(msg) > 0 && msg[0] != "" {
+		message = msg[0]
+	}
+
+	problem := NewProblemDetail(
+		http.StatusUnprocessableEntity,
+		"https://datatracker.ietf.org/doc/html/rfc7231#section-6.5.1",
+		message,
+	).WithInstance(c.Path()).
+		WithTimestamp().
+		WithExtension("errors", errors)
+
+	return c.AbortWithProblemDetail(problem)
 }
 
 // ErrorNotModified writes a 304 Not Modified response.

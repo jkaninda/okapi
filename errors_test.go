@@ -3,6 +3,7 @@ package okapi
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/jkaninda/okapi/okapitest"
 	"net/http"
 	"strings"
 	"testing"
@@ -636,4 +637,95 @@ func TestAbortValidationErrors(t *testing.T) {
 			t.Errorf("expected 0 validation errors, got %d", len(resp.Errors))
 		}
 	})
+}
+func TestProblemDetailWithCustomFields(t *testing.T) {
+	app := NewTestServerOn(t, 8001)
+
+	app.With(
+		WithProblemDetailErrorHandler(&ErrorHandlerConfig{
+			Format:           ErrorFormatProblemJSON,
+			TypePrefix:       "https://api.example.com/errors/",
+			IncludeInstance:  true,
+			IncludeTimestamp: true,
+			CustomFields: map[string]any{
+				"api_version": "v1.0.0",
+				"support_url": "https://support.example.com",
+				"environment": "production",
+			},
+		}),
+	)
+
+	app.Get("/test", func(c *Context) error {
+		return c.AbortNotFound("Resource not found")
+	})
+
+	okapitest.GET(t, app.BaseURL+"/test").ExpectStatusNotFound().ExpectBodyContains("api_version").
+		ExpectBodyContains("support_url").ExpectBodyContains("support_url").
+		ExpectBodyContains("environment").ExpectBodyContains("type").
+		ExpectBodyContains("status").ExpectBodyContains("timestamp")
+
+}
+func TestOkapi_WithErrorHandler(t *testing.T) {
+	app := NewTestServerOn(t, 8002)
+
+	app.With(
+		WithErrorHandler(func(c *Context, code int, message string, err error) error {
+			return c.JSON(code, map[string]any{
+				"status": "error",
+				"code":   code,
+				"msg":    message,
+			})
+		}),
+	)
+
+	app.Get("/test", func(c *Context) error {
+		return c.AbortNotFound("Resource not found")
+	})
+
+	okapitest.GET(t, app.BaseURL+"/test").ExpectStatusNotFound().ExpectBodyContains("status").
+		ExpectBodyContains("code").ExpectBodyContains("msg")
+}
+func TestOkapi_WithSimpleProblemDetailErrorHandler(t *testing.T) {
+	app := NewTestServerOn(t, 8003)
+
+	app.WithSimpleProblemDetailErrorHandler()
+
+	okapitest.GET(t, app.BaseURL+"/test").ExpectStatusNotFound().ExpectBodyContains("page not found")
+}
+
+func TestProblemDetailMarshalJSON(t *testing.T) {
+	problem := ProblemDetail{
+		Type:   "https://example.com/errors/not-found",
+		Title:  "Not Found",
+		Status: 404,
+		Detail: "Resource not found",
+		Extensions: map[string]any{
+			"api_version": "v1.0.0",
+			"support_url": "https://support.example.com",
+			"retry_after": 300,
+		},
+	}
+
+	data, err := json.Marshal(problem)
+	if err != nil {
+		t.Fatalf("Failed to marshal: %v", err)
+	}
+
+	fmt.Println("Marshaled:", string(data))
+
+	var result map[string]any
+	if err = json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	// Verify extensions are present
+	if result["api_version"] != "v1.0.0" {
+		t.Errorf("Expected api_version, got %v", result["api_version"])
+	}
+	if result["support_url"] != "https://support.example.com" {
+		t.Errorf("Expected support_url, got %v", result["support_url"])
+	}
+	if result["retry_after"] != float64(300) {
+		t.Errorf("Expected retry_after, got %v", result["retry_after"])
+	}
 }

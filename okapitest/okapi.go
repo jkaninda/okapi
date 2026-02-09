@@ -418,6 +418,28 @@ func (rb *RequestBuilder) ExpectHeaderExists(key string) *RequestBuilder {
 	return rb
 }
 
+func (rb *RequestBuilder) ExpectCookieExist(key string) *RequestBuilder {
+	rb.t.Helper()
+	cookie := rb.findCookie(key)
+	if cookie == nil {
+		rb.t.Errorf("expected cookie %q to exist, but it was not found", key)
+	} else if cookie.Value == "" {
+		rb.t.Errorf("expected cookie %q to have a value", key)
+	}
+	return rb
+}
+
+func (rb *RequestBuilder) ExpectCookie(key, expectedValue string) *RequestBuilder {
+	rb.t.Helper()
+	cookie := rb.findCookie(key)
+	if cookie == nil {
+		rb.t.Errorf("expected cookie %q to exist, but it was not found", key)
+	} else if cookie.Value != expectedValue {
+		rb.t.Errorf("expected cookie %q to have value %q, got %q", key, expectedValue, cookie.Value)
+	}
+	return rb
+}
+
 func (rb *RequestBuilder) ExpectContentType(contentType string) *RequestBuilder {
 	return rb.ExpectHeader("Content-Type", contentType)
 }
@@ -517,4 +539,13 @@ func doRequest(method, url string, headers map[string]string, contentType string
 	}
 
 	return resp, data, nil
+}
+func (rb *RequestBuilder) findCookie(key string) *http.Cookie {
+	resp, _ := rb.do()
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == key {
+			return cookie
+		}
+	}
+	return nil
 }

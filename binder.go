@@ -460,6 +460,17 @@ func (c *Context) bindFromFields(out any) error {
 	v := reflect.ValueOf(out).Elem()
 	t := v.Type()
 
+	// Helper to try to set a field from a value source
+	trySet := func(valField reflect.Value, value string, field reflect.StructField) (bool, error) {
+		if value == "" {
+			return false, nil
+		}
+		if err := setValueWithValidation(valField, value, field); err != nil {
+			return false, fmt.Errorf("bind error for field %s: %w", field.Name, err)
+		}
+		return true, nil
+	}
+
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		valField := v.Field(i)
@@ -468,92 +479,61 @@ func (c *Context) bindFromFields(out any) error {
 			continue
 		}
 
-		// Skip if this is a multipart form - already handled
+		// Skip multipart forms
 		if strings.Contains(c.ContentType(), constFormData) {
 			continue
 		}
 
 		wasSet := false
-		var err error
 
-		// Try to get value from different sources
-		if tag := field.Tag.Get(tagParam); tag != "" {
-			if value := c.Param(tag); value != "" {
-				err = setValueWithValidation(valField, value, field)
-				if err != nil {
-					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
-				}
-				wasSet = true
-			}
-		}
-		if tag := field.Tag.Get(tagPath); tag != "" {
-			if value := c.Param(tag); value != "" {
-				err = setValueWithValidation(valField, value, field)
-				if err != nil {
-					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
-				}
-				wasSet = true
-			}
+		// Map of tag type → function returning value
+		tagSources := map[string]func(string) string{
+			tagParam:  c.Param,
+			tagPath:   c.Param,
+			tagQuery:  c.Query,
+			tagForm:   c.FormValue,
+			tagHeader: func(key string) string { return c.request.Header.Get(key) },
 		}
 
-		if !wasSet {
-			if tag := field.Tag.Get(tagQuery); tag != "" {
-				if value := c.Query(tag); value != "" {
-					err = setValueWithValidation(valField, value, field)
-					if err != nil {
-						return fmt.Errorf("bind error for field %s: %w", field.Name, err)
-					}
+		// Try each tag source
+		for tag, getter := range tagSources {
+			if tagVal := field.Tag.Get(tag); tagVal != "" {
+				set, err := trySet(valField, getter(tagVal), field)
+				if err != nil {
+					return err
+				}
+				if set {
 					wasSet = true
+					break
 				}
 			}
 		}
 
 		if !wasSet {
-			if tag := field.Tag.Get(tagForm); tag != "" {
-				if value := c.FormValue(tag); value != "" {
-					err = setValueWithValidation(valField, value, field)
+			if key := field.Tag.Get(tagCookie); key != "" {
+				if value, err := c.Cookie(key); err == nil {
+					set, err := trySet(valField, value, field)
 					if err != nil {
-						return fmt.Errorf("bind error for field %s: %w", field.Name, err)
+						return err
 					}
-					wasSet = true
-				}
-			}
-		}
-		// Cookie
-		if key := field.Tag.Get(tagCookie); key != "" {
-			if value, err := c.Cookie(key); err == nil {
-				err = setValueWithValidation(valField, value, field)
-				if err != nil {
-					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
-				}
-				wasSet = true
-			}
-		}
-
-		if !wasSet {
-			if tag := field.Tag.Get(tagHeader); tag != "" {
-				if value := c.request.Header.Get(tag); value != "" {
-					err = setValueWithValidation(valField, value, field)
-					if err != nil {
-						return fmt.Errorf("bind error for field %s: %w", field.Name, err)
+					if set {
+						wasSet = true
 					}
-					wasSet = true
 				}
 			}
 		}
 
-		// Apply defaults and validate only if no value was set
+		// Default value
 		if !wasSet {
 			if def := field.Tag.Get(tagDefault); def != "" && isEmptyValue(valField) {
-				err = setValueWithValidation(valField, def, field)
-				if err != nil {
-					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
+				if _, err := trySet(valField, def, field); err != nil {
+					return err
 				}
 				wasSet = true
 			}
 		}
 
-		// Check required only if no value was set and field is still zero
+		// Required check
 		if !wasSet && field.Tag.Get(tagRequired) == constTRUE && isEmptyValue(valField) {
 			return fmt.Errorf("field %s is required", field.Name)
 		}

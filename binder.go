@@ -442,13 +442,13 @@ func (c *Context) bindParamFieldWithStatus(tag string, vf reflect.Value, fld ref
 func (c *Context) applyDefaultAndValidate(valField reflect.Value, field reflect.StructField, wasSet bool) error {
 	// Only apply default if no value was set and field is currently zero
 	if !wasSet && isEmptyValue(valField) {
-		if def := field.Tag.Get("default"); def != "" {
+		if def := field.Tag.Get(tagDefault); def != "" {
 			return setValueWithValidation(valField, def, field)
 		}
 	}
 
 	// Only check required if no value was set and field is still zero after potential default application
-	if !wasSet && field.Tag.Get("required") == constTRUE && isEmptyValue(valField) {
+	if !wasSet && field.Tag.Get(tagRequired) == constTRUE && isEmptyValue(valField) {
 		return fmt.Errorf("field %s is required", field.Name)
 	}
 
@@ -477,7 +477,16 @@ func (c *Context) bindFromFields(out any) error {
 		var err error
 
 		// Try to get value from different sources
-		if tag := field.Tag.Get("param"); tag != "" {
+		if tag := field.Tag.Get(tagParam); tag != "" {
+			if value := c.Param(tag); value != "" {
+				err = setValueWithValidation(valField, value, field)
+				if err != nil {
+					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
+				}
+				wasSet = true
+			}
+		}
+		if tag := field.Tag.Get(tagPath); tag != "" {
 			if value := c.Param(tag); value != "" {
 				err = setValueWithValidation(valField, value, field)
 				if err != nil {
@@ -488,7 +497,7 @@ func (c *Context) bindFromFields(out any) error {
 		}
 
 		if !wasSet {
-			if tag := field.Tag.Get("query"); tag != "" {
+			if tag := field.Tag.Get(tagQuery); tag != "" {
 				if value := c.Query(tag); value != "" {
 					err = setValueWithValidation(valField, value, field)
 					if err != nil {
@@ -500,7 +509,7 @@ func (c *Context) bindFromFields(out any) error {
 		}
 
 		if !wasSet {
-			if tag := field.Tag.Get("form"); tag != "" {
+			if tag := field.Tag.Get(tagForm); tag != "" {
 				if value := c.FormValue(tag); value != "" {
 					err = setValueWithValidation(valField, value, field)
 					if err != nil {
@@ -511,7 +520,7 @@ func (c *Context) bindFromFields(out any) error {
 			}
 		}
 		// Cookie
-		if key := field.Tag.Get("cookie"); key != "" {
+		if key := field.Tag.Get(tagCookie); key != "" {
 			if value, err := c.Cookie(key); err == nil {
 				err = setValueWithValidation(valField, value, field)
 				if err != nil {
@@ -522,7 +531,7 @@ func (c *Context) bindFromFields(out any) error {
 		}
 
 		if !wasSet {
-			if tag := field.Tag.Get("header"); tag != "" {
+			if tag := field.Tag.Get(tagHeader); tag != "" {
 				if value := c.request.Header.Get(tag); value != "" {
 					err = setValueWithValidation(valField, value, field)
 					if err != nil {
@@ -535,7 +544,7 @@ func (c *Context) bindFromFields(out any) error {
 
 		// Apply defaults and validate only if no value was set
 		if !wasSet {
-			if def := field.Tag.Get("default"); def != "" && isEmptyValue(valField) {
+			if def := field.Tag.Get(tagDefault); def != "" && isEmptyValue(valField) {
 				err = setValueWithValidation(valField, def, field)
 				if err != nil {
 					return fmt.Errorf("bind error for field %s: %w", field.Name, err)
@@ -545,7 +554,7 @@ func (c *Context) bindFromFields(out any) error {
 		}
 
 		// Check required only if no value was set and field is still zero
-		if !wasSet && field.Tag.Get("required") == constTRUE && isEmptyValue(valField) {
+		if !wasSet && field.Tag.Get(tagRequired) == constTRUE && isEmptyValue(valField) {
 			return fmt.Errorf("field %s is required", field.Name)
 		}
 	}

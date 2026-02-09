@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestHandler(t *testing.T) {
@@ -93,6 +94,7 @@ func HelloHandler(c *Context) error {
 	c.Set("hello", "Hello world!")
 	c.Set("isAdmin", true)
 	c.Set("id", 3)
+	c.Set("userTime", time.Now())
 
 	id := c.GetInt("id")
 	if id != 3 {
@@ -103,5 +105,11 @@ func HelloHandler(c *Context) error {
 		return errors.New("isAdmin is not true")
 	}
 	hello := c.GetString("hello")
+
+	userTime, ok := c.GetTime("userTime")
+	if !ok {
+		return errors.New("userTime is not ok")
+	}
+	fmt.Println(id, userTime, hello)
 	return c.Data(http.StatusOK, constPLAINTEXT, []byte(hello))
 }

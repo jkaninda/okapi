@@ -252,3 +252,35 @@ func getMethodColor(method string) string {
 	}
 	return "\033[0m" // Default
 }
+
+// parseAddr parses the server address into host and port
+func parseAddr(addr string) (host, port string) {
+	// Handle different address formats
+	if addr == ":http" {
+		return constLocalhost, "80"
+	}
+	if addr == ":https" {
+		return constLocalhost, "443"
+	}
+
+	if strings.HasPrefix(addr, ":") {
+		return constLocalhost, strings.TrimPrefix(addr, ":")
+	}
+
+	// Split host:port
+	parts := strings.Split(addr, ":")
+	if len(parts) == 2 {
+		host = parts[0]
+		port = parts[1]
+
+		// If host is empty or 0.0.0.0, show localhost for clarity
+		if host == "" || host == "0.0.0.0" {
+			host = constLocalhost
+		}
+
+		return host, port
+	}
+
+	// Fallback
+	return constLocalhost, "8080"
+}

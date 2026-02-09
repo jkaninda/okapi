@@ -1537,38 +1537,6 @@ func (o *Okapi) printRoutes() {
 	fmt.Println(strings.Repeat("=", separatorWidth))
 }
 
-// parseAddr parses the server address into host and port
-func parseAddr(addr string) (host, port string) {
-	// Handle different address formats
-	if addr == ":http" {
-		return constLocalhost, "80"
-	}
-	if addr == ":https" {
-		return constLocalhost, "443"
-	}
-
-	if strings.HasPrefix(addr, ":") {
-		return constLocalhost, strings.TrimPrefix(addr, ":")
-	}
-
-	// Split host:port
-	parts := strings.Split(addr, ":")
-	if len(parts) == 2 {
-		host = parts[0]
-		port = parts[1]
-
-		// If host is empty or 0.0.0.0, show localhost for clarity
-		if host == "" || host == "0.0.0.0" {
-			host = constLocalhost
-		}
-
-		return host, port
-	}
-
-	// Fallback
-	return constLocalhost, "8080"
-}
-
 // Register registers a list of RouteDefinition to the Okapi instance.
 // This method allows you to define multiple routes in a single call, which can be useful for
 // organizing your routes in a more structured way.
@@ -1605,6 +1573,117 @@ func parseAddr(addr string) (host, port string) {
 //	app.Register(routes...)
 func (o *Okapi) Register(routes ...RouteDefinition) {
 	RegisterRoutes(o, routes)
+}
+
+// ************************ Helpers functions **************************
+
+// Handle binds and validates the request body into the input type I,
+// then executes the handler.
+//
+// This helper is useful when you only need to process the request input
+// and control the response manually inside the handler (e.g. using c.OK(),
+// c.JSON(), c.NoContent(), etc.).
+//
+// Example:
+//
+//	o.Post("/books", okapi.Handle(func(c *okapi.Context, in *Book) error {
+//	    return c.Created(in)
+//	}))
+func Handle[TInput any](h func(*Context, *TInput) error) HandlerFunc {
+	return func(c *Context) error {
+		var in TInput
+		if err := c.Bind(&in); err != nil {
+			return c.AbortBadRequest("Bad Request", err)
+		}
+		return h(c, &in)
+	}
+}
+
+// H is a shorthand alias for Handle.
+// It provides the same behavior and is intended for more concise route
+// definitions when readability is preferred over verbosity.
+//
+// Example:
+//
+//	o.Post("/books", okapi.H(func(c *okapi.Context, in *Book) error {
+//	    return c.Created(in)
+//	}))
+func H[I any](h func(*Context, *I) error) HandlerFunc {
+	return Handle(h)
+}
+
+// HandleIO binds and validates the request body into the input type TInput,
+// then executes the handler and writes the response based on content negotiation.
+//
+// The response format is determined by the Accept request header:
+// - application/json -> JSON response
+// - application/xml -> XML response
+// - text/html -> HTML response (if template registered)
+// - etc.
+//
+// This is useful for APIs that need to support multiple response formats
+// without writing separate handlers.
+//
+// Example:
+//
+//	type Book struct {
+//		ID     int    `json:"id"`
+//		Name   string `json:"name" form:"name"  maxLength:"50" example:"The Go Programming Language" yaml:"name" required:"true"`
+//		Price  int    `json:"price" form:"price" query:"price" yaml:"price" min:"0" default:"0" max:"500"`
+//		Qty    int    `json:"qty" form:"qty" query:"qty" yaml:"qty" default:"0"`
+//		Status string `json:"status" form:"status" query:"status" yaml:"status" enum:"paid,unpaid,canceled"  required:"true" example:"available"`
+//	}
+//
+//	type BookOutput struct {
+//	    Status int
+//	    Body Book
+//	}
+//
+//	o.Post("/books", okapi.HandleIO(func(c *okapi.Context, in *Book) (*BookOutput, error) {
+//	    books = append(books, *in)
+//	    return &BookOutput{Body: *in}, nil
+//	}))
+//
+//	// Client requests with Accept: application/json -> JSON response
+//	// Client requests with Accept: application/xml -> XML response
+func HandleIO[TInput any, TOutput any](h func(*Context, *TInput) (*TOutput, error)) HandlerFunc {
+	return func(c *Context) error {
+		var in TInput
+		if err := c.Bind(&in); err != nil {
+			return c.AbortBadRequest("Bad Request", err)
+		}
+
+		out, err := h(c, &in)
+		if err != nil {
+			return err
+		}
+		return c.Return(out) // Content negotiation based on Accept header
+	}
+}
+
+// HandleO executes the handler and writes the response based on content negotiation.
+// Useful for GET/LIST endpoints that don't need input binding but support
+// multiple response formats.
+//
+// Example:
+//
+//	type BooksOutput struct {
+//	    Status int
+//	    Body []Book
+//	}
+//	o.Get("/books", okapi.HandleO(func(c *okapi.Context) (*BooksOutput, error) {
+//	    return &BooksOutput{Body: books}, nil
+//	}))
+//
+//	// Client can request JSON, XML, HTML, etc. via Accept header
+func HandleO[TOutput any](h func(*Context) (*TOutput, error)) HandlerFunc {
+	return func(c *Context) error {
+		out, err := h(c)
+		if err != nil {
+			return err
+		}
+		return c.Return(out)
+	}
 }
 
 // RegisterSchemas registers component schemas that are re-used as references.

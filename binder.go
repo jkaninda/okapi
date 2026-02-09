@@ -509,7 +509,6 @@ func (c *Context) bindFromFields(out any) error {
 			}
 		}
 
-		// Cookie is special, since it returns error
 		if !wasSet {
 			if key := field.Tag.Get(tagCookie); key != "" {
 				if value, err := c.Cookie(key); err == nil {

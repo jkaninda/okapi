@@ -98,7 +98,116 @@ go run main.go
 
 ##  Core Concepts
 
-### Request Handling & Validation
+
+## Validation and Binding Methods
+
+Okapi provides multiple ways to validate and bind incoming request data, each suited for different use cases.
+
+### Method 1: Using `c.Bind()` (Manual Binding)
+
+The simplest approach-manually bind and validate the request data within your handler:
+
+```go
+o.Post("/users", func(c *okapi.Context) error {
+    var req CreateUserRequest
+    if err := c.Bind(&req); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    // Proceed with creating the user using validated data
+    return c.Created(req)
+})
+```
+
+### Method 2: Using `okapi.Handle()` (Input Validation)
+
+Use `okapi.Handle()` when you want automatic input binding and validation with a typed handler signature:
+
+```go
+type Book struct {
+    ID     int    `json:"id" path:"id"`
+    Name   string `json:"name" form:"name" maxLength:"50" required:"true"`
+    Price  int    `json:"price" form:"price" min:"0" max:"500" default:"0"`
+    Status string `json:"status" enum:"paid,unpaid,canceled" required:"true"`
+}
+
+o.Post("/books", okapi.Handle(func(c *okapi.Context, book *Book) error {
+    book.ID = generateID()
+    return c.Created(book)
+}),
+    okapi.DocRequestBody(&Book{}),
+    okapi.DocResponse(&Book{}),
+)
+```
+
+### Method 3: Using `okapi.H()` (Shorthand for Handle)
+
+`okapi.H()` is a shorter version of `okapi.Handle()` when you only need input validation:
+
+```go
+type BookDetailInput struct {
+    ID int `json:"id" path:"id"`
+}
+
+o.Get("/books/{id:int}", okapi.H(func(c *okapi.Context, input *BookDetailInput) error {
+    book := findBookByID(input.ID)
+    if book == nil {
+        return c.AbortNotFound("Book not found")
+    }
+    return c.OK(book)
+}),
+    okapi.DocResponse(&Book{}),
+)
+```
+
+### Method 4: Using `okapi.HandleIO()` (Input and Output)
+
+Use `okapi.HandleIO()` when you want to define both input and output structs separately. This is useful for complex operations where the response structure differs from the input:
+
+```go
+type BookEditInput struct {
+    ID   int  `json:"id" path:"id" required:"true"`
+    Body Book `json:"body"`
+}
+
+type BookOutput struct {
+    Status int
+    Body   Book
+}
+
+o.Put("/books/{id:int}", okapi.HandleIO(func(c *okapi.Context, input *BookEditInput) (*BookOutput, error) {
+    book := updateBook(input.ID, input.Body)
+    if book == nil {
+        return nil, c.AbortNotFound("Book not found")
+    }
+    return &BookOutput{Body: *book}, nil
+})).WithIO(&BookEditInput{}, &BookOutput{})
+```
+
+> **Note:** `WithIO()` generates OpenAPI documentation for both input and output schemas. The output struct should follow the body style convention.
+
+See the complete example in [validation-binding](https://github.com/jkaninda/okapi/tree/main/examples/validation-binding)
+
+### Method 5: Using `okapi.HandleO()` (Output Only)
+
+Use `okapi.HandleO()` when you only need a custom output struct without specific input validation:
+
+```go
+type BooksResponse struct {
+    Body []Book `json:"books"`
+}
+
+o.Get("/books", okapi.HandleO(func(c *okapi.Context) (*BooksResponse, error) {
+    return &BooksResponse{Body: getAllBooks()}, nil
+})).WithOutput(&BooksResponse{})
+```
+
+> **Note:** The output struct must follow the body style convention. The response content type is based on the `Accept` header requested by the client, defaulting to `application/json`.
+
+See the complete example in [validation-binding](https://github.com/jkaninda/okapi/tree/main/examples/validation-binding)
+
+
+### OpenAPI & Request Binding
+
 ```go
 // Path parameters with type constraints
 o.Get("/books/{id:int}", func(c *okapi.Context) error {
@@ -213,7 +322,8 @@ admin.Get("/dashboard", getDashboard)
 
 ### Declarative Route Definition
 
-For better organization, define routes using the `RouteDefinition` struct—ideal for controller-based architectures:
+For better organization, define routes using the `RouteDefinition` ideal for controller/Services based architectures:
+
 ```go
 type BookService struct{}
 
@@ -279,8 +389,10 @@ See the complete example in [examples/route-definition](https://github.com/jkani
 ```go
 // JWT Authentication
 jwtAuth := okapi.JWTAuth{
-    SigningSecret: []byte("your-secret-key"),
-    TokenLookup:   "header:Authorization",
+    SigningSecret:    []byte("supersecret"),
+    ClaimsExpression: "Equals(`email_verified`, `true`) && Equals(`user.role`, `admin`)",
+    TokenLookup:      "header:Authorization",
+    ContextKey:       "user",
 }
 
 protected := o.Group("/api", jwtAuth.Middleware).WithBearerAuth()
@@ -295,6 +407,7 @@ basicAuth := okapi.BasicAuth{
 admin := o.Group("/admin", basicAuth.Middleware)
 admin.Get("/dashboard", getDashboard)
 ```
+See the complete example in [examples/middleware](https://github.com/jkaninda/okapi/tree/main/examples/middleware).
 
 ---
 

@@ -2,7 +2,7 @@
 title: WebSocket
 layout: default
 parent: Features
-nav_order: 10
+nav_order: 11
 ---
 # WebSocket
 Okapi provides WebSocket support through the `okapiws` package, enabling real-time, bidirectional communication between server and clients. This lightweight, framework-agnostic package offers a clean API and seamless integration with both Okapi and standard Go HTTP servers.

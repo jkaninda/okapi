@@ -50,6 +50,7 @@ func (ec *ExampleController) Routes() []RouteDefinition {
 			Group:       group,
 			Summary:     "Hello, World!",
 			Description: `Hello, World!`,
+			Tags:        []string{"hello"},
 			Response:    &Book{},
 			Request:     &Book{},
 			Security:    bearerAuthSecurity,

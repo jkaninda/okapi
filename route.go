@@ -49,6 +49,8 @@ type RouteDefinition struct {
 	// used for OpenAPI documentation.
 	// Example:  "This endpoint allows clients to create a new book in the system by providing the necessary details."
 	Description string
+	// Tags sets the tags for the Route, which can be used for documentation purposes. // Optional
+	Tags []string
 
 	// Request optionally defines the expected input schema for the route.
 	// It can be a struct or pointer to a struct with binding tags (query, path, header, cookie, form, body).
@@ -234,5 +236,8 @@ func (r *RouteDefinition) attachDocOptions() {
 	}
 	if r.Description != "" {
 		r.Options = append(r.Options, Description(r.Description))
+	}
+	if len(r.Tags) > 0 {
+		r.Options = append(r.Options, Tags(r.Tags...))
 	}
 }

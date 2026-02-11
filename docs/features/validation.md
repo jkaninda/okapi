@@ -61,9 +61,9 @@ type CreateUserRequest struct {
 
 Okapi provides multiple ways to validate and bind incoming request data, each suited for different use cases.
 
-### Method 1: Using `c.Bind()` (Manual Binding)
+### Method 1: Using `c.Bind()`
 
-The simplest approach—manually bind and validate the request data within your handler:
+The simplest approach to bind and validate the request data within your handler:
 
 ```go
 o.Post("/users", func(c *okapi.Context) error {

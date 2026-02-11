@@ -98,18 +98,108 @@ go run main.go
 
 ##  Core Concepts
 
+### OpenAPI & Request Binding
 
+```go
+// Path parameters with type constraints
+o.Get("/books/{id:int}", func(c *okapi.Context) error {
+    id := c.Param("id")
+    return c.JSON(200, okapi.M{"book_id": id})
+})
+
+// Struct binding with automatic validation
+type Book struct {
+    Name  string `json:"name" minLength:"5" maxLength:"50" required:"true"`
+    Price int    `json:"price" min:"1" max:"100" required:"true"`
+}
+
+// Method 1: Using WithIO for cleaner syntax
+o.Put("/books", func(c *okapi.Context) error {
+    book := &Book{}
+    if err := c.Bind(book); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.OK(book)
+}).WithIO(&Book{}, &Book{})
+
+// Method 2: Using RouteOptions for more control
+o.Post("/books", func(c *okapi.Context) error {
+    book := &Book{}
+    if err := c.Bind(book); err != nil {
+        return c.ErrorBadRequest(err)
+    }
+    return c.Created(book)
+}, 
+    okapi.DocSummary("Create a new book"),
+    okapi.DocRequestBody(Book{}),
+    okapi.DocResponse(Book{}),
+)
+```
+
+### Advanced Request/Response Patterns
+
+Separate your payload from metadata using the `Body` field pattern for cleaner, more maintainable code:
+```go
+type Book struct {
+    Name   string `json:"name" minLength:"4" maxLength:"50" required:"true" pattern:"^[A-Za-z]+$"`
+    Price  int    `json:"price" required:"true" min:"5" max:"100"`
+    Year   int    `json:"year" deprecated:"true"`
+    Status string `json:"status" enum:"available,out_of_stock,discontinued" default:"available"`
+}
+
+type BookRequest struct {
+    Body   Book   `json:"body"`
+    ID     int    `param:"id" query:"id"`
+    APIKey string `header:"X-API-Key" required:"true"`
+}
+
+type BookResponse struct {
+    Status    int    // HTTP status code
+    Body      Book   // Response payload
+    RequestID string `header:"X-Request-ID"` // Custom response header
+}
+
+func main() {
+    o := okapi.Default()
+    
+    o.Post("/books", func(c *okapi.Context) error {
+        var req BookRequest
+        if err := c.Bind(&req); err != nil {
+            return c.ErrorBadRequest(err)
+        }
+        
+        res := &BookResponse{
+            Status:    201,
+            RequestID: uuid.New().String(),
+            Body:      req.Body,
+        }
+        return c.Respond(res) // Automatically sets status, headers, and body based on struct tags
+		// Alternative: return c.Return(res) to use the Status field as the HTTP status code
+    },
+        okapi.DocSummary("Create a new book"),
+        okapi.Request(&BookRequest{}),
+        okapi.Response(BookResponse{}),
+    )
+	// or using WithIO for cleaner syntax
+	// o.Post("/books", createBookHandler).WithIO(&BookRequest{}, &BookResponse{})
+    
+    if err := o.Start(); err != nil {
+        panic(err)
+    }
+}
+```
 ## Validation and Binding Methods
 
 Okapi provides multiple ways to validate and bind incoming request data, each suited for different use cases.
 
-### Method 1: Using `c.Bind()` (Manual Binding)
+### Method 1: Using `c.Bind()` 
 
-The simplest approach-manually bind and validate the request data within your handler:
+The simplest approach to bind and validate the request data within your handler:
 
 ```go
 o.Post("/users", func(c *okapi.Context) error {
     var req CreateUserRequest
+	// Automatic binding
     if err := c.Bind(&req); err != nil {
         return c.ErrorBadRequest(err)
     }
@@ -204,98 +294,6 @@ o.Get("/books", okapi.HandleO(func(c *okapi.Context) (*BooksResponse, error) {
 > **Note:** The output struct must follow the body style convention. The response content type is based on the `Accept` header requested by the client, defaulting to `application/json`.
 
 See the complete example in [validation-binding](https://github.com/jkaninda/okapi/tree/main/examples/validation-binding)
-
-
-### OpenAPI & Request Binding
-
-```go
-// Path parameters with type constraints
-o.Get("/books/{id:int}", func(c *okapi.Context) error {
-    id := c.Param("id")
-    return c.JSON(200, okapi.M{"book_id": id})
-})
-
-// Struct binding with automatic validation
-type Book struct {
-    Name  string `json:"name" minLength:"5" maxLength:"50" required:"true"`
-    Price int    `json:"price" min:"1" max:"100" required:"true"`
-}
-
-// Method 1: Using WithIO for cleaner syntax
-o.Put("/books", func(c *okapi.Context) error {
-    book := &Book{}
-    if err := c.Bind(book); err != nil {
-        return c.ErrorBadRequest(err)
-    }
-    return c.OK(book)
-}).WithIO(&Book{}, &Book{})
-
-// Method 2: Using RouteOptions for more control
-o.Post("/books", func(c *okapi.Context) error {
-    book := &Book{}
-    if err := c.Bind(book); err != nil {
-        return c.ErrorBadRequest(err)
-    }
-    return c.Created(book)
-}, 
-    okapi.DocSummary("Create a new book"),
-    okapi.DocRequestBody(Book{}),
-    okapi.DocResponse(Book{}),
-)
-```
-
-### Advanced Request/Response Patterns
-
-Separate your payload from metadata using the `Body` field pattern for cleaner, more maintainable code:
-```go
-type Book struct {
-    Name   string `json:"name" minLength:"4" maxLength:"50" required:"true" pattern:"^[A-Za-z]+$"`
-    Price  int    `json:"price" required:"true" min:"5" max:"100"`
-    Year   int    `json:"year" deprecated:"true"`
-    Status string `json:"status" enum:"available,out_of_stock,discontinued" default:"available"`
-}
-
-type BookRequest struct {
-    Body   Book   `json:"body"`
-    ID     int    `param:"id" query:"id"`
-    APIKey string `header:"X-API-Key" required:"true"`
-}
-
-type BookResponse struct {
-    Status    int    // HTTP status code
-    Body      Book   // Response payload
-    RequestID string `header:"X-Request-ID"` // Custom response header
-}
-
-func main() {
-    o := okapi.Default()
-    
-    o.Post("/books", func(c *okapi.Context) error {
-        var req BookRequest
-        if err := c.Bind(&req); err != nil {
-            return c.ErrorBadRequest(err)
-        }
-        
-        res := &BookResponse{
-            Status:    201,
-            RequestID: uuid.New().String(),
-            Body:      req.Body,
-        }
-        return c.Respond(res) // Automatically sets status, headers, and body based on struct tags
-		// Alternative: return c.Return(res) to use the Status field as the HTTP status code
-    },
-        okapi.DocSummary("Create a new book"),
-        okapi.Request(&BookRequest{}),
-        okapi.Response(BookResponse{}),
-    )
-	// or using WithIO for cleaner syntax
-	// o.Post("/books", createBookHandler).WithIO(&BookRequest{}, &BookResponse{})
-    
-    if err := o.Start(); err != nil {
-        panic(err)
-    }
-}
-```
 
 ### Route Groups & Middleware
 ```go
@@ -410,7 +408,76 @@ admin.Get("/dashboard", getDashboard)
 See the complete example in [examples/middleware](https://github.com/jkaninda/okapi/tree/main/examples/middleware).
 
 ---
+## Templating 
 
+Okapi supports template rendering for serving HTML pages. You can use the built-in renderer, Go's standard `html/template` package, or any custom renderer that implements Okapi's `Renderer` interface.
+### Built-in Template Renderer
+
+```go
+func main() {
+    // Load all .html and .tmpl files from the views directory
+    tmpl, err := okapi.NewTemplateFromDirectory("public/views", ".html", ".tmpl")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+o := okapi.Default().WithRenderer(tmpl)
+
+o.Get("/", func(c *okapi.Context) error {
+    return c.Render(http.StatusOK, "hello", okapi.M{
+        "title":   "Greeting Page",
+        "message": "Hello, World!",
+    })
+})
+
+if err := o.Start(); err != nil {
+log.Fatal(err)
+}
+}
+```
+You can also load templates from a glob pattern instead of a directory:
+```go
+tmpl, err := okapi.NewTemplateFromFiles("public/views/*.html")
+```
+
+### Embedded Templates
+
+For production deployments, embedding templates directly into the binary using Go's `embed` package eliminates runtime file-system dependencies.
+```go
+var (
+    //go:embed views/*
+    Views embed.FS
+
+    AssetsFS = http.FS(must(fs.Sub(Views, "views/assets")))
+)
+
+func main() {
+    app := okapi.New()
+    app.WithRendererFromFS(Views, "views/*.html")
+
+    app.Get("/", func(c *okapi.Context) error {
+        return c.Render(http.StatusOK, "home", okapi.M{
+            "title":    "Go Okapi Bookstore",
+            "headline": "Discover your next great read",
+            "books":    books,
+        })
+    })
+
+    // Serve embedded static assets
+    app.StaticFS("/assets", AssetsFS)
+
+    if err := app.Start(); err != nil {
+        panic(err)
+    }
+}
+func must(fsys fs.FS, err error) fs.FS {
+    if err != nil {
+    panic(err)
+    }
+    return fsys
+}
+
+```
 ## Testing
 
 Built-in testing utilities for comprehensive test coverage:

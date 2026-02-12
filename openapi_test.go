@@ -65,7 +65,7 @@ func TestOpenAPI(t *testing.T) {
 	v2 := api.Group("v2")
 	v1.Post("/books", anyHandler,
 		DocSummary("Book Summary"),
-		DocAutoPathParams(),
+		docAutoPathParams(),
 		DocQueryParamWithDefault("auth", "string", "auth name", true, "defaultAuth"),
 		DocHeaderWithDefault("X-Custom-Header", "string", "A custom header", false, "defaultHeaderValue"),
 		DocBearerAuth(),
@@ -76,7 +76,7 @@ func TestOpenAPI(t *testing.T) {
 	)
 	v1.Put("/books", anyHandler,
 		DocSummary("Book Summary"),
-		DocAutoPathParams(),
+		docAutoPathParams(),
 		DocQueryParam("auth", "string", "auth name", true),
 		DocBearerAuth(),
 		DocResponse(Book{}),
@@ -115,7 +115,7 @@ func TestOpenAPI(t *testing.T) {
 	// V2
 	v2.Post("/books", anyHandler,
 		DocSummary("Book Summary"),
-		DocAutoPathParams(),
+		docAutoPathParams(),
 		DocQueryParam("auth", "string", "auth name", true),
 		DocResponseHeader("X-RateLimit-Limit", "int", "The number of requests allowed per minute"),
 		DocBearerAuth(),

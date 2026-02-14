@@ -43,6 +43,7 @@ import (
 
 const (
 	constInt      = "int"
+	constUint     = "uint"
 	constInt64    = "int64"
 	constInt32    = "int32"
 	constFloat    = "float"
@@ -592,10 +593,10 @@ func DocPathParamWithDefault(name, typ, desc string, defvalue any) RouteOption {
 	}
 }
 
-// DocAutoPathParams automatically extracts path parameters from the route path
+// docAutoPathParams automatically extracts path parameters from the route path
 // and adds them to the documentation.
 // It skips parameters that are already defined.
-func DocAutoPathParams() RouteOption {
+func docAutoPathParams() RouteOption {
 	return func(r *Route) {
 		pathParams := extractPathParams(r.docPath)
 		for _, param := range pathParams {
@@ -975,7 +976,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 		// Auto-extract path parameters if none are defined
 		if len(r.pathParams) == 0 {
-			DocAutoPathParams()(r)
+			docAutoPathParams()(r)
 		}
 		if len(r.operationId) == 0 {
 			if len(r.summary) != 0 {
@@ -1603,6 +1604,97 @@ func buildPathParam(name, typ string) *openapi3.ParameterRef {
 	}
 }
 
+// ExtractPathParams extracts all struct fields with "path" or "param" tags
+func extractPathParamsFromStruct(v any) []*openapi3.ParameterRef {
+	if v == nil {
+		return nil
+	}
+
+	val := reflect.ValueOf(v)
+	typ := val.Type()
+
+	// Handle pointer types
+	if typ.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil
+		}
+		val = val.Elem()
+		typ = val.Type()
+	}
+
+	// Must be a struct
+	if typ.Kind() != reflect.Struct {
+		return nil
+	}
+
+	var params []*openapi3.ParameterRef
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+
+		// Check for "path" or "param" tag
+		paramName := getPathParamName(field)
+		if paramName == "" {
+			continue
+		}
+
+		// Get the field type as string
+		fieldType := getFieldTypeName(field.Type)
+
+		param := buildPathParam(paramName, fieldType)
+		params = append(params, param)
+	}
+	return params
+}
+
+// getPathParamName extracts the parameter name from "path" or "param" struct tags.
+func getPathParamName(field reflect.StructField) string {
+	// Check "path" tag first
+	if tag := field.Tag.Get(tagPath); tag != "" {
+		return parseTagName(tag)
+	}
+
+	// Check "param" tag
+	if tag := field.Tag.Get(tagParam); tag != "" {
+		return parseTagName(tag)
+	}
+
+	return ""
+}
+
+// parseTagName extracts the name from a tag value
+func parseTagName(tag string) string {
+	if tag == "-" {
+		return ""
+	}
+	name, _, _ := strings.Cut(tag, ",")
+	if name == "" {
+		return ""
+	}
+
+	return name
+}
+
+// getFieldTypeName returns the string representation of a reflect.Type
+func getFieldTypeName(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.String:
+		return constString
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return constInt
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return constUint
+	case reflect.Float32, reflect.Float64:
+		return constFloat
+	case reflect.Bool:
+		return constBool
+	case reflect.Ptr:
+		return getFieldTypeName(t.Elem())
+	default:
+		return t.String()
+	}
+}
+
 func normalizeType(t string) string {
 	switch strings.ToLower(t) {
 	case constInt, "integer":
@@ -1891,6 +1983,10 @@ func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 			// Path params are handled elsewhere
 			return true
 		}
+		// Path parameter (request only)
+		if key := sf.Tag.Get(tagParam); key != "" {
+			return true
+		}
 	}
 
 	// Body field
@@ -1959,4 +2055,5 @@ func (r *Route) generateRequestSchema(input any) {
 	if !hasExplicitBinding {
 		r.request = reflectToSchemaWithInfo(input).Schema
 	}
+	r.pathParams = extractPathParamsFromStruct(input)
 }

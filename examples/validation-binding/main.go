@@ -46,12 +46,17 @@ func main() {
 	o := okapi.Default()
 	api := o.Group("api")
 
-	// CREATE - Using okapi.Handle with automatic validation
-	api.Post("/books", okapi.Handle(func(c *okapi.Context, book *Book) error {
+	// CREATE
+	api.Post("/books", func(c *okapi.Context) error {
+		book := &Book{}
+		if err := c.Bind(book); err != nil {
+			return c.AbortBadRequest("Bad request", err)
+		}
 		book.ID = len(books) + 1
 		books = append(books, *book)
 		return c.Created(book)
-	}),
+	},
+		// OpenAPi Doc
 		okapi.DocRequestBody(&Book{}),
 		okapi.DocResponse(&Book{}),
 	)

@@ -43,6 +43,7 @@ import (
 
 const (
 	constInt      = "int"
+	constUint     = "uint"
 	constInt64    = "int64"
 	constInt32    = "int32"
 	constFloat    = "float"
@@ -1678,15 +1679,15 @@ func parseTagName(tag string) string {
 func getFieldTypeName(t reflect.Type) string {
 	switch t.Kind() {
 	case reflect.String:
-		return "string"
+		return constString
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return "int"
+		return constInt
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "uint"
+		return constUint
 	case reflect.Float32, reflect.Float64:
-		return "float"
+		return constFloat
 	case reflect.Bool:
-		return "bool"
+		return constBool
 	case reflect.Ptr:
 		return getFieldTypeName(t.Elem())
 	default:

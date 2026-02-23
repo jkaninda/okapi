@@ -783,23 +783,42 @@ func (o *Okapi) Use(middlewares ...Middleware) {
 // Internally, Okapi converts between http.Handler and HandlerFunc to allow smooth interop.
 func (o *Okapi) UseMiddleware(mw func(http.Handler) http.Handler) {
 	o.Use(func(next HandlerFunc) HandlerFunc {
-		// Convert HandlerFunc to http.Handler
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := NewContext(o, w, r)
-			if err := next(ctx); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		})
-
-		// Apply standard middleware
-		wrapped := mw(h)
-
-		// Convert back to HandlerFunc
 		return func(ctx *Context) error {
-			wrapped.ServeHTTP(ctx.response, ctx.request)
-			return nil
+			return serveWithHTTPMiddleware(ctx, next, mw)
 		}
 	})
+}
+
+func serveWithHTTPMiddleware(ctx *Context, next HandlerFunc, mw func(http.Handler) http.Handler) error {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ctx == nil {
+			return
+		}
+
+		// Reuse the same Okapi context/store so values set by earlier Okapi middleware
+		// remain available after crossing into net/http middleware.
+		ctx.request = r
+
+		// Preserve status/bytes tracking while allowing std middleware to wrap the writer.
+		var restoreResponse func()
+		if rw, ok := ctx.response.(*responseWriter); ok && w != nil && w != ctx.response {
+			original := rw.writer
+			rw.writer = w
+			restoreResponse = func() {
+				rw.writer = original
+			}
+		}
+		if restoreResponse != nil {
+			defer restoreResponse()
+		}
+
+		if err := next(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	mw(h).ServeHTTP(ctx.response, ctx.request)
+	return nil
 }
 
 // StartServer starts the Okapi server with the specified HTTP server
@@ -1202,6 +1221,7 @@ func (o *Okapi) registerOptionsHandler(path string) {
 			}
 
 			header := w.Header()
+			appendVaryHeaders(header, "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers")
 			header.Set(constAccessControlAllowOrigin, origin)
 
 			if o.cors.AllowCredentials {

@@ -264,21 +264,8 @@ func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 // func(http.Handler) http.Handler pattern.
 func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 	g.Use(func(next HandlerFunc) HandlerFunc {
-		// Convert HandlerFunc to http.Handler
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := NewContext(g.okapi, w, r)
-			if err := next(ctx); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		})
-
-		// Apply standard middleware
-		wrapped := mw(h)
-
-		// Convert back to HandlerFunc
 		return func(ctx *Context) error {
-			wrapped.ServeHTTP(ctx.response, ctx.request)
-			return nil
+			return serveWithHTTPMiddleware(ctx, next, mw)
 		}
 	})
 }

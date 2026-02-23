@@ -167,6 +167,45 @@ func allowedOrigin(allowed []string, origin string) bool {
 
 }
 
+func appendVaryHeaders(h http.Header, fields ...string) {
+	if h == nil {
+		return
+	}
+
+	seen := make(map[string]struct{})
+	values := make([]string, 0, len(fields))
+
+	for _, current := range h.Values("Vary") {
+		for _, part := range strings.Split(current, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if _, ok := seen[part]; ok {
+				continue
+			}
+			seen[part] = struct{}{}
+			values = append(values, part)
+		}
+	}
+
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
+		seen[field] = struct{}{}
+		values = append(values, field)
+	}
+
+	if len(values) > 0 {
+		h.Set("Vary", strings.Join(values, ", "))
+	}
+}
+
 // LoadTLSConfig creates a TLS configuration from certificate and key files
 // Parameters:
 //   - certFile: Path to the certificate file (PEM format)

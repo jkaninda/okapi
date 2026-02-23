@@ -59,6 +59,7 @@ func (cors Cors) CORSHandler(next HandlerFunc) HandlerFunc {
 		}
 
 		h := c.response.Header()
+		appendVaryHeaders(h, "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers")
 
 		// Always set origin
 		h.Set(constAccessControlAllowOrigin, origin)

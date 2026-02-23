@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
@@ -354,6 +355,60 @@ func TestStdMiddleware(t *testing.T) {
 	okapitest.POST(t, "http://localhost:8080/api/v1/protected").SetBearerAuth("Token").ExpectStatusCreated().ExpectBody("hello world")
 
 }
+
+func TestStdMiddleware_PreservesOkapiContextValues(t *testing.T) {
+	type ctxKey string
+
+	const requestKey ctxKey = "trace"
+	server := NewTestServer(t)
+	server.DisableAccessLog()
+
+	injectRequestContext := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(context.WithValue(r.Context(), requestKey, "trace-123"))
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	server.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c *Context) error {
+			c.Set("root-value", "root-ok")
+			return next(c)
+		}
+	})
+	server.UseMiddleware(injectRequestContext)
+	server.Get("/root", func(c *Context) error {
+		if c.GetString("root-value") != "root-ok" {
+			return c.String(http.StatusInternalServerError, "missing-root-store")
+		}
+		if got, _ := c.Request().Context().Value(requestKey).(string); got != "trace-123" {
+			return c.String(http.StatusInternalServerError, "missing-root-request-context")
+		}
+		return c.String(http.StatusOK, "ok")
+	})
+
+	group := server.Group("/api")
+	group.Use(func(next HandlerFunc) HandlerFunc {
+		return func(c *Context) error {
+			c.Set("group-value", "group-ok")
+			return next(c)
+		}
+	})
+	group.UseMiddleware(injectRequestContext)
+	group.Get("/ctx", func(c *Context) error {
+		if c.GetString("group-value") != "group-ok" {
+			return c.String(http.StatusInternalServerError, "missing-group-store")
+		}
+		if got, _ := c.Request().Context().Value(requestKey).(string); got != "trace-123" {
+			return c.String(http.StatusInternalServerError, "missing-group-request-context")
+		}
+		return c.String(http.StatusOK, "ok")
+	})
+
+	okapitest.GET(t, server.BaseURL+"/root").ExpectStatusOK().ExpectBody("ok")
+	okapitest.GET(t, server.BaseURL+"/api/ctx").ExpectStatusOK().ExpectBody("ok")
+}
+
 func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string {
 	t.Helper()
 	token, err := GenerateJwtToken(secret, claims, 2*time.Hour)

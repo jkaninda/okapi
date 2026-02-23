@@ -110,7 +110,7 @@ func (jwtAuth *JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 			return secret, nil
 		}, nil
 	}
-	if len(jwtAuth.JwksFile.Keys) != 0 {
+	if jwtAuth.JwksFile != nil && len(jwtAuth.JwksFile.Keys) != 0 {
 		return func(token *jwt.Token) (interface{}, error) {
 			kid, ok := token.Header["kid"].(string)
 			if !ok {

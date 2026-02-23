@@ -36,8 +36,9 @@ import (
 
 type TestServer struct {
 	*Okapi
-	BaseURL string
-	t       TestingT
+	BaseURL     string
+	t           TestingT
+	httptestSrv *httptest.Server
 }
 
 type TestingT interface {
@@ -75,12 +76,16 @@ func NewTestContext(method, url string, body io.Reader) (*Context, *httptest.Res
 func NewTestServer(t TestingT) *TestServer {
 	t.Helper()
 	o := New()
-	baseURL := o.StartForTest(t)
+	o.applyCommon()
+	o.context.okapi = o
+	srv := httptest.NewServer(o)
+	t.Cleanup(srv.Close)
 
 	return &TestServer{
-		Okapi:   o,
-		BaseURL: baseURL,
-		t:       t,
+		Okapi:       o,
+		BaseURL:     srv.URL,
+		t:           t,
+		httptestSrv: srv,
 	}
 }
 
@@ -113,10 +118,16 @@ func (o *Okapi) StartForTest(t TestingT) string {
 		t.Fatalf("Okapi instance is nil")
 	}
 
+	errCh := make(chan error, 1)
+
 	// Start server
 	go func() {
 		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
+			select {
+			case errCh <- err:
+			default:
+				t.Errorf("Server failed to start: %v", err)
+			}
 		}
 	}()
 
@@ -127,8 +138,14 @@ func (o *Okapi) StartForTest(t TestingT) string {
 		}
 	})
 
-	// Wait for server
-	addr := o.WaitForServer(100 * time.Millisecond)
+	// Wait for server startup or startup error
+	addr, err := o.waitForServerOrError(2*time.Second, errCh)
+	if err != nil {
+		t.Fatalf("Server failed to start: %v", err)
+	}
+	if addr == "" {
+		t.Fatalf("Server did not start within timeout")
+	}
 
 	// Build base URL
 	if strings.HasPrefix(addr, ":") {
@@ -136,6 +153,41 @@ func (o *Okapi) StartForTest(t TestingT) string {
 	}
 
 	return "http://" + strings.TrimPrefix(addr, ":")
+}
+
+func (o *Okapi) waitForServerOrError(timeout time.Duration, errCh <-chan error) (string, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-errCh:
+			if err != nil {
+				return "", err
+			}
+		default:
+		}
+
+		if o.server != nil && o.server.Addr != "" {
+			conn, err := net.DialTimeout("tcp", o.server.Addr, 50*time.Millisecond)
+			if err == nil {
+				_ = conn.Close()
+				select {
+				case startErr := <-errCh:
+					if startErr != nil {
+						return "", startErr
+					}
+				default:
+				}
+				return o.server.Addr, nil
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	select {
+	case err := <-errCh:
+		return "", err
+	default:
+	}
+	return "", nil
 }
 
 // WaitForServer waits until the server is ready and returns the address

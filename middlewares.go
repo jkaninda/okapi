@@ -303,11 +303,12 @@ func (jwtAuth *JWTAuth) Middleware(next HandlerFunc) HandlerFunc {
 			return c.AbortUnauthorized("Invalid token")
 
 		}
+		validMethods := jwtAlgo
 		if jwtAuth.Algo != "" {
-			jwtAlgo = []string{jwtAuth.Algo}
+			validMethods = []string{jwtAuth.Algo}
 		}
 		token, err := jwt.Parse(tokenStr, keyFunc,
-			jwt.WithValidMethods(jwtAlgo),
+			jwt.WithValidMethods(validMethods),
 			jwt.WithAudience(jwtAuth.Audience),
 			jwt.WithIssuer(jwtAuth.Issuer))
 		if err != nil || !token.Valid {

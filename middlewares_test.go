@@ -31,6 +31,7 @@ import (
 	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -229,6 +230,58 @@ func TestJwtMiddleware(t *testing.T) {
 	client.GET("/admin/protected").ExpectStatusUnauthorized()
 
 }
+
+func TestJWTResolveKeyFunc_NilJwksFile(t *testing.T) {
+	auth := &JWTAuth{}
+
+	keyFunc, err := auth.resolveKeyFunc()
+	if err == nil {
+		t.Fatal("expected error when no JWT verifier is configured")
+	}
+	if keyFunc != nil {
+		t.Fatal("expected nil keyFunc when no verifier is configured")
+	}
+}
+
+func TestJwtMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
+	original := append([]string(nil), jwtAlgo...)
+	t.Cleanup(func() {
+		jwtAlgo = original
+	})
+
+	auth := &JWTAuth{
+		SigningSecret: SigningSecret,
+		Algo:          "HS256",
+		Audience:      "okapi.example.com",
+		Issuer:        "okapi.example.com",
+	}
+
+	token := mustGenerateToken(t, SigningSecret, jwt.MapClaims{
+		"sub": "12345",
+		"iss": "okapi.example.com",
+		"aud": "okapi.example.com",
+	})
+
+	ctx, _ := NewTestContext(http.MethodGet, "/protected", nil)
+	ctx.okapi = New(WithAccessLogDisabled())
+	ctx.request.Header.Set("Authorization", "Bearer "+token)
+
+	called := false
+	err := auth.Middleware(func(c *Context) error {
+		called = true
+		return nil
+	})(ctx)
+	if err != nil {
+		t.Fatalf("JWT middleware returned error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected next handler to be called")
+	}
+	if !reflect.DeepEqual(jwtAlgo, original) {
+		t.Fatalf("jwtAlgo was mutated: got %v want %v", jwtAlgo, original)
+	}
+}
+
 func TestBasicAuth(t *testing.T) {
 	username := "user"
 	password := "password"

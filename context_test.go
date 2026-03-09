@@ -27,11 +27,12 @@ package okapi
 import (
 	"errors"
 	"fmt"
-	"github.com/jkaninda/okapi/okapitest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 func TestHandler(t *testing.T) {
@@ -75,6 +76,33 @@ func TestServeFile(t *testing.T) {
 	okapitest.GET(t, "http://localhost:8080").ExpectStatusOK()
 
 }
+func TestContextGetFromStringValues(t *testing.T) {
+	ctx, _ := NewTestContext(http.MethodGet, "/test", nil)
+
+	ctx.Set("user_id", "42")
+	ctx.Set("is_admin", "true")
+	ctx.Set("score", "100")
+
+	if v := ctx.GetInt("user_id"); v != 42 {
+		t.Errorf("GetInt from string: expected 42, got %d", v)
+	}
+	if v := ctx.GetInt64("score"); v != 100 {
+		t.Errorf("GetInt64 from string: expected 100, got %d", v)
+	}
+	if v := ctx.GetBool("is_admin"); !v {
+		t.Errorf("GetBool from string: expected true, got false")
+	}
+
+	ctx.Set("direct_int", 7)
+	ctx.Set("direct_bool", true)
+	if v := ctx.GetInt("direct_int"); v != 7 {
+		t.Errorf("GetInt direct: expected 7, got %d", v)
+	}
+	if v := ctx.GetBool("direct_bool"); !v {
+		t.Errorf("GetBool direct: expected true, got false")
+	}
+}
+
 func TestNewTestContext(t *testing.T) {
 	ctx, rec := NewTestContext(http.MethodGet, "/test", nil)
 	if ctx.request.Method != http.MethodGet {

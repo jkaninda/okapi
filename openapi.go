@@ -1440,7 +1440,7 @@ func getJSONFieldName(field reflect.StructField) string {
 // isRequiredFieldWithTag determines if a struct field is required
 func isRequiredFieldWithTag(field reflect.StructField) bool {
 	// First check explicit "required" tag
-	if requiredTag := field.Tag.Get("required"); requiredTag == "true" {
+	if requiredTag := field.Tag.Get("required"); requiredTag == constTRUE {
 		return true
 	}
 

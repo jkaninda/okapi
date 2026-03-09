@@ -29,8 +29,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/gorilla/mux"
-	"gopkg.in/yaml.v3"
 	"html/template"
 	"log/slog"
 	"mime/multipart"
@@ -38,9 +36,13 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -171,6 +173,10 @@ func (c *Context) GetBool(key string) bool {
 	if val, ok := getAs[bool](c, key); ok {
 		return val
 	}
+	// Try converting from string
+	if s, ok := getAs[string](c, key); ok {
+		return s == constTRUE
+	}
 	return false
 }
 
@@ -179,6 +185,16 @@ func (c *Context) GetBool(key string) bool {
 func (c *Context) GetInt(key string) int {
 	if val, ok := getAs[int](c, key); ok {
 		return val
+	}
+	// Try converting from string (e.g. values set by JWT ForwardClaims)
+	if s, ok := getAs[string](c, key); ok {
+		if n, err := strconv.Atoi(s); err == nil {
+			return n
+		}
+	}
+	// Try converting from float64 (e.g. raw JSON-decoded numbers)
+	if f, ok := getAs[float64](c, key); ok {
+		return int(f)
 	}
 	return 0
 }
@@ -189,7 +205,17 @@ func (c *Context) GetInt64(key string) int64 {
 	if val, ok := getAs[int64](c, key); ok {
 		return val
 	}
-	return 0 // Default value if not found or wrong type
+	// Try converting from string
+	if s, ok := getAs[string](c, key); ok {
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return n
+		}
+	}
+	// Try converting from float64
+	if f, ok := getAs[float64](c, key); ok {
+		return int64(f)
+	}
+	return 0
 }
 
 // Copy creates a shallow copy of the context with a new data map.

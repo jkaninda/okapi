@@ -26,8 +26,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/jkaninda/okapi"
 	"net/http"
+
+	"github.com/jkaninda/okapi"
 )
 
 type User struct {
@@ -81,7 +82,7 @@ func main() {
 	v1.Post("/users", store)
 
 	// Create a new group with a base path v2
-	v2 := api.Group("/v2")
+	v2 := api.Group("/v2").WithTags([]string{"usersV2"})
 	// Define a route with a handler
 	v2.Get("/users", func(c *okapi.Context) error {
 		c.SetHeader("Version", "v2")

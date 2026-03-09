@@ -141,12 +141,13 @@ func (g *Group) add(method, path string, h HandlerFunc, opts ...RouteOption) *Ro
 	for i := len(g.middlewares) - 1; i >= 0; i-- {
 		finalHandler = g.middlewares[i](finalHandler)
 	}
-	tags := g.Tags
-	if len(tags) == 0 {
-		tags = []string{g.Prefix}
-	}
 	// Register the route with the joined base path and route path
-	return g.okapi.addRoute(method, fullPath, tags, finalHandler, opts...).setDisabled(g.disabled)
+	route := g.okapi.addRoute(method, fullPath, g.Tags, finalHandler, opts...)
+	// Use group prefix as fallback
+	if len(route.tags) == 0 {
+		route.tags = []string{g.Prefix}
+	}
+	return route.setDisabled(g.disabled)
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
@@ -159,14 +160,6 @@ func (g *Group) handle(method, path string, h HandlerFunc, opts ...RouteOption) 
 	}
 	if g.deprecated {
 		opts = append(opts, DocDeprecated())
-	}
-	if len(g.Tags) != 0 {
-		for _, tag := range g.Tags {
-			if tag == "" {
-				continue // Skip empty tags
-			}
-			opts = append(opts, DocTag(tag))
-		}
 	}
 	if len(g.security) > 0 {
 		opts = append(opts, withSecurity(g.security))
@@ -322,13 +315,14 @@ func (g *Group) Register(routes ...RouteDefinition) {
 		} else if r.Group.okapi == nil {
 			r.Group.okapi = g.okapi
 		}
-		tags := r.Group.Tags
-		if len(tags) == 0 {
-			tags = []string{g.Prefix}
-		}
 		for _, mid := range r.Middlewares {
 			r.Options = append(r.Options, UseMiddleware(mid))
 		}
-		g.okapi.addRoute(r.Method, joinPaths(g.Prefix, r.Path), tags, r.Handler, r.Options...).setDisabled(g.disabled)
+		route := g.okapi.addRoute(r.Method, joinPaths(g.Prefix, r.Path), r.Group.Tags, r.Handler, r.Options...)
+		// Use group prefix as fallback
+		if len(route.tags) == 0 {
+			route.tags = []string{g.Prefix}
+		}
+		route.setDisabled(g.disabled)
 	}
 }

@@ -26,10 +26,11 @@ package okapi
 
 import (
 	"errors"
-	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
 	"testing"
+
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 func TestGroup(t *testing.T) {
@@ -77,7 +78,7 @@ func TestGroup(t *testing.T) {
 		slog.Info("Calling route", "path", c.request.URL.Path)
 		return c.OK(M{"message": "Welcome to Okapi!"})
 	})
-	newG := NewGroup("group", o, LoggerMiddleware)
+	newG := NewGroup("group", o, LoggerMiddleware).WithTags([]string{"group"})
 	newG.Get("/group", func(c *Context) error {
 		slog.Info("Calling route", "path", c.request.URL.Path)
 		return c.OK(M{"message": "Welcome to Okapi's new group!"})

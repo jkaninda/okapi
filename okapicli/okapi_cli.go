@@ -28,9 +28,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jkaninda/okapi"
-	"github.com/spf13/pflag"
-	"gopkg.in/yaml.v3"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -39,6 +36,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/jkaninda/okapi"
+	"github.com/spf13/pflag"
+	"gopkg.in/yaml.v3"
 )
 
 const (

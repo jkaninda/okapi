@@ -25,10 +25,14 @@
 package main
 
 import (
+	"log/slog"
+	"net/http"
+	"os"
+	"time"
+
 	goutils "github.com/jkaninda/go-utils"
 	"github.com/jkaninda/okapi"
-	"net/http"
-	"time"
+	"github.com/jkaninda/okapi/okapicli"
 )
 
 const template = `
@@ -158,6 +162,7 @@ func main() {
 	//
 	// Creates a new Okapi instance
 	o := okapi.Default()
+	cli := okapicli.New(o, "Okapi SSE Example")
 
 	o.Get("/", func(c *okapi.Context) error {
 		return c.HTMLView(http.StatusOK, template, okapi.M{
@@ -192,9 +197,21 @@ func main() {
 		}
 	})
 
-	// Start the server
-	err := o.Start()
-	if err != nil {
+	// Run server with lifecycle hooks
+	if err := cli.RunServer(&okapicli.RunOptions{
+		ShutdownTimeout: 30 * time.Second,                               // Optional: customize shutdown timeout
+		Signals:         []os.Signal{okapicli.SIGINT, okapicli.SIGTERM}, // Optional: customize shutdown signals
+		OnStart: func() {
+			slog.Info("Preparing resources before startup")
+
+		},
+		OnStarted: func() {
+			slog.Info("Server started successfully")
+		},
+		OnShutdown: func() {
+			slog.Info("Cleaning up before shutdown")
+		},
+	}); err != nil {
 		panic(err)
 	}
 }

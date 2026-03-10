@@ -516,6 +516,11 @@ func (c *Context) SSESendEvent(id, eventType string, data any) error {
 
 // SSEStream keeps connection open for multiple messages
 func (c *Context) SSEStream(ctx context.Context, messageChan <-chan Message) error {
+	// Set SSE headers and flush immediately
+	(&Message{}).setSSEHeaders(c.response)
+	if flusher, ok := c.response.(http.Flusher); ok {
+		flusher.Flush()
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -581,6 +586,12 @@ func (c *Context) SendSSECustom(data any, serializer Serializer) error {
 func (c *Context) SSEStreamWithOptions(ctx context.Context, messageChan <-chan Message, opts *StreamOptions) error {
 	if opts == nil {
 		opts = &StreamOptions{}
+	}
+
+	// Set SSE headers and flush immediately
+	(&Message{}).setSSEHeaders(c.response)
+	if flusher, ok := c.response.(http.Flusher); ok {
+		flusher.Flush()
 	}
 
 	var ticker *time.Ticker

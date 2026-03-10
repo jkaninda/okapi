@@ -62,6 +62,7 @@ type (
 		middlewares        []Middleware
 		server             *http.Server
 		tlsServer          *http.Server
+		baseCancel         context.CancelFunc
 		tlsConfig          *tls.Config
 		tlsServerConfig    *tls.Config
 		withTlsServer      bool
@@ -813,6 +814,14 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	}
 	o.server = server
 	server.Handler = o
+
+	// Set BaseContext so all request contexts derive from a cancellable parent.
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	o.baseCancel = baseCancel
+	server.BaseContext = func(_ net.Listener) context.Context {
+		return baseCtx
+	}
+
 	o.router.muxRouter.StrictSlash(o.strictSlash)
 	o.context.okapi = o
 	o.applyCommon()
@@ -832,6 +841,7 @@ func (o *Okapi) StartServer(server *http.Server) error {
 		}()
 
 		o.tlsServer.Handler = o
+		o.tlsServer.BaseContext = server.BaseContext
 		return o.tlsServer.ListenAndServeTLS("", "")
 	}
 
@@ -868,6 +878,11 @@ func (o *Okapi) shutdownServer(ctx context.Context, server *http.Server, serverT
 	}
 
 	_, _ = fmt.Fprintf(defaultWriter, "[Okapi] Gracefully shutting down %s server at %s\n", serverType, server.Addr)
+
+	// Cancel the base context to notify all in-flight requests (including SSE streams)
+	if o.baseCancel != nil {
+		o.baseCancel()
+	}
 
 	if err := server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("%s shutdown error at %s: %w", serverType, server.Addr, err)

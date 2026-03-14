@@ -29,11 +29,13 @@ import (
 	"crypto/rsa"
 	"crypto/subtle"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	goutils "github.com/jkaninda/go-utils"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	goutils "github.com/jkaninda/go-utils"
 )
 
 // BasicAuthMiddleware is a middleware that adds basic authentication to the request context.
@@ -368,5 +370,21 @@ func (jwtAuth *JWTAuth) Middleware(next HandlerFunc) HandlerFunc {
 			}
 		}
 		return next(c)
+	}
+}
+
+// RequestID sets a request ID from X-Request-ID or generates one
+// and stores it in the context and response header.
+func RequestID() Middleware {
+	return func(next HandlerFunc) HandlerFunc {
+		return func(c *Context) error {
+			id := c.Header(requestIDHeader)
+			if id == "" {
+				id = uuid.New().String()
+			}
+			c.Set("request_id", id)
+			c.Response().Header().Set(requestIDHeader, id)
+			return next(c)
+		}
 	}
 }

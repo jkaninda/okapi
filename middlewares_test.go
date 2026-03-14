@@ -27,14 +27,15 @@ package okapi
 import (
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 var (
@@ -328,6 +329,7 @@ func TestStdMiddleware(t *testing.T) {
 		})
 
 	})
+	o.Use(RequestID())
 	o.Get("/", func(c *Context) error {
 		return c.JSON(http.StatusOK, M{"hello": "world"})
 	}).Use(helloMiddleware)
@@ -399,7 +401,8 @@ func TestStdMiddleware(t *testing.T) {
 
 	waitForServer()
 	okapitest.GET(t, "http://localhost:8080/").ExpectStatusOK().ExpectHeader("Version", "v1.0")
-	okapitest.GET(t, "http://localhost:8080/api").ExpectStatusOK().ExpectHeader("Group", "api")
+	okapitest.GET(t, "http://localhost:8080/api").ExpectStatusOK().ExpectHeader("Group", "api").ExpectHeaderContains(requestIDHeader, "")
+	okapitest.GET(t, "http://localhost:8080/api").ExpectStatusOK().ExpectHeaderContains("jonas", "")
 	okapitest.GET(t, "http://localhost:8080/api/hello").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/hello").ExpectStatusOK()
 	okapitest.POST(t, "http://localhost:8080/hello").ExpectStatusCreated().ExpectBody("hello world")

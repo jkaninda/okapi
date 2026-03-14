@@ -111,6 +111,9 @@ func main() {
 		return nil
 	})
 
+	// Set "serve" as the default command (runs when no subcommand is given)
+	cli.DefaultCommand("serve")
+
 	// Execute: parses os.Args for the subcommand and runs it
 	// Usage:
 	//   myapp serve --port 9090 --debug

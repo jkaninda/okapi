@@ -459,6 +459,64 @@ func TestCLI_Execute_NoCommands_FallsBack(t *testing.T) {
 	}
 }
 
+func TestCLI_DefaultCommand(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	var ran bool
+	var gotPort int
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		ran = true
+		gotPort = cmd.GetInt("port")
+		return nil
+	}).Int("port", "p", 8080, "HTTP server port")
+
+	cli.DefaultCommand("serve")
+
+	// No subcommand given, just flags
+	restore := setOSArgs("--port", "9090")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if !ran {
+		t.Error("Expected default command 'serve' to run")
+	}
+	if gotPort != 9090 {
+		t.Error("Expected port 9090, got", gotPort)
+	}
+	if cli.MatchedCommand() == nil || cli.MatchedCommand().Name() != "serve" {
+		t.Error("Expected matched command to be 'serve'")
+	}
+}
+
+func TestCLI_DefaultCommand_NoArgs(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	var ran bool
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		ran = true
+		return nil
+	}).Int("port", "p", 8080, "HTTP server port")
+
+	cli.DefaultCommand("serve")
+
+	// No args at all
+	restore := setOSArgs()
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if !ran {
+		t.Error("Expected default command 'serve' to run with no args")
+	}
+}
+
 func TestCLI_Command_RunServer(t *testing.T) {
 	app := okapi.New()
 	cli := New(app, "test-app")

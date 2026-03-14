@@ -64,6 +64,8 @@ type CLI struct {
 	commandOrder []string
 	// matchedCommand holds the command that was matched during Execute
 	matchedCommand *Command
+	// defaultCommand is the command name to run when no subcommand is specified
+	defaultCommand string
 }
 
 // Command represents a CLI subcommand with its own flags, description, and run handler
@@ -505,6 +507,13 @@ func (c *CLI) Command(name, description string, run func(cmd *Command) error) *C
 	return cmd
 }
 
+// DefaultCommand sets the command to run when no subcommand is specified.
+// The named command must be registered via Command() before calling Execute().
+func (c *CLI) DefaultCommand(name string) *CLI {
+	c.defaultCommand = name
+	return c
+}
+
 // MatchedCommand returns the command that was matched during Execute, or nil if none
 func (c *CLI) MatchedCommand() *Command {
 	return c.matchedCommand
@@ -531,15 +540,20 @@ func (c *CLI) Execute() error {
 		}
 	}
 
-	if cmdName == "" {
-		c.printUsage()
-		return fmt.Errorf("no subcommand specified")
-	}
-
+	// If no subcommand found or the name isn't a registered command, try the default
 	cmd, ok := c.commands[cmdName]
 	if !ok {
-		c.printUsage()
-		return fmt.Errorf("unknown command: %s", cmdName)
+		if c.defaultCommand != "" {
+			cmdName = c.defaultCommand
+			cmd = c.commands[cmdName]
+			cmdArgs = args // pass all original args to the default command
+		} else if cmdName == "" {
+			c.printUsage()
+			return fmt.Errorf("no subcommand specified")
+		} else {
+			c.printUsage()
+			return fmt.Errorf("unknown command: %s", cmdName)
+		}
 	}
 
 	c.matchedCommand = cmd

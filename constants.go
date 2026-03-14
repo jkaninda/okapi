@@ -107,4 +107,6 @@ const (
 	defaultStatus    = 200
 	constLocalhost   = "localhost"
 	constDevelopment = "development"
+
+	requestIDHeader = "X-Request-ID"
 )

@@ -708,7 +708,7 @@ func validateMinMax(field reflect.Value, sf reflect.StructField) error {
 	return nil
 }
 
-// validateSlice maxItems and minItems
+// validateSlice validates minItems, maxItems, uniqueItems, and element-level format/pattern
 func validateSlice(field reflect.Value, sf reflect.StructField) error {
 	// Slice minItems/maxItems
 	if minItemsTag := sf.Tag.Get(tagMinItems); minItemsTag != "" {
@@ -725,6 +725,18 @@ func validateSlice(field reflect.Value, sf reflect.StructField) error {
 	if sf.Tag.Get(tagUniqueItems) == constTRUE {
 		if err := checkUniqueItems(field); err != nil {
 			return fmt.Errorf("field %s: %v", sf.Name, err)
+		}
+	}
+	// Element-level format validation
+	if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
+		if err := checkFormat(field, formatTag, sf); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	// Element-level pattern validation
+	if patternTag := sf.Tag.Get(tagPattern); patternTag != "" {
+		if err := checkPattern(field, patternTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
 		}
 	}
 	return nil

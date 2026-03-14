@@ -89,6 +89,22 @@ func NewTestServer(t TestingT) *TestServer {
 	}
 }
 
+// NewTestServerWIthOkapi creates and starts Okapi test server.
+func NewTestServerWithOkapi(t TestingT, o *Okapi) *TestServer {
+	t.Helper()
+	o.applyCommon()
+	o.context.okapi = o
+	srv := httptest.NewServer(o)
+	t.Cleanup(srv.Close)
+
+	return &TestServer{
+		Okapi:       o,
+		BaseURL:     srv.URL,
+		t:           t,
+		httptestSrv: srv,
+	}
+}
+
 // NewTestServerOn creates and starts a new Okapi test server.
 //
 // Example:

@@ -561,6 +561,7 @@ func checkFormatValue(field reflect.Value, formatTag string, sf reflect.StructFi
 		return fmt.Errorf("unsupported format: %s", formatTag)
 	}
 }
+
 // checkPattern validates a field against a regex pattern.
 // For slice fields, each element is validated individually.
 func checkPattern(field reflect.Value, pattern string) error {

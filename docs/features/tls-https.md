@@ -163,11 +163,9 @@ o.Use(redirectToHTTPS)
 ### Example: Adding HSTS Header
 
 ```go
-func hstsMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
-    return func(c *okapi.Context) error {
-        c.SetHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        return next(c)
-    }
+func hstsMiddleware(c *okapi.Context) error {
+    c.SetHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return c.Next()
 }
 
 o.Use(hstsMiddleware)

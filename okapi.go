@@ -124,7 +124,6 @@ type (
 		hidden          bool
 		internal        bool
 		handle          HandlerFunc
-		handler         HandlerFunc
 		cookies         []*openapi3.ParameterRef
 	}
 
@@ -153,7 +152,10 @@ type (
 	// HandlerFunc is a function type that takes a Context and returns an error.
 	HandlerFunc func(*Context) error
 
-	Middleware func(next HandlerFunc) HandlerFunc
+	// Middleware is a function that processes a request before or after the next handler.
+	// Call c.Next() to pass control to the next middleware or final handler.
+	Middleware     = HandlerFunc
+	MiddlewareFunc = HandlerFunc
 
 	// Response implementation
 	responseWriter struct {
@@ -164,9 +166,9 @@ type (
 	}
 )
 
-// chain is an interface that defines a method for chaining handlers.
+// chain is an interface that provides access to global middlewares for building handler chains.
 type chain interface {
-	next(hf HandlerFunc) HandlerFunc
+	globalMiddlewares() []Middleware
 }
 
 // Hide marks the Route as hidden, preventing it from being listed in OpenAPI documentation.
@@ -277,7 +279,6 @@ func (r *Route) Use(m ...Middleware) {
 		return
 	}
 	r.middlewares = append(r.middlewares, m...)
-	r.handler = r.next(r.handle)
 }
 
 // ****** OKAPI OPTIONS ******
@@ -751,12 +752,18 @@ func (o *Okapi) StartOn(port int) error {
 //
 // Middleware functions have the signature:
 //
-//	func(next HandlerFunc) HandlerFunc
+//	func(c *Context) error
+//
+// Call c.Next() inside middleware to pass control to the next handler in the chain.
 //
 // Example:
 //
-//	// Add logging and authentication middleware
-//	okapi.Use(LoggingMiddleware, AuthMiddleware)
+//	okapi.Use(func(c *okapi.Context) error {
+//	    log.Println("before")
+//	    err := c.Next()
+//	    log.Println("after")
+//	    return err
+//	})
 //
 // Note: For group-specific middleware, use Group.Use() instead.
 func (o *Okapi) Use(middlewares ...Middleware) {
@@ -783,23 +790,20 @@ func (o *Okapi) Use(middlewares ...Middleware) {
 //
 // Internally, Okapi converts between http.Handler and HandlerFunc to allow smooth interop.
 func (o *Okapi) UseMiddleware(mw func(http.Handler) http.Handler) {
-	o.Use(func(next HandlerFunc) HandlerFunc {
-		// Convert HandlerFunc to http.Handler
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := NewContext(o, w, r)
-			if err := next(ctx); err != nil {
+	o.Use(func(c *Context) error {
+		// Convert the rest of the chain into an http.Handler
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Continue the Okapi middleware chain
+			c.request = r
+			if err := c.Next(); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
 
-		// Apply standard middleware
-		wrapped := mw(h)
-
-		// Convert back to HandlerFunc
-		return func(ctx *Context) error {
-			wrapped.ServeHTTP(ctx.response, ctx.request)
-			return nil
-		}
+		// Apply standard middleware and serve
+		wrapped := mw(next)
+		wrapped.ServeHTTP(c.response, c.request)
+		return nil
 	})
 }
 
@@ -1107,7 +1111,6 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts
 		opt(route)
 	}
 	o.routes = append(o.routes, route)
-	route.handler = route.next(h)
 	// Main handler
 	o.router.muxRouter.StrictSlash(o.strictSlash).HandleFunc(normalizedPath, func(w http.ResponseWriter, r *http.Request) {
 		ctx := NewContext(o, w, r)
@@ -1116,8 +1119,11 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 			return
 		}
+		// Build the handler chain: global middlewares + route middlewares + handler
+		ctx.handlers = route.buildHandlers()
+		ctx.index = -1
 		// Any error returned by the route will result in a 500 Internal Server Error
-		if err := route.handler(ctx); err != nil {
+		if err := ctx.Next(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}).Methods(method)
@@ -1268,21 +1274,20 @@ func (o *Okapi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler(ctx)
 }
 
-// next applies the middlewares in correct order
-func (o *Okapi) next(h HandlerFunc) HandlerFunc {
-	// Start with the original handler
-	for i := len(o.middlewares) - 1; i >= 0; i-- {
-		h = o.middlewares[i](h)
-	}
-	return h
+// globalMiddlewares returns the global middleware chain.
+func (o *Okapi) globalMiddlewares() []Middleware {
+	return o.middlewares
 }
 
-// next applies the middlewares in correct order for a specific route
-func (r *Route) next(h HandlerFunc) HandlerFunc {
-	for i := len(r.middlewares) - 1; i >= 0; i-- {
-		h = r.middlewares[i](h)
-	}
-	return r.chain.next(h)
+// buildHandlers constructs the full handler chain for a route:
+// global middlewares + route middlewares + final handler.
+func (r *Route) buildHandlers() []HandlerFunc {
+	global := r.chain.globalMiddlewares()
+	handlers := make([]HandlerFunc, 0, len(global)+len(r.middlewares)+1)
+	handlers = append(handlers, global...)
+	handlers = append(handlers, r.middlewares...)
+	handlers = append(handlers, r.handle)
+	return handlers
 }
 func (o *Okapi) Routes() []Route {
 	routes := make([]Route, 0, len(o.routes))
@@ -1407,30 +1412,28 @@ func (o *Okapi) NoMethod(h HandlerFunc) {
 }
 
 // handleAccessLog logs the access details of the request
-func handleAccessLog(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		if c.IsWebSocketUpgrade() || c.IsSSE() || !c.okapi.accessLog {
-			return next(c)
-		}
-		startTime := time.Now()
-		err := next(c)
-		status := c.response.StatusCode()
-		logger := c.okapi.logger
-		logFields := buildBaseLogFields(c, status, time.Since(startTime))
-		if c.okapi.debug {
-			debugFields := buildDebugFields(c)
-			logFields = append(logFields, debugFields...)
-		}
-		switch {
-		case status >= 500:
-			logger.Error("[okapi] Incoming request", logFields...)
-		case status >= 400:
-			logger.Warn("[okapi] Incoming request", logFields...)
-		default:
-			logger.Info("[okapi] Incoming request", logFields...)
-		}
-		return err
+func handleAccessLog(c *Context) error {
+	if c.IsWebSocketUpgrade() || c.IsSSE() || !c.okapi.accessLog {
+		return c.Next()
 	}
+	startTime := time.Now()
+	err := c.Next()
+	status := c.response.StatusCode()
+	logger := c.okapi.logger
+	logFields := buildBaseLogFields(c, status, time.Since(startTime))
+	if c.okapi.debug {
+		debugFields := buildDebugFields(c)
+		logFields = append(logFields, debugFields...)
+	}
+	switch {
+	case status >= 500:
+		logger.Error("[okapi] Incoming request", logFields...)
+	case status >= 400:
+		logger.Warn("[okapi] Incoming request", logFields...)
+	default:
+		logger.Info("[okapi] Incoming request", logFields...)
+	}
+	return err
 }
 
 // buildBaseLogFields constructs the core log fields

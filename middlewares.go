@@ -195,196 +195,186 @@ type (
 
 // LoggerMiddleware is a middleware that logs request details like method, URL, client IP,
 // status, duration, referer, and user agent.
-func LoggerMiddleware(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		if c.IsWebSocketUpgrade() || c.IsSSE() {
-			// Skip logging for WebSocket upgrades or Server-Sent Events
-			return next(c)
-		}
-		startTime := time.Now()
-		err := next(c)
-		status := c.response.StatusCode()
-		duration := goutils.FormatDuration(time.Since(startTime), 2)
-
-		logger := c.okapi.logger
-		args := []any{
-			"method", c.request.Method,
-			"url", c.request.URL.Path,
-			"ip", c.RealIP(),
-			"host", c.request.Host,
-			"status", status,
-			"duration", duration,
-			"referer", c.request.Referer(),
-			"user_agent", c.request.UserAgent(),
-		}
-		switch {
-		case status >= 500:
-			logger.Error("[okapi] Incoming request", args...)
-		case status >= 400:
-			logger.Warn("[okapi] Incoming request", args...)
-		default:
-			logger.Info("[okapi] Incoming request", args...)
-		}
-		return err
+func LoggerMiddleware(c *Context) error {
+	if c.IsWebSocketUpgrade() || c.IsSSE() {
+		// Skip logging for WebSocket upgrades or Server-Sent Events
+		return c.Next()
 	}
+	startTime := time.Now()
+	err := c.Next()
+	status := c.response.StatusCode()
+	duration := goutils.FormatDuration(time.Since(startTime), 2)
+
+	logger := c.okapi.logger
+	args := []any{
+		"method", c.request.Method,
+		"url", c.request.URL.Path,
+		"ip", c.RealIP(),
+		"host", c.request.Host,
+		"status", status,
+		"duration", duration,
+		"referer", c.request.Referer(),
+		"user_agent", c.request.UserAgent(),
+	}
+	switch {
+	case status >= 500:
+		logger.Error("[okapi] Incoming request", args...)
+	case status >= 400:
+		logger.Warn("[okapi] Incoming request", args...)
+	default:
+		logger.Info("[okapi] Incoming request", args...)
+	}
+	return err
 }
 
 // Middleware is a basic authentication middleware that checks Basic Auth credentials.
 // It returns 401 Unauthorized and sets the WWW-Authenticate header on failure.
-func (b *BasicAuth) Middleware(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		username, password, ok := c.request.BasicAuth()
-		if !ok ||
-			subtle.ConstantTimeCompare([]byte(username), []byte(b.Username)) != 1 ||
-			subtle.ConstantTimeCompare([]byte(password), []byte(b.Password)) != 1 {
+func (b *BasicAuth) Middleware(c *Context) error {
+	username, password, ok := c.request.BasicAuth()
+	if !ok ||
+		subtle.ConstantTimeCompare([]byte(username), []byte(b.Username)) != 1 ||
+		subtle.ConstantTimeCompare([]byte(password), []byte(b.Password)) != 1 {
 
-			realm := b.Realm
-			if realm == "" {
-				realm = okapiName
-			}
-			c.Logger().Warn("Basic Authentication Required", "ip", c.RealIP(), "realm", realm)
-			c.response.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
-			return c.String(http.StatusUnauthorized, "Unauthorized")
+		realm := b.Realm
+		if realm == "" {
+			realm = okapiName
 		}
-		contextKey := b.ContextKey
-		if contextKey == "" {
-			contextKey = "username"
-		}
-		c.Set(contextKey, username)
-		return next(c)
+		c.Logger().Warn("Basic Authentication Required", "ip", c.RealIP(), "realm", realm)
+		c.response.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
+		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
+	contextKey := b.ContextKey
+	if contextKey == "" {
+		contextKey = "username"
+	}
+	c.Set(contextKey, username)
+	return c.Next()
 }
 
 // Middleware
 //
 // deprecate, use BasicAuth.Middleware
-func (b *BasicAuthMiddleware) Middleware(next HandlerFunc) HandlerFunc {
+func (b *BasicAuthMiddleware) Middleware(c *Context) error {
 	auth := BasicAuth{Username: b.Username, Password: b.Password, ContextKey: b.ContextKey}
-	return auth.Middleware(next)
+	return auth.Middleware(c)
 }
 
 // Middleware is a middleware that limits the size of the request body to prevent excessive memory usage.
-func (b BodyLimit) Middleware(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		const errReadBody = "Failed to read request body"
-		const errTooLarge = "Request body too large"
+func (b BodyLimit) Middleware(c *Context) error {
+	const errReadBody = "Failed to read request body"
+	const errTooLarge = "Request body too large"
 
-		// LimitReader prevents reading more than MaxBytes+1
-		body, err := io.ReadAll(io.LimitReader(c.request.Body, b.MaxBytes+1))
-		if err != nil {
-			return c.String(http.StatusInternalServerError, errReadBody)
-		}
-		if int64(len(body)) > b.MaxBytes {
-			c.Logger().Warn("Request body too large", "size", len(body), "max_size", b.MaxBytes, "ip", c.RealIP())
-			return c.String(http.StatusRequestEntityTooLarge, errTooLarge)
-		}
-
-		// Reset request body for downstream handlers
-		c.request.Body = io.NopCloser(bytes.NewReader(body))
-		return next(c)
+	// LimitReader prevents reading more than MaxBytes+1
+	body, err := io.ReadAll(io.LimitReader(c.request.Body, b.MaxBytes+1))
+	if err != nil {
+		return c.String(http.StatusInternalServerError, errReadBody)
 	}
+	if int64(len(body)) > b.MaxBytes {
+		c.Logger().Warn("Request body too large", "size", len(body), "max_size", b.MaxBytes, "ip", c.RealIP())
+		return c.String(http.StatusRequestEntityTooLarge, errTooLarge)
+	}
+
+	// Reset request body for downstream handlers
+	c.request.Body = io.NopCloser(bytes.NewReader(body))
+	return c.Next()
 }
 
 // Middleware validates JWT tokens from the configured source
-func (jwtAuth *JWTAuth) Middleware(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		tokenStr, err := jwtAuth.extractToken(c)
-		if err != nil || tokenStr == "" {
-			c.Logger().Debug("Failed to extract token", "error", err, "ip", c.RealIP())
-			c.Logger().Warn("Failed to extract token", "error", err, "ip", c.RealIP())
-			if jwtAuth.OnUnauthorized != nil {
-				return jwtAuth.OnUnauthorized(c)
-			}
-			return c.AbortUnauthorized("Missing or invalid token", err)
+func (jwtAuth *JWTAuth) Middleware(c *Context) error {
+	tokenStr, err := jwtAuth.extractToken(c)
+	if err != nil || tokenStr == "" {
+		c.Logger().Debug("Failed to extract token", "error", err, "ip", c.RealIP())
+		c.Logger().Warn("Failed to extract token", "error", err, "ip", c.RealIP())
+		if jwtAuth.OnUnauthorized != nil {
+			return jwtAuth.OnUnauthorized(c)
 		}
-
-		keyFunc, err := jwtAuth.resolveKeyFunc()
-		if err != nil {
-			c.Logger().Warn("Failed to resolve key function", "ip", c.RealIP(), "error", err)
-			c.Logger().Debug("Failed to resolve key function", "ip", c.RealIP(), "token", tokenStr, "error", err)
-			return c.AbortUnauthorized("Invalid token")
-
-		}
-		validMethods := jwtAlgo
-		if jwtAuth.Algo != "" {
-			validMethods = []string{jwtAuth.Algo}
-		}
-		token, err := jwt.Parse(tokenStr, keyFunc,
-			jwt.WithValidMethods(validMethods),
-			jwt.WithAudience(jwtAuth.Audience),
-			jwt.WithIssuer(jwtAuth.Issuer))
-		if err != nil || !token.Valid {
-			if jwtAuth.OnUnauthorized != nil {
-				return jwtAuth.OnUnauthorized(c)
-			}
-			return c.AbortUnauthorized("Invalid or expired token", err)
-		}
-
-		// If claims expression is configured, validate the claims
-		if jwtAuth.ClaimsExpression != "" {
-			valid, err := jwtAuth.validateJWTClaims(token)
-			if err != nil {
-				c.Logger().Warn("Failed to validate JWT claims expression", "error", err)
-				if jwtAuth.OnUnauthorized != nil {
-					return jwtAuth.OnUnauthorized(c)
-				}
-				return c.AbortUnauthorized("failed to validate authentication permissions", err)
-			}
-			if !valid {
-				c.Logger().Warn("JWT claims did not meet required expression ", "error", err)
-				if jwtAuth.OnUnauthorized != nil {
-					return jwtAuth.OnUnauthorized(c)
-				}
-				return c.AbortForbidden("Insufficient permissions", err)
-			}
-		}
-		// If custom claims validation function is provided, use it
-		if jwtAuth.ValidateClaims != nil {
-			if err = jwtAuth.ValidateClaims(c, token.Claims); err != nil {
-				c.Logger().Warn("Failed to validate Claims Expression", "function", "ValidateClaims", "error", err)
-				c.Logger().Debug("Failed to validate Claims Expression", "function", "ValidateClaims", "expression", jwtAuth.ClaimsExpression, "error", err)
-				if jwtAuth.OnUnauthorized != nil {
-					return jwtAuth.OnUnauthorized(c)
-				}
-				return c.AbortForbidden("Insufficient permissions")
-			}
-		}
-		// If ValidateRole is configured, validate the role claim
-		if jwtAuth.ValidateRole != nil {
-			if err = jwtAuth.ValidateRole(token.Claims); err != nil {
-				c.Logger().Warn("Failed to validate JWT role", "function", "ValidateRole", "error", err)
-				if jwtAuth.OnUnauthorized != nil {
-					return jwtAuth.OnUnauthorized(c)
-				}
-				return c.AbortForbidden("Insufficient permissions", err)
-			}
-		}
-		// Store claims in context
-		if jwtAuth.ContextKey != "" && token.Claims != nil {
-			c.Set(jwtAuth.ContextKey, token.Claims)
-		}
-		// Forward specific claims to context if configured
-		if jwtAuth.ForwardClaims != nil {
-			if err = jwtAuth.forwardContextFromClaims(token, c); err != nil {
-				c.Logger().Error("Failed to forward context from claims", "error", err)
-			}
-		}
-		return next(c)
+		return c.AbortUnauthorized("Missing or invalid token", err)
 	}
+
+	keyFunc, err := jwtAuth.resolveKeyFunc()
+	if err != nil {
+		c.Logger().Warn("Failed to resolve key function", "ip", c.RealIP(), "error", err)
+		c.Logger().Debug("Failed to resolve key function", "ip", c.RealIP(), "token", tokenStr, "error", err)
+		return c.AbortUnauthorized("Invalid token")
+
+	}
+	validMethods := jwtAlgo
+	if jwtAuth.Algo != "" {
+		validMethods = []string{jwtAuth.Algo}
+	}
+	token, err := jwt.Parse(tokenStr, keyFunc,
+		jwt.WithValidMethods(validMethods),
+		jwt.WithAudience(jwtAuth.Audience),
+		jwt.WithIssuer(jwtAuth.Issuer))
+	if err != nil || !token.Valid {
+		if jwtAuth.OnUnauthorized != nil {
+			return jwtAuth.OnUnauthorized(c)
+		}
+		return c.AbortUnauthorized("Invalid or expired token", err)
+	}
+
+	// If claims expression is configured, validate the claims
+	if jwtAuth.ClaimsExpression != "" {
+		valid, err := jwtAuth.validateJWTClaims(token)
+		if err != nil {
+			c.Logger().Warn("Failed to validate JWT claims expression", "error", err)
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
+			return c.AbortUnauthorized("failed to validate authentication permissions", err)
+		}
+		if !valid {
+			c.Logger().Warn("JWT claims did not meet required expression ", "error", err)
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
+			return c.AbortForbidden("Insufficient permissions", err)
+		}
+	}
+	// If custom claims validation function is provided, use it
+	if jwtAuth.ValidateClaims != nil {
+		if err = jwtAuth.ValidateClaims(c, token.Claims); err != nil {
+			c.Logger().Warn("Failed to validate Claims Expression", "function", "ValidateClaims", "error", err)
+			c.Logger().Debug("Failed to validate Claims Expression", "function", "ValidateClaims", "expression", jwtAuth.ClaimsExpression, "error", err)
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
+			return c.AbortForbidden("Insufficient permissions")
+		}
+	}
+	// If ValidateRole is configured, validate the role claim
+	if jwtAuth.ValidateRole != nil {
+		if err = jwtAuth.ValidateRole(token.Claims); err != nil {
+			c.Logger().Warn("Failed to validate JWT role", "function", "ValidateRole", "error", err)
+			if jwtAuth.OnUnauthorized != nil {
+				return jwtAuth.OnUnauthorized(c)
+			}
+			return c.AbortForbidden("Insufficient permissions", err)
+		}
+	}
+	// Store claims in context
+	if jwtAuth.ContextKey != "" && token.Claims != nil {
+		c.Set(jwtAuth.ContextKey, token.Claims)
+	}
+	// Forward specific claims to context if configured
+	if jwtAuth.ForwardClaims != nil {
+		if err = jwtAuth.forwardContextFromClaims(token, c); err != nil {
+			c.Logger().Error("Failed to forward context from claims", "error", err)
+		}
+	}
+	return c.Next()
 }
 
 // RequestID sets a request ID from X-Request-ID or generates one
 // and stores it in the context and response header.
 func RequestID() Middleware {
-	return func(next HandlerFunc) HandlerFunc {
-		return func(c *Context) error {
-			id := c.Header(requestIDHeader)
-			if id == "" {
-				id = uuid.New().String()
-			}
-			c.Set("request_id", id)
-			c.Response().Header().Set(requestIDHeader, id)
-			return next(c)
+	return func(c *Context) error {
+		id := c.Header(requestIDHeader)
+		if id == "" {
+			id = uuid.New().String()
 		}
+		c.Set("request_id", id)
+		c.Response().Header().Set(requestIDHeader, id)
+		return c.Next()
 	}
 }

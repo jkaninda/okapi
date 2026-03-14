@@ -268,10 +268,15 @@ func TestJwtMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
 	ctx.request.Header.Set("Authorization", "Bearer "+token)
 
 	called := false
-	err := auth.Middleware(func(c *Context) error {
-		called = true
-		return nil
-	})(ctx)
+	ctx.handlers = []HandlerFunc{
+		auth.Middleware,
+		func(c *Context) error {
+			called = true
+			return nil
+		},
+	}
+	ctx.index = -1
+	err := ctx.Next()
 	if err != nil {
 		t.Fatalf("JWT middleware returned error: %v", err)
 	}
@@ -437,10 +442,7 @@ func whoAmIHandler(c *Context) error {
 	)
 }
 
-func helloMiddleware(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		slog.Info("Hello Okapi Route middleware function")
-		return next(c)
-	}
-
+func helloMiddleware(c *Context) error {
+	slog.Info("Hello Okapi Route middleware function")
+	return c.Next()
 }

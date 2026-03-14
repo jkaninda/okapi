@@ -55,6 +55,10 @@ type (
 		// store is a key/value store for storing data in the context
 		store        *Store
 		errorHandler ErrorHandler
+		// handlers is the chain of middleware + final handler for the current request
+		handlers []HandlerFunc
+		// index tracks the current position in the handler chain
+		index int
 	}
 	Store struct {
 		mu   sync.RWMutex
@@ -125,6 +129,16 @@ func (c *Context) Logger() *slog.Logger {
 	}
 	return c.okapi.logger
 
+}
+
+// Next executes the next handler in the middleware chain.
+// It should be called inside middleware to pass control to the next middleware or final handler.
+func (c *Context) Next() error {
+	c.index++
+	if c.index < len(c.handlers) {
+		return c.handlers[c.index](c)
+	}
+	return nil
 }
 
 // Get retrieves a value from the context's data store with thread-safe access.
@@ -224,6 +238,8 @@ func (c *Context) Copy() *Context {
 		request:  c.request,      // Copy request reference
 		response: c.response,     // Copy response reference
 		store:    newStoreData(), // Initialize new data map
+		handlers: c.handlers,     // Share handler chain
+		index:    c.index,        // Copy current position
 	}
 	// Copy all key-value pairs to the new context
 	for k, v := range c.store.data {

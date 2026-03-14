@@ -51,53 +51,51 @@ type Cors struct {
 }
 
 // CORSHandler applies CORS headers and handles preflight (OPTIONS) requests.
-func (cors Cors) CORSHandler(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		origin := c.request.Header.Get("Origin")
-		if !allowedOrigin(cors.AllowedOrigins, origin) {
-			return next(c)
-		}
-
-		h := c.response.Header()
-
-		// Always set origin
-		h.Set(constAccessControlAllowOrigin, origin)
-
-		// Allow credentials
-		if cors.AllowCredentials {
-			h.Set(constAccessControlAllowCredentials, "true")
-		}
-
-		// Allow headers
-		if len(cors.AllowedHeaders) > 0 {
-			h.Set(constAccessControlAllowHeaders, strings.Join(cors.AllowedHeaders, ", "))
-		} else if reqHeaders := c.request.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-			h.Set(constAccessControlAllowHeaders, reqHeaders)
-		}
-
-		// Allow methods
-		if len(cors.AllowMethods) > 0 {
-			h.Set(constAccessControlAllowMethods, strings.Join(cors.AllowMethods, ", "))
-		} else if reqMethod := c.request.Header.Get("Access-Control-Request-Method"); reqMethod != "" {
-			h.Set(constAccessControlAllowMethods, reqMethod)
-		}
-
-		// Expose headers
-		if len(cors.ExposeHeaders) > 0 {
-			h.Set(constAccessControlExposeHeaders, strings.Join(cors.ExposeHeaders, ", "))
-		}
-
-		// Max age
-		if cors.MaxAge > 0 {
-			h.Set(constAccessControlMaxAge, strconv.Itoa(cors.MaxAge))
-		}
-
-		// Preflight response
-		if c.request.Method == http.MethodOptions {
-			c.response.WriteHeader(http.StatusNoContent)
-			return nil
-		}
-
-		return next(c)
+func (cors Cors) CORSHandler(c *Context) error {
+	origin := c.request.Header.Get("Origin")
+	if !allowedOrigin(cors.AllowedOrigins, origin) {
+		return c.Next()
 	}
+
+	h := c.response.Header()
+
+	// Always set origin
+	h.Set(constAccessControlAllowOrigin, origin)
+
+	// Allow credentials
+	if cors.AllowCredentials {
+		h.Set(constAccessControlAllowCredentials, "true")
+	}
+
+	// Allow headers
+	if len(cors.AllowedHeaders) > 0 {
+		h.Set(constAccessControlAllowHeaders, strings.Join(cors.AllowedHeaders, ", "))
+	} else if reqHeaders := c.request.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+		h.Set(constAccessControlAllowHeaders, reqHeaders)
+	}
+
+	// Allow methods
+	if len(cors.AllowMethods) > 0 {
+		h.Set(constAccessControlAllowMethods, strings.Join(cors.AllowMethods, ", "))
+	} else if reqMethod := c.request.Header.Get("Access-Control-Request-Method"); reqMethod != "" {
+		h.Set(constAccessControlAllowMethods, reqMethod)
+	}
+
+	// Expose headers
+	if len(cors.ExposeHeaders) > 0 {
+		h.Set(constAccessControlExposeHeaders, strings.Join(cors.ExposeHeaders, ", "))
+	}
+
+	// Max age
+	if cors.MaxAge > 0 {
+		h.Set(constAccessControlMaxAge, strconv.Itoa(cors.MaxAge))
+	}
+
+	// Preflight response
+	if c.request.Method == http.MethodOptions {
+		c.response.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+
+	return c.Next()
 }

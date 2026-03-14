@@ -177,16 +177,14 @@ o.Get("/protected", protectedHandler).Use(jwtAuth.Middleware)
 
 ## Custom Middleware
 
-Create your own middleware functions:
+Create your own middleware functions. Call `c.Next()` to pass control to the next middleware or handler:
 
 ```go
-func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
-    return func(c *okapi.Context) error {
-        start := time.Now()
-        err := next(c)
-        log.Printf("Request took %v", time.Since(start))
-        return err
-    }
+func customMiddleware(c *okapi.Context) error {
+    start := time.Now()
+    err := c.Next()
+    log.Printf("Request took %v", time.Since(start))
+    return err
 }
 
 o.Use(customMiddleware)

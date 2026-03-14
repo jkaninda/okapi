@@ -136,13 +136,14 @@ func (g *Group) add(method, path string, h HandlerFunc, opts ...RouteOption) *Ro
 		panic("okapi instance is nil, cannot register route")
 	}
 	fullPath := joinPaths(g.Prefix, path)
-	// Wrap handler with combined middlewares
-	finalHandler := h
-	for i := len(g.middlewares) - 1; i >= 0; i-- {
-		finalHandler = g.middlewares[i](finalHandler)
+	// Prepend group middleware before any route-level middleware
+	if len(g.middlewares) > 0 {
+		groupMW := make([]Middleware, len(g.middlewares))
+		copy(groupMW, g.middlewares)
+		opts = append([]RouteOption{UseMiddleware(groupMW...)}, opts...)
 	}
 	// Register the route with the joined base path and route path
-	route := g.okapi.addRoute(method, fullPath, g.Tags, finalHandler, opts...)
+	route := g.okapi.addRoute(method, fullPath, g.Tags, h, opts...)
 	// Use group prefix as fallback
 	if len(route.tags) == 0 {
 		route.tags = []string{g.Prefix}
@@ -222,9 +223,11 @@ func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http
 		h(c.response, c.request)
 		return nil
 	}
-	// Apply group middleware
-	for i := len(g.middlewares) - 1; i >= 0; i-- {
-		converted = g.middlewares[i](converted)
+	// Prepend group middleware
+	if len(g.middlewares) > 0 {
+		groupMW := make([]Middleware, len(g.middlewares))
+		copy(groupMW, g.middlewares)
+		opts = append([]RouteOption{UseMiddleware(groupMW...)}, opts...)
 	}
 	tags := g.Tags
 	if len(tags) == 0 {
@@ -238,9 +241,11 @@ func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http
 func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOption) {
 	// Convert standard handler to HandlerFunc
 	converted := g.okapi.wrapHTTPHandler(h)
-	// Apply group middleware
-	for i := len(g.middlewares) - 1; i >= 0; i-- {
-		converted = g.middlewares[i](converted)
+	// Prepend group middleware
+	if len(g.middlewares) > 0 {
+		groupMW := make([]Middleware, len(g.middlewares))
+		copy(groupMW, g.middlewares)
+		opts = append([]RouteOption{UseMiddleware(groupMW...)}, opts...)
 	}
 	tags := g.Tags
 	if len(tags) == 0 {
@@ -256,23 +261,20 @@ func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 // This enables compatibility with existing middleware libraries that use the
 // func(http.Handler) http.Handler pattern.
 func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
-	g.Use(func(next HandlerFunc) HandlerFunc {
-		// Convert HandlerFunc to http.Handler
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := NewContext(g.okapi, w, r)
-			if err := next(ctx); err != nil {
+	g.Use(func(c *Context) error {
+		// Convert the rest of the chain into an http.Handler
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Continue the Okapi middleware chain
+			c.request = r
+			if err := c.Next(); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
 
-		// Apply standard middleware
-		wrapped := mw(h)
-
-		// Convert back to HandlerFunc
-		return func(ctx *Context) error {
-			wrapped.ServeHTTP(ctx.response, ctx.request)
-			return nil
-		}
+		// Apply standard middleware and serve
+		wrapped := mw(next)
+		wrapped.ServeHTTP(c.response, c.request)
+		return nil
 	})
 }
 

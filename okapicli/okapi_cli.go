@@ -51,12 +51,32 @@ const (
 
 type CLI struct {
 	o       *okapi.Okapi
+	name    string
 	flagSet *pflag.FlagSet
 	flags   map[string]interface{}
 	// structPtr holds a pointer to the struct being populated from CLI flags, used for writing back parsed values after resolution
 	structPtr interface{}
 	// envMappings maps CLI flag names to environment variable names for easy lookup during env var application
 	envMappings map[string]string
+	// commands holds registered subcommands
+	commands map[string]*Command
+	// commandOrder preserves registration order for help display
+	commandOrder []string
+	// matchedCommand holds the command that was matched during Execute
+	matchedCommand *Command
+	// defaultCommand is the command name to run when no subcommand is specified
+	defaultCommand string
+}
+
+// Command represents a CLI subcommand with its own flags, description, and run handler
+type Command struct {
+	name        string
+	description string
+	flagSet     *pflag.FlagSet
+	structPtr   interface{}
+	envMappings map[string]string
+	run         func(cmd *Command) error
+	cli         *CLI
 }
 
 // RunOptions configures the Run behavior
@@ -86,9 +106,11 @@ func New(o *okapi.Okapi, name ...string) *CLI {
 	}
 	return &CLI{
 		o:           o,
+		name:        appName,
 		flagSet:     pflag.NewFlagSet(appName, pflag.ExitOnError),
 		flags:       make(map[string]interface{}),
 		envMappings: make(map[string]string),
+		commands:    make(map[string]*Command),
 	}
 }
 
@@ -460,6 +482,371 @@ func (c *CLI) RunServer(opts ...*RunOptions) error {
 // It is a shortcut for RunServer(nil)
 func (c *CLI) Run() error {
 	return c.RunServer(nil)
+}
+
+// Command registers a new subcommand with a name, description, and run handler.
+// The run handler receives the Command so it can access parsed flag values.
+//
+// Usage:
+//
+//	cli.Command("serve", "Start the HTTP server", func(cmd *okapicli.Command) error {
+//	    port := cmd.GetInt("port")
+//	    return nil
+//	}).Int("port", "p", 8080, "HTTP server port")
+func (c *CLI) Command(name, description string, run func(cmd *Command) error) *Command {
+	cmd := &Command{
+		name:        name,
+		description: description,
+		flagSet:     pflag.NewFlagSet(name, pflag.ExitOnError),
+		envMappings: make(map[string]string),
+		run:         run,
+		cli:         c,
+	}
+	c.commands[name] = cmd
+	c.commandOrder = append(c.commandOrder, name)
+	return cmd
+}
+
+// DefaultCommand sets the command to run when no subcommand is specified.
+// The named command must be registered via Command() before calling Execute().
+func (c *CLI) DefaultCommand(name string) *CLI {
+	c.defaultCommand = name
+	return c
+}
+
+// MatchedCommand returns the command that was matched during Execute, or nil if none
+func (c *CLI) MatchedCommand() *Command {
+	return c.matchedCommand
+}
+
+// Execute parses os.Args for a subcommand and runs it.
+// If no subcommands are registered, it falls back to ParseFlags behavior.
+// If no subcommand matches, it prints usage and exits.
+func (c *CLI) Execute() error {
+	if len(c.commands) == 0 {
+		return c.ParseFlags()
+	}
+
+	args := os.Args[1:]
+
+	// Find the subcommand name (first non-flag argument)
+	var cmdName string
+	var cmdArgs []string
+	for i, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			cmdName = arg
+			cmdArgs = args[i+1:]
+			break
+		}
+	}
+
+	// If no subcommand found or the name isn't a registered command, try the default
+	cmd, ok := c.commands[cmdName]
+	if !ok {
+		if c.defaultCommand != "" {
+			cmdName = c.defaultCommand
+			cmd = c.commands[cmdName]
+			cmdArgs = args // pass all original args to the default command
+		} else if cmdName == "" {
+			c.printUsage()
+			return fmt.Errorf("no subcommand specified")
+		} else {
+			c.printUsage()
+			return fmt.Errorf("unknown command: %s", cmdName)
+		}
+	}
+
+	c.matchedCommand = cmd
+
+	// Apply env vars for the command
+	if err := cmd.applyEnvVars(); err != nil {
+		return err
+	}
+
+	// Parse the command's flags from remaining args
+	if err := cmd.flagSet.Parse(cmdArgs); err != nil {
+		return err
+	}
+
+	// Populate struct if set
+	if cmd.structPtr != nil {
+		if err := cmd.populateStruct(); err != nil {
+			return err
+		}
+	}
+
+	// Run the command handler
+	if cmd.run != nil {
+		return cmd.run(cmd)
+	}
+	return nil
+}
+
+// printUsage prints the CLI usage with all registered subcommands
+func (c *CLI) printUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s <command> [flags]\n\n", c.name)
+	if len(c.commandOrder) > 0 {
+		fmt.Fprintln(os.Stderr, "Available commands:")
+		maxLen := 0
+		for _, name := range c.commandOrder {
+			if len(name) > maxLen {
+				maxLen = len(name)
+			}
+		}
+		for _, name := range c.commandOrder {
+			cmd := c.commands[name]
+			fmt.Fprintf(os.Stderr, "  %-*s  %s\n", maxLen, name, cmd.description)
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+	fmt.Fprintf(os.Stderr, "Use \"%s <command> --help\" for more information about a command.\n", c.name)
+}
+
+// --- Command methods ---
+
+// Name returns the command name
+func (cmd *Command) Name() string {
+	return cmd.name
+}
+
+// CLI returns the parent CLI instance
+func (cmd *Command) CLI() *CLI {
+	return cmd.cli
+}
+
+// Okapi returns the Okapi instance from the parent CLI
+func (cmd *Command) Okapi() *okapi.Okapi {
+	return cmd.cli.o
+}
+
+// String adds a string flag to the command
+func (cmd *Command) String(name, shorthand, defaultValue, usage string) *Command {
+	cmd.flagSet.StringP(name, shorthand, defaultValue, usage)
+	return cmd
+}
+
+// Int adds an integer flag to the command
+func (cmd *Command) Int(name, shorthand string, defaultValue int, usage string) *Command {
+	cmd.flagSet.IntP(name, shorthand, defaultValue, usage)
+	return cmd
+}
+
+// Bool adds a boolean flag to the command
+func (cmd *Command) Bool(name, shorthand string, defaultValue bool, usage string) *Command {
+	cmd.flagSet.BoolP(name, shorthand, defaultValue, usage)
+	return cmd
+}
+
+// Float adds a float64 flag to the command
+func (cmd *Command) Float(name, shorthand string, defaultValue float64, usage string) *Command {
+	cmd.flagSet.Float64P(name, shorthand, defaultValue, usage)
+	return cmd
+}
+
+// Duration adds a time.Duration flag to the command
+func (cmd *Command) Duration(name, shorthand string, duration time.Duration, usage string) *Command {
+	cmd.flagSet.DurationP(name, shorthand, duration, usage)
+	return cmd
+}
+
+// GetString retrieves a string flag value from the command
+func (cmd *Command) GetString(name string) string {
+	val, _ := cmd.flagSet.GetString(name)
+	return val
+}
+
+// GetInt retrieves an int flag value from the command
+func (cmd *Command) GetInt(name string) int {
+	val, _ := cmd.flagSet.GetInt(name)
+	return val
+}
+
+// GetBool retrieves a bool flag value from the command
+func (cmd *Command) GetBool(name string) bool {
+	val, _ := cmd.flagSet.GetBool(name)
+	return val
+}
+
+// GetFloat retrieves a float64 flag value from the command
+func (cmd *Command) GetFloat(name string) float64 {
+	val, _ := cmd.flagSet.GetFloat64(name)
+	return val
+}
+
+// GetDuration retrieves a time.Duration flag value from the command
+func (cmd *Command) GetDuration(name string) time.Duration {
+	val, _ := cmd.flagSet.GetDuration(name)
+	return val
+}
+
+// Args returns the non-flag arguments after command flag parsing
+func (cmd *Command) Args() []string {
+	return cmd.flagSet.Args()
+}
+
+// FromStruct registers flags from struct tags on the command.
+// Uses the same tags as CLI.FromStruct: cli, short, desc, env, default
+func (cmd *Command) FromStruct(v interface{}) *Command {
+	val := reflect.ValueOf(v)
+	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Struct {
+		panic("FromStruct requires a non-nil pointer to a struct")
+	}
+
+	cmd.structPtr = v
+	typ := val.Elem().Type()
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Elem().Field(i)
+
+		if !field.IsExported() {
+			continue
+		}
+
+		cliName := strings.TrimSpace(field.Tag.Get("cli"))
+		if cliName == "" {
+			continue
+		}
+
+		shorthand := strings.TrimSpace(field.Tag.Get("short"))
+		description := strings.TrimSpace(field.Tag.Get("desc"))
+		envVar := strings.TrimSpace(field.Tag.Get("env"))
+		defaultTag := strings.TrimSpace(field.Tag.Get("default"))
+
+		switch field.Type.Kind() {
+		case reflect.String:
+			defValue := defaultTag
+			if defValue == "" && fieldVal.Kind() == reflect.String {
+				defValue = fieldVal.String()
+			}
+			cmd.flagSet.StringP(cliName, shorthand, defValue, description)
+			if envVar != "" {
+				cmd.envMappings[cliName] = envVar
+			}
+
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if field.Type == reflect.TypeOf(time.Duration(0)) {
+				defValue := time.Duration(0)
+				if defaultTag != "" {
+					if v, err := time.ParseDuration(defaultTag); err == nil {
+						defValue = v
+					}
+				} else if fieldVal.Type() == reflect.TypeOf(time.Duration(0)) {
+					defValue = fieldVal.Interface().(time.Duration)
+				}
+				cmd.flagSet.DurationP(cliName, shorthand, defValue, description)
+				if envVar != "" {
+					cmd.envMappings[cliName] = envVar
+				}
+			} else {
+				defValue := 0
+				if defaultTag != "" {
+					if v, err := strconv.Atoi(defaultTag); err == nil {
+						defValue = v
+					}
+				} else if fieldVal.Kind() == reflect.Int {
+					defValue = int(fieldVal.Int())
+				}
+				cmd.flagSet.IntP(cliName, shorthand, defValue, description)
+				if envVar != "" {
+					cmd.envMappings[cliName] = envVar
+				}
+			}
+
+		case reflect.Bool:
+			defValue := false
+			if defaultTag != "" {
+				if v, err := strconv.ParseBool(defaultTag); err == nil {
+					defValue = v
+				}
+			} else if fieldVal.Kind() == reflect.Bool {
+				defValue = fieldVal.Bool()
+			}
+			cmd.flagSet.BoolP(cliName, shorthand, defValue, description)
+			if envVar != "" {
+				cmd.envMappings[cliName] = envVar
+			}
+
+		case reflect.Float32, reflect.Float64:
+			defValue := 0.0
+			if defaultTag != "" {
+				if v, err := strconv.ParseFloat(defaultTag, 64); err == nil {
+					defValue = v
+				}
+			} else if fieldVal.Kind() == reflect.Float64 {
+				defValue = fieldVal.Float()
+			}
+			cmd.flagSet.Float64P(cliName, shorthand, defValue, description)
+			if envVar != "" {
+				cmd.envMappings[cliName] = envVar
+			}
+
+		default:
+			continue
+		}
+	}
+
+	return cmd
+}
+
+// populateStruct writes final flag values back into the command's struct
+func (cmd *Command) populateStruct() error {
+	val := reflect.ValueOf(cmd.structPtr).Elem()
+	typ := val.Type()
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Field(i)
+
+		if !field.IsExported() {
+			continue
+		}
+
+		cliName := strings.TrimSpace(field.Tag.Get("cli"))
+		if cliName == "" {
+			continue
+		}
+
+		switch field.Type.Kind() {
+		case reflect.String:
+			if v, err := cmd.flagSet.GetString(cliName); err == nil {
+				fieldVal.SetString(v)
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if field.Type == reflect.TypeOf(time.Duration(0)) {
+				if v, err := cmd.flagSet.GetDuration(cliName); err == nil {
+					fieldVal.SetInt(int64(v))
+				}
+			} else {
+				if v, err := cmd.flagSet.GetInt(cliName); err == nil {
+					fieldVal.SetInt(int64(v))
+				}
+			}
+		case reflect.Bool:
+			if v, err := cmd.flagSet.GetBool(cliName); err == nil {
+				fieldVal.SetBool(v)
+			}
+		case reflect.Float32, reflect.Float64:
+			if v, err := cmd.flagSet.GetFloat64(cliName); err == nil {
+				fieldVal.SetFloat(v)
+			}
+		}
+	}
+
+	return nil
+}
+
+// applyEnvVars reads environment variables and sets corresponding command flags
+func (cmd *Command) applyEnvVars() error {
+	for flagName, envVar := range cmd.envMappings {
+		if envValue := os.Getenv(envVar); envValue != "" {
+			if err := cmd.flagSet.Set(flagName, envValue); err != nil {
+				return fmt.Errorf("failed to set flag %q from env %s=%q: %w",
+					flagName, envVar, envValue, err)
+			}
+		}
+	}
+	return nil
 }
 
 // applyEnvVars reads environment variables and sets corresponding flags

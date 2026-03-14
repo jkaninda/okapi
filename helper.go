@@ -50,7 +50,7 @@ func fPrintError(msg string, args ...interface{}) {
 		if !ok {
 			key = fmt.Sprintf("invalid_key_%d", i)
 		}
-		b.WriteString(fmt.Sprintf(" %s=%v", key, args[i+1]))
+		fmt.Fprintf(&b, " %s=%v", key, args[i+1])
 	}
 
 	b.WriteByte('\n')
@@ -65,7 +65,7 @@ func fPrint(msg string, args ...interface{}) {
 		if !ok {
 			key = fmt.Sprintf("invalid_key_%d", i)
 		}
-		b.WriteString(fmt.Sprintf(" %s=%v", key, args[i+1]))
+		fmt.Fprintf(&b, " %s=%v", key, args[i+1])
 	}
 
 	b.WriteByte('\n')

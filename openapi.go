@@ -173,7 +173,7 @@ func (l License) ToOpenAPI() *openapi3.License {
 // ToOpenAPI converts Servers to openapi3.Servers.
 // It transforms the custom Servers type to the format expected by the openapi3 package.
 func (s Servers) ToOpenAPI() openapi3.Servers {
-	var servers openapi3.Servers
+	servers := make(openapi3.Servers, 0, len(s))
 	for _, srv := range s {
 		server := &openapi3.Server{
 			URL:         srv.URL,

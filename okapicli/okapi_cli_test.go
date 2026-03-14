@@ -26,13 +26,15 @@ package okapicli
 
 import (
 	"fmt"
-	"github.com/jkaninda/okapi"
-	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jkaninda/okapi"
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 type serverConfig struct {
@@ -236,4 +238,248 @@ func TestCLI_Default(t *testing.T) {
 	cli.Okapi().Get("/", func(c *okapi.Context) error {
 		return c.String(200, "Hello, Okapi CLI!")
 	})
+}
+
+func TestCLI_Command_Basic(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	var ran bool
+	var gotPort int
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		ran = true
+		gotPort = cmd.GetInt("port")
+		return nil
+	}).Int("port", "p", 8080, "HTTP server port")
+
+	restore := setOSArgs("serve", "--port", "9090")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if !ran {
+		t.Error("Expected serve command to run")
+	}
+	if gotPort != 9090 {
+		t.Error("Expected port 9090, got", gotPort)
+	}
+	if cli.MatchedCommand() == nil || cli.MatchedCommand().Name() != "serve" {
+		t.Error("Expected matched command to be 'serve'")
+	}
+}
+
+func TestCLI_Command_FromStruct(t *testing.T) {
+	type serveConfig struct {
+		Port  int    `cli:"port"  short:"p" desc:"HTTP port" default:"8080"`
+		Host  string `cli:"host"  short:"h" desc:"Hostname"  default:"localhost"`
+		Debug bool   `cli:"debug" short:"d" desc:"Debug mode"`
+	}
+
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	cfg := &serveConfig{}
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		return nil
+	}).FromStruct(cfg)
+
+	restore := setOSArgs("serve", "--port", "3000", "--debug")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if cfg.Port != 3000 {
+		t.Error("Expected port 3000, got", cfg.Port)
+	}
+	if cfg.Host != "localhost" {
+		t.Error("Expected host localhost, got", cfg.Host)
+	}
+	if !cfg.Debug {
+		t.Error("Expected debug to be true")
+	}
+}
+
+func TestCLI_Command_EnvVars(t *testing.T) {
+	type serveConfig struct {
+		Port int `cli:"port" short:"p" desc:"HTTP port" env:"TEST_CMD_PORT" default:"8080"`
+	}
+
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	cfg := &serveConfig{}
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		return nil
+	}).FromStruct(cfg)
+
+	if err := os.Setenv("TEST_CMD_PORT", "4000"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Unsetenv("TEST_CMD_PORT") }()
+
+	restore := setOSArgs("serve")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if cfg.Port != 4000 {
+		t.Error("Expected port 4000 from env, got", cfg.Port)
+	}
+}
+
+func TestCLI_Command_Unknown(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		return nil
+	})
+
+	restore := setOSArgs("unknown")
+	defer restore()
+
+	err := cli.Execute()
+	if err == nil {
+		t.Error("Expected error for unknown command")
+	}
+	if err != nil && !strings.Contains(err.Error(), "unknown command") {
+		t.Error("Expected 'unknown command' error, got:", err)
+	}
+}
+
+func TestCLI_Command_NoSubcommand(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		return nil
+	})
+
+	restore := setOSArgs()
+	defer restore()
+
+	err := cli.Execute()
+	if err == nil {
+		t.Error("Expected error when no subcommand specified")
+	}
+}
+
+func TestCLI_Command_MultipleCommands(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	var serveRan, migrateRan bool
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		serveRan = true
+		return nil
+	}).Int("port", "p", 8080, "HTTP port")
+
+	cli.Command("migrate", "Run migrations", func(cmd *Command) error {
+		migrateRan = true
+		return nil
+	}).String("dir", "d", "./migrations", "Migrations directory")
+
+	restore := setOSArgs("migrate", "--dir", "/tmp/migrations")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if serveRan {
+		t.Error("serve should not have run")
+	}
+	if !migrateRan {
+		t.Error("migrate should have run")
+	}
+}
+
+func TestCLI_Command_Args(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	var gotArgs []string
+
+	cli.Command("run", "Run a script", func(cmd *Command) error {
+		gotArgs = cmd.Args()
+		return nil
+	}).Bool("verbose", "v", false, "Verbose output")
+
+	restore := setOSArgs("run", "--verbose", "script.sh", "arg1", "arg2")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if len(gotArgs) != 3 || gotArgs[0] != "script.sh" {
+		t.Error("Expected args [script.sh arg1 arg2], got", gotArgs)
+	}
+}
+
+func TestCLI_Command_OkapiAccess(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		if cmd.Okapi() != app {
+			t.Error("Expected Okapi() to return the parent instance")
+		}
+		if cmd.CLI() != cli {
+			t.Error("Expected CLI() to return the parent CLI")
+		}
+		return nil
+	})
+
+	restore := setOSArgs("serve")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+}
+
+func TestCLI_Execute_NoCommands_FallsBack(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app").
+		Int("port", "p", 8080, "HTTP port")
+
+	restore := setOSArgs("--port", "3000")
+	defer restore()
+
+	// Execute with no commands registered should fall back to ParseFlags
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
+	if cli.GetInt("port") != 3000 {
+		t.Error("Expected port 3000, got", cli.GetInt("port"))
+	}
+}
+
+func TestCLI_Command_RunServer(t *testing.T) {
+	app := okapi.New()
+	cli := New(app, "test-app")
+
+	cli.Command("serve", "Start the server", func(cmd *Command) error {
+		port := cmd.GetInt("port")
+		cmd.Okapi().WithPort(port)
+
+		okapitest.GracefulExitAfter(3 * time.Second)
+		return cmd.CLI().RunServer(&RunOptions{
+			ShutdownTimeout: 10 * time.Second,
+			OnStart: func() {
+				slog.Info("Server starting", "port", port)
+			},
+		})
+	}).Int("port", "p", 8080, "HTTP port")
+
+	restore := setOSArgs("serve", "--port", "18923")
+	defer restore()
+
+	if err := cli.Execute(); err != nil {
+		t.Fatal("Execute failed:", err)
+	}
 }

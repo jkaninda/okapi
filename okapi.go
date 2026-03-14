@@ -1427,11 +1427,11 @@ func handleAccessLog(c *Context) error {
 	}
 	switch {
 	case status >= 500:
-		logger.Error("[okapi] Incoming request", logFields...)
+		logger.Error("[Okapi] Incoming request", logFields...)
 	case status >= 400:
-		logger.Warn("[okapi] Incoming request", logFields...)
+		logger.Warn("[Okapi] Incoming request", logFields...)
 	default:
-		logger.Info("[okapi] Incoming request", logFields...)
+		logger.Info("[Okapi] Incoming request", logFields...)
 	}
 	return err
 }

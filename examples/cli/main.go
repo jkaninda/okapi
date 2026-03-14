@@ -25,11 +25,13 @@
 package main
 
 import (
-	"github.com/jkaninda/okapi"
-	"github.com/jkaninda/okapi/okapicli"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/jkaninda/okapi"
+	"github.com/jkaninda/okapi/okapicli"
 )
 
 type ServerConfig struct {
@@ -47,69 +49,75 @@ type Config struct {
 }
 
 func main() {
-	cfg := &ServerConfig{}
-	// Create default Okapi instance
 	o := okapi.Default()
+	cli := okapicli.New(o, "myapp")
 
-	// Create CLI instance
-	cli := okapicli.New(o, "Okapi CLI Example").FromStruct(cfg)
-	// Or
-	// cli := okapicli.New(o, "Okapi CLI Example").
-	//	String("config", "c", "config.yaml", "Path to configuration file").
-	//	Int("port", "p", 8000, "HTTP server port").
-	//	Bool("debug", "d", false, "Enable debug mode")
-
-	// Parse flags
-	if err := cli.Parse(); err != nil {
-		panic(err)
-	}
-
-	// Apply CLI options
-	o.WithPort(cfg.Port)
-	// Or
-	// o.WithPort(cli.GetInt("port"))
-	if cli.GetBool("debug") {
-		o.WithDebug()
-	}
-
-	// Load configuration
-	config := &Config{}
-	if path := cli.GetString("config"); path != "" {
-		slog.Info("Loading configuration", "path", path)
-		if err := cli.LoadConfig(path, config); err != nil {
-			slog.Error("Failed to load configuration", "error", err)
+	//  Subcommand: serve
+	serveCfg := &ServerConfig{}
+	cli.Command("serve", "Start the HTTP server", func(cmd *okapicli.Command) error {
+		// Apply parsed config
+		cmd.Okapi().WithPort(serveCfg.Port)
+		if serveCfg.Debug {
+			cmd.Okapi().WithDebug()
 		}
-	}
 
-	// Define routes
-	o.Get("/", func(ctx *okapi.Context) error {
-		return ctx.OK(okapi.M{
-			"message": "Hello, Okapi!",
+		// Load app config from file
+		config := &Config{}
+		if path := serveCfg.Config; path != "" {
+			slog.Info("Loading configuration", "path", path)
+			if err := cmd.CLI().LoadConfig(path, config); err != nil {
+				slog.Error("Failed to load configuration", "error", err)
+			}
+		}
+
+		// Define routes
+		cmd.Okapi().Get("/", func(ctx *okapi.Context) error {
+			return ctx.OK(okapi.M{"message": "Hello, Okapi!"})
 		})
+
+		// Run server with lifecycle hooks
+		return cmd.CLI().RunServer(&okapicli.RunOptions{
+			ShutdownTimeout: 30 * time.Second,
+			Signals:         []os.Signal{okapicli.SIGINT, okapicli.SIGTERM},
+			OnStart: func() {
+				slog.Info("Preparing resources before startup")
+				if config.DatabaseURL != "" {
+					slog.Info("Connecting to database")
+				}
+			},
+			OnStarted: func() {
+				slog.Info("Server started successfully")
+			},
+			OnShutdown: func() {
+				slog.Info("Cleaning up before shutdown")
+			},
+		})
+	}).FromStruct(serveCfg)
+
+	// Subcommand: worker
+	cli.Command("worker", "Start application worker", func(cmd *okapicli.Command) error {
+
+		fmt.Println("Starting myapp wortker...")
+		sleepTime := cmd.GetDuration("sleep") * time.Second
+		slog.Info("Worker started successfully", "concurrency", cmd.GetInt("concurrency"), "sleep", sleepTime)
+
+		time.Sleep(sleepTime)
+		fmt.Println("Stoping myapp wortker...")
+		return nil
+	}).Int("concurrency", "c", 3, "concurrency jobs").Duration("sleep", "", 5, "Sleep time")
+	// Subcommand: version
+	cli.Command("version", "Show the worker", func(cmd *okapicli.Command) error {
+		fmt.Println("myapp v1.0.0")
+		return nil
 	})
 
-	// Run server with lifecycle hooks
-	if err := cli.RunServer(&okapicli.RunOptions{
-		ShutdownTimeout: 30 * time.Second,                               // Optional: customize shutdown timeout
-		Signals:         []os.Signal{okapicli.SIGINT, okapicli.SIGTERM}, // Optional: customize shutdown signals
-		OnStart: func() {
-			slog.Info("Preparing resources before startup")
-			if config.DatabaseURL != "" {
-				slog.Info("Connecting to database")
-			}
-		},
-		OnStarted: func() {
-			slog.Info("Server started successfully")
-		},
-		OnShutdown: func() {
-			slog.Info("Cleaning up before shutdown")
-		},
-	}); err != nil {
-		panic(err)
+	// Execute: parses os.Args for the subcommand and runs it
+	// Usage:
+	//   myapp serve --port 9090 --debug
+	//   myapp worker --concurrency 5 --slep 5
+	//   myapp version
+	if err := cli.Execute(); err != nil {
+		slog.Error("Error", "error", err)
+		os.Exit(1)
 	}
-
-	// Or use defaults
-	// if err := cli.Run(); err != nil {
-	//	panic(err)
-	// }
 }

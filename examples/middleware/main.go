@@ -27,13 +27,14 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/jkaninda/okapi"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jkaninda/okapi"
 )
 
 type Book struct {
@@ -126,6 +127,7 @@ func main() {
 			},
 		},
 	})
+	o.Use(okapi.RequestID())
 
 	o.Get("/", func(c *okapi.Context) error {
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
@@ -334,18 +336,15 @@ func whoAmI(c *okapi.Context) error {
 	)
 }
 
-func customMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
-	return func(c *okapi.Context) error {
-		slog.Info("Custom middleware executed", "path", c.Request().URL.Path, "method", c.Request().Method)
-		// Call the next handler in the chain
-		if err := next(c); err != nil {
-			// If an error occurs, log it and return a generic error response
-			slog.Error("Error in custom middleware", "error", err)
-			return c.JSON(http.StatusInternalServerError, okapi.M{"error": "Internal Server Error"})
-		}
-		c.Response().StatusCode()
-		slog.Info("Response sent", "status", c.Response().StatusCode())
-
-		return nil
+func customMiddleware(c *okapi.Context) error {
+	slog.Info("Custom middleware executed", "path", c.Request().URL.Path, "method", c.Request().Method)
+	// Call the next handler in the chain
+	if err := c.Next(); err != nil {
+		// If an error occurs, log it and return a generic error response
+		slog.Error("Error in custom middleware", "error", err)
+		return c.JSON(http.StatusInternalServerError, okapi.M{"error": "Internal Server Error"})
 	}
+	slog.Info("Response sent", "status", c.Response().StatusCode())
+
+	return nil
 }

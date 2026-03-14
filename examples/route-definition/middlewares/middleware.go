@@ -123,18 +123,16 @@ func Login(authRequest *models.AuthRequest) (models.AuthResponse, error) {
 	}, nil
 
 }
-func CustomMiddleware(next okapi.HandlerFunc) okapi.HandlerFunc {
-	return func(c *okapi.Context) error {
-		slog.Info("Custom middleware executed", "path", c.Request().URL.Path, "method", c.Request().Method)
-		// You can add any custom logic here, such as logging, authentication, etc.
-		// For example, let's log the request method and URL
-		slog.Info("Request received", "method", c.Request().Method, "url", c.Request().URL.String())
-		// Call the next handler in the chain
-		if err := next(c); err != nil {
-			// If an error occurs, log it and return a generic error response
-			slog.Error("Error in custom middleware", "error", err)
-			return c.JSON(http.StatusInternalServerError, okapi.M{"error": "Internal Server Error"})
-		}
-		return nil
+func CustomMiddleware(c *okapi.Context) error {
+	slog.Info("Custom middleware executed", "path", c.Request().URL.Path, "method", c.Request().Method)
+	// You can add any custom logic here, such as logging, authentication, etc.
+	// For example, let's log the request method and URL
+	slog.Info("Request received", "method", c.Request().Method, "url", c.Request().URL.String())
+	// Call the next handler in the chain
+	if err := c.Next(); err != nil {
+		// If an error occurs, log it and return a generic error response
+		slog.Error("Error in custom middleware", "error", err)
+		return c.JSON(http.StatusInternalServerError, okapi.M{"error": "Internal Server Error"})
 	}
+	return nil
 }

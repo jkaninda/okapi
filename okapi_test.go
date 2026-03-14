@@ -28,8 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
 	"os"
@@ -37,6 +35,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jkaninda/okapi/okapitest"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
@@ -426,20 +427,18 @@ func customResponseWriter(c *Context) error {
 	return nil
 }
 
-func customMiddleware(next HandlerFunc) HandlerFunc {
-	return func(c *Context) error {
-		request := c.Request()
-		start := time.Now()
-		slog.Info("Custom middleware executed", "path", request.URL.Path, "method", request.Method)
-		// Call the next handler in the chain
-		if err := next(c); err != nil {
-			// If an error occurs, log it and return a generic error response
-			slog.Error("Error in custom middleware", "error", err)
-			return c.JSON(http.StatusInternalServerError, M{"error": "Internal Server Error"})
-		}
-		slog.Info("request took", "duration", time.Since(start))
-		return nil
+func customMiddleware(c *Context) error {
+	request := c.Request()
+	start := time.Now()
+	slog.Info("Custom middleware executed", "path", request.URL.Path, "method", request.Method)
+	// Call the next handler in the chain
+	if err := c.Next(); err != nil {
+		// If an error occurs, log it and return a generic error response
+		slog.Error("Error in custom middleware", "error", err)
+		return c.JSON(http.StatusInternalServerError, M{"error": "Internal Server Error"})
 	}
+	slog.Info("request took", "duration", time.Since(start))
+	return nil
 }
 func (bc *BookController) Routes() []RouteDefinition {
 	coreGroup := &Group{Prefix: "/core", Tags: []string{"CoreGroup"}}

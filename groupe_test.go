@@ -38,11 +38,9 @@ func TestGroup(t *testing.T) {
 	// create api group
 	api := o.Group("/api").setDisabled(false)
 	// Okapi's Group Middleware
-	api.Use(func(next HandlerFunc) HandlerFunc {
-		return func(c *Context) (err error) {
-			slog.Info("Okapi's Group middleware")
-			return next(c)
-		}
+	api.Use(func(c *Context) error {
+		slog.Info("Okapi's Group middleware")
+		return c.Next()
 	})
 	test := o.Group("/test").Disable().Deprecated()
 	_okapi := test.Okapi()
@@ -115,11 +113,9 @@ func TestRegister(t *testing.T) {
 	app := New()
 	coreGroup := app.Group("/core").setDisabled(false).WithTags([]string{"CoreGroup"})
 
-	coreGroup.Use(func(next HandlerFunc) HandlerFunc {
-		return func(c *Context) (err error) {
-			slog.Info("Core Group middleware")
-			return next(c)
-		}
+	coreGroup.Use(func(c *Context) error {
+		slog.Info("Core Group middleware")
+		return c.Next()
 	})
 
 	bookController := &BookController{}

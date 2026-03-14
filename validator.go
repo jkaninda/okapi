@@ -137,7 +137,8 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 	return nil
 }
 
-// validateField performs tag-based validations: required, min/max, length constraints.
+// validateField performs tag-based validations: required, min/max, length constraints,
+// enum, multipleOf, format, pattern, and slice validations.
 func (c *Context) validateField(field reflect.Value, sf reflect.StructField) error {
 	// Required
 	if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
@@ -165,6 +166,49 @@ func (c *Context) validateField(field reflect.Value, sf reflect.StructField) err
 	if maxLen := sf.Tag.Get(tagMaxLength); maxLen != "" {
 		if err := checkMaxLength(field, maxLen); err != nil {
 			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+
+	// Enum validation
+	if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
+		if err := checkEnum(field, enumTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	// MultipleOf validation
+	if multipleOfTag := sf.Tag.Get(tagMultipleOf); multipleOfTag != "" {
+		if err := checkMultipleOf(field, multipleOfTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	// Format validation
+	if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
+		if err := checkFormat(field, formatTag, sf); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	// Pattern validation
+	if patternTag := sf.Tag.Get(tagPattern); patternTag != "" {
+		if err := checkPattern(field, patternTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	// Slice validations
+	if field.Kind() == reflect.Slice {
+		if minItemsTag := sf.Tag.Get(tagMinItems); minItemsTag != "" {
+			if err := checkMinItems(field, minItemsTag); err != nil {
+				return fmt.Errorf("field %s: %v", sf.Name, err)
+			}
+		}
+		if maxItemsTag := sf.Tag.Get(tagMaxItems); maxItemsTag != "" {
+			if err := checkMaxItems(field, maxItemsTag); err != nil {
+				return fmt.Errorf("field %s: %v", sf.Name, err)
+			}
+		}
+		if sf.Tag.Get(tagUniqueItems) == constTRUE {
+			if err := checkUniqueItems(field); err != nil {
+				return fmt.Errorf("field %s: %v", sf.Name, err)
+			}
 		}
 	}
 
@@ -455,8 +499,24 @@ func checkMaxLength(field reflect.Value, maxTag string) error {
 	return nil
 }
 
-// checkFormat validates field based on format type
+// checkFormat validates field based on format type.
+// For slice fields, each element is validated individually.
 func checkFormat(field reflect.Value, formatTag string, sf reflect.StructField) error {
+	// Handle slice fields: validate each element
+	if field.Kind() == reflect.Slice {
+		for i := 0; i < field.Len(); i++ {
+			elem := field.Index(i)
+			if err := checkFormatValue(elem, formatTag, sf); err != nil {
+				return fmt.Errorf("element [%d]: %w", i, err)
+			}
+		}
+		return nil
+	}
+	return checkFormatValue(field, formatTag, sf)
+}
+
+// checkFormatValue validates a single value against a format tag
+func checkFormatValue(field reflect.Value, formatTag string, sf reflect.StructField) error {
 	var value string
 	if field.Type() == reflect.TypeOf(time.Time{}) {
 		if field.IsZero() {
@@ -501,7 +561,23 @@ func checkFormat(field reflect.Value, formatTag string, sf reflect.StructField) 
 		return fmt.Errorf("unsupported format: %s", formatTag)
 	}
 }
+
+// checkPattern validates a field against a regex pattern.
+// For slice fields, each element is validated individually.
 func checkPattern(field reflect.Value, pattern string) error {
+	if field.Kind() == reflect.Slice {
+		for i := 0; i < field.Len(); i++ {
+			elem := field.Index(i)
+			if err := checkPatternValue(elem, pattern); err != nil {
+				return fmt.Errorf("element [%d]: %w", i, err)
+			}
+		}
+		return nil
+	}
+	return checkPatternValue(field, pattern)
+}
+
+func checkPatternValue(field reflect.Value, pattern string) error {
 	if field.Kind() != reflect.String {
 		return fmt.Errorf("pattern validation can only be applied to string fields")
 	}

@@ -36,6 +36,18 @@ type SliceRequest struct {
 	Tags []string `json:"tags" minItems:"2" maxItems:"5" uniqueItems:"true"`
 }
 
+type SliceFormatRequest struct {
+	Emails []string `json:"emails" format:"email"`
+}
+
+type SlicePatternRequest struct {
+	Codes []string `json:"codes" pattern:"^[A-Z]{2}-[0-9]{3}$"`
+}
+
+type SliceUUIDFormatRequest struct {
+	IDs []string `json:"ids" format:"uuid" minItems:"1"`
+}
+
 func TestValidateEmail(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1054,6 +1066,185 @@ func TestHostNameValidation(t *testing.T) {
 
 	}
 }
+func TestSliceFormatValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid emails",
+			body:    `{"emails": ["alice@example.com", "bob@example.com"]}`,
+			wantErr: false,
+		},
+		{
+			name:        "invalid email in slice",
+			body:        `{"emails": ["alice@example.com", "not-an-email"]}`,
+			wantErr:     true,
+			errContains: "invalid email format",
+		},
+		{
+			name:    "empty slice - no validation",
+			body:    `{"emails": []}`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+
+			var req SliceFormatRequest
+			err := c.Bind(&req)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Bind() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Bind() error = %v, should contain %q", err, tt.errContains)
+				}
+			}
+		})
+	}
+}
+
+func TestSlicePatternValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid codes",
+			body:    `{"codes": ["AB-123", "CD-456"]}`,
+			wantErr: false,
+		},
+		{
+			name:        "invalid code in slice",
+			body:        `{"codes": ["AB-123", "invalid"]}`,
+			wantErr:     true,
+			errContains: "does not match pattern",
+		},
+		{
+			name:        "all invalid",
+			body:        `{"codes": ["abc", "123"]}`,
+			wantErr:     true,
+			errContains: "does not match pattern",
+		},
+		{
+			name:    "empty slice - no validation",
+			body:    `{"codes": []}`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+
+			var req SlicePatternRequest
+			err := c.Bind(&req)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Bind() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Bind() error = %v, should contain %q", err, tt.errContains)
+				}
+			}
+		})
+	}
+}
+
+func TestSliceUUIDFormatWithMinItems(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid UUIDs",
+			body:    `{"ids": ["550e8400-e29b-41d4-a716-446655440000"]}`,
+			wantErr: false,
+		},
+		{
+			name:        "invalid UUID in slice",
+			body:        `{"ids": ["550e8400-e29b-41d4-a716-446655440000", "not-a-uuid"]}`,
+			wantErr:     true,
+			errContains: "invalid UUID format",
+		},
+		{
+			name:        "empty slice - fails minItems",
+			body:        `{"ids": []}`,
+			wantErr:     true,
+			errContains: "must be at least 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+
+			var req SliceUUIDFormatRequest
+			err := c.Bind(&req)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Bind() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Bind() error = %v, should contain %q", err, tt.errContains)
+				}
+			}
+		})
+	}
+}
+
+func TestCheckFormatSliceDirect(t *testing.T) {
+	// Test checkFormat directly with a slice of strings
+	emails := reflect.ValueOf([]string{"a@b.com", "invalid"})
+	sf := reflect.StructField{
+		Tag: reflect.StructTag(`format:"email"`),
+	}
+	err := checkFormat(emails, "email", sf)
+	if err == nil {
+		t.Error("expected error for invalid email in slice")
+	}
+	if !strings.Contains(err.Error(), "element [1]") {
+		t.Errorf("expected error to reference element [1], got: %v", err)
+	}
+}
+
+func TestCheckPatternSliceDirect(t *testing.T) {
+	// Test checkPattern directly with a slice of strings
+	values := reflect.ValueOf([]string{"AB-123", "bad"})
+	err := checkPattern(values, `^[A-Z]{2}-[0-9]{3}$`)
+	if err == nil {
+		t.Error("expected error for non-matching element in slice")
+	}
+	if !strings.Contains(err.Error(), "element [1]") {
+		t.Errorf("expected error to reference element [1], got: %v", err)
+	}
+
+	// All valid
+	validValues := reflect.ValueOf([]string{"AB-123", "CD-456"})
+	err = checkPattern(validValues, `^[A-Z]{2}-[0-9]{3}$`)
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
 func BenchmarkCheckEnum(b *testing.B) {
 	field := reflect.ValueOf("processing")
 	enumTag := "pending,processing,shipped,delivered,cancelled"

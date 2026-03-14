@@ -28,10 +28,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jkaninda/okapi/okapitest"
 	"log/slog"
 	"net/http"
 	"testing"
+
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 type input struct {
@@ -283,7 +284,7 @@ func anyHandler(c *Context) error {
 }
 
 func TestWithOpenAPIDocs(t *testing.T) {
-	o := Default().
+	app := Default().
 		WithOpenAPIDocs(OpenAPI{
 			Title:   "Okapi Web Framework Example",
 			Version: "1.0.0",
@@ -299,24 +300,13 @@ func TestWithOpenAPIDocs(t *testing.T) {
 				URL: "http://localhost:8080/openapi.json",
 			},
 		})
+	o := NewTestServerWithOkapi(t, app)
 
 	o.Get("/", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	}).WithIO(&SliceRequest{}, &SliceRequest{})
-
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/", o.BaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/docs", o.BaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/openapi.json", o.BaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/redoc", o.BaseURL)).ExpectStatusOK()
 }

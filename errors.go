@@ -571,13 +571,16 @@ func (c *Context) AbortValidationErrorsWithProblemDetail(errors []ValidationErro
 }
 
 // ErrorNotModified writes a 304 Not Modified response.
-func (c *Context) ErrorNotModified(message any) error {
-	return c.JSON(http.StatusNotModified, message)
+func (c *Context) ErrorNotModified() error {
+	c.response.WriteHeader(http.StatusNotModified)
+	return nil
 }
 
-// AbortNotModified writes a standardized 304 Not Modified response.
-func (c *Context) AbortNotModified(msg string, err ...error) error {
-	return c.abortWithStatus(http.StatusNotModified, "Not Modified", msg, err...)
+// AbortNotModified writes a 304 Not Modified response.
+// Per HTTP spec, 304 responses must not contain a body.
+func (c *Context) AbortNotModified() error {
+	c.response.WriteHeader(http.StatusNotModified)
+	return nil
 }
 
 // ErrorLocked writes a 423 Locked response.

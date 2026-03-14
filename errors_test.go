@@ -3,10 +3,11 @@ package okapi
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jkaninda/okapi/okapitest"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 // ---------------------------------------------------------------------------
@@ -77,8 +78,8 @@ var allCases = []errorAbortCase{
 	// --- 3xx ---
 	{
 		name: "NotModified", code: http.StatusNotModified, defaultMessage: "Not Modified",
-		errorFn: func(c *Context) error { return c.ErrorNotModified("not modified") },
-		abortFn: func(c *Context, msg string, err ...error) error { return c.AbortNotModified(msg, err...) },
+		errorFn: func(c *Context) error { return c.ErrorNotModified() },
+		abortFn: func(c *Context, msg string, err ...error) error { return c.AbortNotModified() },
 	},
 
 	// --- 4xx ---
@@ -345,9 +346,12 @@ func TestErrorMethods(t *testing.T) {
 				t.Errorf("expected status %d, got %d", tc.code, rec.Code)
 			}
 
-			body := strings.TrimSpace(rec.Body.String())
-			if body == "" {
-				t.Error("expected non-empty response body")
+			// 304 Not Modified must not have a body per HTTP spec
+			if tc.code != http.StatusNotModified {
+				body := strings.TrimSpace(rec.Body.String())
+				if body == "" {
+					t.Error("expected non-empty response body")
+				}
 			}
 		})
 	}
@@ -366,6 +370,11 @@ func TestAbortMethods_WithError(t *testing.T) {
 
 			if rec.Code != tc.code {
 				t.Errorf("expected status %d, got %d", tc.code, rec.Code)
+			}
+
+			// 304 Not Modified must not have a body per HTTP spec
+			if tc.code == http.StatusNotModified {
+				return
 			}
 
 			var resp ErrorResponse
@@ -403,6 +412,11 @@ func TestAbortMethods_WithoutError(t *testing.T) {
 				t.Errorf("expected status %d, got %d", tc.code, rec.Code)
 			}
 
+			// 304 Not Modified must not have a body per HTTP spec
+			if tc.code == http.StatusNotModified {
+				return
+			}
+
 			var resp ErrorResponse
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("failed to unmarshal ErrorResponse: %v\nbody: %s", err, rec.Body.String())
@@ -430,6 +444,11 @@ func TestAbortMethods_EmptyMessage(t *testing.T) {
 
 			if rec.Code != tc.code {
 				t.Errorf("expected status %d, got %d", tc.code, rec.Code)
+			}
+
+			// 304 Not Modified must not have a body per HTTP spec
+			if tc.code == http.StatusNotModified {
+				return
 			}
 
 			var resp ErrorResponse

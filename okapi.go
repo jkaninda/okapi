@@ -670,6 +670,10 @@ func (r *responseWriter) Close() error {
 // Flush flushes if supported.
 func (r *responseWriter) Flush() {
 	if fl, ok := r.writer.(http.Flusher); ok {
+		if !r.wroteHeader {
+			r.wroteHeader = true
+			r.status = http.StatusOK
+		}
 		fl.Flush()
 	}
 }

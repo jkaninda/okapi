@@ -1116,7 +1116,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts
 		ctx := NewContext(o, w, r)
 		// if the route is disabled, return 404 Not Found
 		if route.disabled {
-			http.Error(w, "404 Not Found", http.StatusNotFound)
+			http.Error(ctx.response, "404 Not Found", http.StatusNotFound)
 			return
 		}
 		// Build the handler chain: global middlewares + route middlewares + handler
@@ -1124,7 +1124,9 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts
 		ctx.index = -1
 		// Any error returned by the route will result in a 500 Internal Server Error
 		if err := ctx.Next(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			if ctx.response.StatusCode() == 0 {
+				http.Error(ctx.response, err.Error(), http.StatusInternalServerError)
+			}
 		}
 	}).Methods(method)
 	// Register OPTIONS handler only once per path if CORS is enabled

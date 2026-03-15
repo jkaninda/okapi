@@ -165,6 +165,82 @@ app.Register(okapi.RouteDefinition{
 })
 ```
 
+### RouteDefinition with Group Tags
+
+Use `.WithTags()` on groups to avoid repeating `Tags` on every route. Routes inherit tags from their group automatically. Only set `Tags` on individual routes when they need to override the group default.
+
+```go
+// Tags set on the group are inherited by all routes in the group
+apiGroup := app.Group("/api/v1", authMiddleware).WithTags([]string{"Books"})
+apiGroup.WithBearerAuth()
+
+app.Register(
+    // This route inherits "Books" tag from apiGroup — no Tags field needed
+    okapi.RouteDefinition{
+        Method:   http.MethodGet,
+        Path:     "/books",
+        Handler:  bookService.List,
+        Group:    apiGroup,
+        Summary:  "List books",
+        Response: &BooksResponse{},
+    },
+    // This route overrides the group tag with its own
+    okapi.RouteDefinition{
+        Method:  http.MethodGet,
+        Path:    "/authors",
+        Handler: authorService.List,
+        Group:   apiGroup,
+        Tags:    []string{"Authors"},
+        Summary: "List authors",
+        Response: &AuthorsResponse{},
+    },
+)
+```
+
+### Bulk Registration Pattern
+
+Organize routes into methods that return `[]okapi.RouteDefinition`, then register them in bulk:
+
+```go
+type Router struct {
+    app *okapi.Okapi
+    v1  *okapi.Group
+    // handlers, middleware, etc.
+}
+
+func (r *Router) registerRoutes() {
+    r.app.Register(r.bookRoutes()...)
+    r.app.Register(r.adminRoutes()...)
+}
+
+func (r *Router) bookRoutes() []okapi.RouteDefinition {
+    bookGroup := r.v1.Group("/books").WithTags([]string{"Books"})
+
+    return []okapi.RouteDefinition{
+        {
+            Method:   http.MethodGet,
+            Path:     "",
+            Handler:  bookService.List,
+            Group:    bookGroup,
+            Summary:  "List books",
+            Response: &BooksResponse{},
+        },
+        {
+            Method:  http.MethodPost,
+            Path:    "",
+            Handler: okapi.H(bookService.Create),
+            Group:   bookGroup,
+            Summary: "Create book",
+            Request: &CreateBookRequest{},
+            Options: []okapi.RouteOption{
+                okapi.DocResponse(201, &BookResponse{}),
+                okapi.DocErrorResponse(409, &ErrorResponse{}),
+            },
+        },
+    }
+}
+```
+
 ### Route Methods
 
 - `route.Hide()` - Hide from OpenAPI docs

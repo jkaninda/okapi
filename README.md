@@ -1,6 +1,8 @@
 # Okapi
 
-A modern, minimalist HTTP web framework for Go inspired by FastAPI's elegant design philosophy.
+A **modern, minimalist HTTP web framework for Go** inspired by the elegant developer experience of FastAPI.
+
+Okapi focuses on **clarity, strong typing, automatic validation, and built-in OpenAPI documentation**, making it easy to build production-ready APIs without boilerplate.
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
@@ -12,19 +14,35 @@ A modern, minimalist HTTP web framework for Go inspired by FastAPI's elegant des
   <img src="https://raw.githubusercontent.com/jkaninda/okapi/main/logo.png" width="150" alt="Okapi logo">
 </p>
 
-Named after the okapi, a rare and graceful mammal native to the rainforests of northeastern Democratic Republic of the Congo—Okapi blends simplicity and strength in a unique, powerful package.
+Named after the **okapi**, a rare and graceful mammal native to the rainforests of northeastern Democratic Republic of the Congo — Okapi blends **simplicity, elegance, and strength** into a powerful framework for building Go web services.
+
+---
+
+# Why Okapi?
+
+Go developers often combine multiple libraries for routing, validation, documentation, authentication, and testing.
+
+**Okapi brings all these capabilities together in one cohesive framework** while remaining fully compatible with Go’s standard `net/http`.
+
+Key goals:
+
+* **Developer experience similar to FastAPI**
+* **Minimal boilerplate**
+* **Strong typing**
+* **Built-in OpenAPI documentation**
+* **Production-ready features out of the box**
 
 ## Features
 
-- **Intuitive API Design** – Clean, declarative syntax for routes and middleware
+- **Intuitive API Design** – Clean, declarative syntax for routes and middleware.
 - **Automatic Request Binding** – Parse JSON, XML, forms, query params, headers, and path variables into structs
-- **Built-in Validation** – Struct tag-based validation with comprehensive error messages
-- **Auto-Generated OpenAPI Docs** – Swagger UI and ReDoc automatically synced with your code
+- **Built-in Validation** – Struct tag-based validation with comprehensive error messages.
+- **Auto-Generated OpenAPI Docs** – Swagger UI and ReDoc automatically synced with your code.
 - **Runtime Documentation Control** – Enable/disable OpenAPI docs at runtime without redeployment
-- **Authentication Ready** – Native JWT, Basic Auth, and extensible middleware support
-- **Standard Library Compatible** – Works seamlessly with Go's `net/http`
+- **Authentication Ready** – Native JWT, Basic Auth, and extensible middleware support.
+- **Standard Library Compatible** – Fully compatible with Go’s `net/http`.
 - **Dynamic Route Management** – Enable/disable routes at runtime without code changes
-- **Production Ready** – CORS, TLS, graceful shutdown, and comprehensive middleware
+- **Production Ready** –  TLS support, CORS, graceful shutdown, middleware system, and more.
 
 ## Installation
 
@@ -57,15 +75,25 @@ func main() {
 }
 ```
 
-Run with `go run main.go` and visit:
-- **API**: http://localhost:8080
-- **Docs**: http://localhost:8080/docs
+Run the application:
+
+```
+go run main.go
+```
+
+Visit:
+
+* API → [http://localhost:8080](http://localhost:8080)
+* Swagger Docs → [http://localhost:8080/docs](http://localhost:8080/docs)
+* ReDoc → [http://localhost:8080/redoc](http://localhost:8080/redoc)
+
 
 ---
 
 ## Request Binding & Validation
 
-Okapi provides multiple approaches to bind and validate incoming requests, from simple binding to fully typed handler signatures.
+Okapi supports **multiple binding styles**, from simple handlers to fully typed input/output patterns.
+
 
 ### Validation Tags
 
@@ -559,17 +587,6 @@ Both approaches generate OpenAPI documentation automatically.
 - To **keep using your existing router** (Chi, Fiber, Echo, etc.) without adopting a new framework
 - **Strict typed request/response contracts** as your primary design model
 - A **minimal, API-only stack** without broader web framework concerns
-
----
-
-### Community & Maturity
-
-- **Huma**: More established with a larger community and extensive production usage
-- **Okapi**: Newer and rapidly evolving, with a smaller but growing community
-
-Both are actively maintained. Choose based on your architectural preferences and project needs rather than stability concerns alone.
-
-> **Note**: If you're already using Huma with Chi or another router and it's working well for you, there's no urgent reason to switch. Okapi is ideal for new projects or when you want a more integrated, batteries-included framework experience.
 
 
 ---

@@ -132,6 +132,9 @@ func (o *Okapi) registerDocRoutes(title string) {
 	o.Get(openApiDocPath, func(c *Context) error {
 		return c.JSON(http.StatusOK, o.openapiSpec)
 	}).internalRoute().Hide() // Hide the route from the OpenAPI documentation
+	o.Get("/openapi.yaml", func(c *Context) error {
+		return c.YAML(http.StatusOK, o.openapiSpec)
+	}).internalRoute().Hide()
 	// Register the swagger route
 	o.Get(openApiDocPrefix, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})

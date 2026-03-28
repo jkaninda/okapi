@@ -26,9 +26,10 @@ package okapi
 
 import (
 	"errors"
-	"github.com/jkaninda/okapi/okapitest"
 	"net/http"
 	"testing"
+
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 func TestRegisterDocRoutes(t *testing.T) {
@@ -54,6 +55,7 @@ func TestRegisterDocRoutes(t *testing.T) {
 
 	waitForServer()
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/redoc").ExpectStatusOK()
 }

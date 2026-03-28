@@ -252,6 +252,7 @@ func TestNew(t *testing.T) {
 	waitForServer()
 	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusOK()
 }
 func TestWithOpenAPIDisabled(t *testing.T) {
 	o := Default().WithOpenAPIDisabled().WithDebug()
@@ -273,6 +274,7 @@ func TestWithOpenAPIDisabled(t *testing.T) {
 	waitForServer()
 	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusNotFound()
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusNotFound()
+	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusNotFound()
 
 }
 

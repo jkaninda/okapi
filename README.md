@@ -307,6 +307,8 @@ app.Register(bookService.Routes()...)
 ```go
 jwtAuth := okapi.JWTAuth{
     SigningSecret:    []byte("your-secret-key"),
+    Issuer:           "okapi",
+    Audience:         "okapi.jkaninda.dev",
     ClaimsExpression: "Equals(`email_verified`, `true`)",
     TokenLookup:      "header:Authorization",
     ContextKey:       "user",
@@ -515,6 +517,12 @@ Topics covered: Routing, Request Binding, Validation, Responses, Middleware, Aut
 Building microservices? 
 Check out **[Goma Gateway](https://github.com/jkaninda/goma-gateway)** a high-performance API Gateway with authentication, rate limiting, load balancing, and support for REST, GraphQL, gRPC, TCP, and UDP.
 
+### OSS projects built with Okapi
+
+- **[Posta](https://github.com/goposta/posta)** — Self-hosted email delivery platform. Send emails via HTTP API with SMTP delivery, templates, storage, and analytics.
+- **[Goma Admin](https://github.com/jkaninda/goma-admin)** — Control plane for Goma Gateway. Manage, configure, and monitor distributed API gateways from a unified dashboard.
+
+
 ## Okapi vs Huma
 
 Both **[Okapi](https://github.com/jkaninda/okapi)** and **[Huma](https://github.com/danielgtaylor/huma)** aim to improve developer experience in Go APIs with strong typing and OpenAPI integration. The key difference is **philosophy**: Okapi is a *batteries-included web framework*, while Huma is an *API layer designed to sit on top of existing routers*.
@@ -553,6 +561,10 @@ app.Register(okapi.RouteDefinition{
      Tags: []string{"users"},
      Request: &UserRequest{},
      Response:    &User{},
+     Options: []okapi.RouteOption{
+	    okapi.DocErrorResponse(401, &ErrorUnauthorized{}),
+	    okapi.DocErrorResponse(404, &ErrorNotFound{}),
+	},
 })
 ```
 
@@ -569,25 +581,6 @@ huma.Register(api, huma.Operation{
 ```
 
 Both approaches generate OpenAPI documentation automatically.
-
----
-
-### When to Choose Which?
-
-#### Choose Okapi if you want:
-
-- A **batteries-included web framework** with routing, middleware, auth, OpenAPI, templates, and CLI in one cohesive package
-- **FastAPI-like developer experience** that feels idiomatic in Go
-- **Dynamic route control** — enable or disable routes and groups at runtime
-- To build APIs **and** serve HTML pages or static assets from the same application
-
-#### Choose Huma if you want:
-
-- A **schema-first, OpenAPI-driven API layer** where the spec drives your implementation
-- To **keep using your existing router** (Chi, Fiber, Echo, etc.) without adopting a new framework
-- **Strict typed request/response contracts** as your primary design model
-- A **minimal, API-only stack** without broader web framework concerns
-
 
 ---
 

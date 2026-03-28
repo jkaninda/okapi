@@ -169,6 +169,7 @@ func main() {
 		SigningSecret:    []byte(signingSecret),
 		TokenLookup:      "header:Authorization",
 		Audience:         "okapi.jkaninda.dev",
+		Issuer:           "okapi",
 		ClaimsExpression: "Equals(`email_verified`, `true`) && OneOf(`user.role`, `admin`, `owner`) && Contains(`tags`, `vip`, `premium`, `gold`)",
 		ForwardClaims: map[string]string{
 			"email": "user.email",

@@ -200,6 +200,7 @@ o.Get("/books", handler).WithOutput(&BooksResponse{})
 * **Swagger UI**: `http://localhost:8080/docs`
 * **Redoc**: `http://localhost:8080/redoc`
 * **OpenAPI JSON**: `http://localhost:8080/openapi.json`
+* **OpenAPI YAML**: `http://localhost:8080/openapi.yaml`
 
 ![Swagger UI](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
 

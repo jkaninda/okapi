@@ -30,72 +30,147 @@ import (
 	"strings"
 )
 
+// Cors configures Cross-Origin Resource Sharing behavior.
 type Cors struct {
-	// AllowedOrigins specifies which origins are allowed.
+	// AllowedOrigins is the set of origins permitted to access the resource.
+	// Supports exact matches ("https://app.example.com"), a single wildcard
+	// ("*" — allows any origin), or scheme+subdomain patterns
+	// ("https://*.example.com").
 	AllowedOrigins []string
 
-	// AllowedHeaders defines which request headers are permitted.
+	// AllowedHeaders lists request headers permitted on cross-origin requests.
+	// When empty, the value of Access-Control-Request-Headers is echoed back
+	// on preflight responses.
 	AllowedHeaders []string
 
-	// ExposeHeaders indicates which response headers are exposed to the client.
+	// ExposeHeaders lists response headers the browser is allowed to expose
+	// to client-side scripts (Access-Control-Expose-Headers).
 	ExposeHeaders []string
-	//
+
+	// Headers contains additional response headers to set on every
+	// CORS-matched response (e.g. "X-Frame-Options": "DENY").
 	Headers map[string]string
 
-	// MaxAge defines how long the results of a preflight request can be cached (in seconds).
+	// MaxAge is how long (in seconds) the browser may cache a preflight
+	// response. Values ≤ 0 are omitted.
 	MaxAge int
 
-	// AllowMethods lists the HTTP methods permitted for cross-origin requests.
-	AllowMethods     []string
+	// AllowMethods lists HTTP methods permitted for cross-origin requests.
+	// When empty, the value of Access-Control-Request-Method is echoed back
+	// on preflight responses.
+	AllowMethods []string
+
+	// AllowCredentials enables Access-Control-Allow-Credentials: true.
+	// When set, AllowedOrigins should not rely on the bare "*" wildcard —
+	// the origin is always echoed verbatim so credentialed requests work.
 	AllowCredentials bool
 }
 
-// CORSHandler applies CORS headers and handles preflight (OPTIONS) requests.
+// CORSHandler applies CORS headers and short-circuits real preflight
+// requests (OPTIONS with Access-Control-Request-Method) with 204.
+// Plain OPTIONS requests fall through to the next handler.
 func (cors Cors) CORSHandler(c *Context) error {
 	origin := c.request.Header.Get("Origin")
-	if !allowedOrigin(cors.AllowedOrigins, origin) {
+	isPreflight := c.request.Method == http.MethodOptions &&
+		c.request.Header.Get("Access-Control-Request-Method") != ""
+
+	if origin == "" || !originAllowed(cors.AllowedOrigins, origin) {
+		if isPreflight {
+			c.response.WriteHeader(http.StatusNoContent)
+			return nil
+		}
 		return c.Next()
 	}
 
-	h := c.response.Header()
+	cors.writeHeaders(c.response.Header(), c.request, isPreflight)
 
-	// Always set origin
+	if isPreflight {
+		c.response.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	return c.Next()
+}
+
+func (cors Cors) writeHeaders(h http.Header, r *http.Request, isPreflight bool) {
+	origin := r.Header.Get("Origin")
+
 	h.Set(constAccessControlAllowOrigin, origin)
+	addVary(h, "Origin")
 
-	// Allow credentials
 	if cors.AllowCredentials {
 		h.Set(constAccessControlAllowCredentials, "true")
 	}
 
-	// Allow headers
-	if len(cors.AllowedHeaders) > 0 {
-		h.Set(constAccessControlAllowHeaders, strings.Join(cors.AllowedHeaders, ", "))
-	} else if reqHeaders := c.request.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-		h.Set(constAccessControlAllowHeaders, reqHeaders)
-	}
-
-	// Allow methods
-	if len(cors.AllowMethods) > 0 {
-		h.Set(constAccessControlAllowMethods, strings.Join(cors.AllowMethods, ", "))
-	} else if reqMethod := c.request.Header.Get("Access-Control-Request-Method"); reqMethod != "" {
-		h.Set(constAccessControlAllowMethods, reqMethod)
-	}
-
-	// Expose headers
 	if len(cors.ExposeHeaders) > 0 {
 		h.Set(constAccessControlExposeHeaders, strings.Join(cors.ExposeHeaders, ", "))
 	}
 
-	// Max age
-	if cors.MaxAge > 0 {
-		h.Set(constAccessControlMaxAge, strconv.Itoa(cors.MaxAge))
+	if isPreflight {
+		if len(cors.AllowedHeaders) > 0 {
+			h.Set(constAccessControlAllowHeaders, strings.Join(cors.AllowedHeaders, ", "))
+		} else if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+			h.Set(constAccessControlAllowHeaders, reqHeaders)
+			addVary(h, "Access-Control-Request-Headers")
+		}
+
+		if len(cors.AllowMethods) > 0 {
+			h.Set(constAccessControlAllowMethods, strings.Join(cors.AllowMethods, ", "))
+		} else if reqMethod := r.Header.Get("Access-Control-Request-Method"); reqMethod != "" {
+			h.Set(constAccessControlAllowMethods, reqMethod)
+			addVary(h, "Access-Control-Request-Method")
+		}
+
+		if cors.MaxAge > 0 {
+			h.Set(constAccessControlMaxAge, strconv.Itoa(cors.MaxAge))
+		}
 	}
 
-	// Preflight response
-	if c.request.Method == http.MethodOptions {
-		c.response.WriteHeader(http.StatusNoContent)
-		return nil
+	for k, v := range cors.Headers {
+		h.Set(k, v)
 	}
+}
 
-	return c.Next()
+func originAllowed(allowed []string, origin string) bool {
+	if origin == "" {
+		return false
+	}
+	loweredOrigin := strings.ToLower(origin)
+	for _, entry := range allowed {
+		if entry == "*" {
+			return true
+		}
+		if strings.EqualFold(entry, origin) {
+			return true
+		}
+		if strings.Contains(entry, "*") && matchWildcardOrigin(entry, loweredOrigin) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchWildcardOrigin(pattern, origin string) bool {
+	pattern = strings.ToLower(pattern)
+	star := strings.Index(pattern, "*")
+	if star < 0 {
+		return false
+	}
+	prefix := pattern[:star]
+	suffix := pattern[star+1:]
+	if !strings.HasPrefix(origin, prefix) || !strings.HasSuffix(origin, suffix) {
+		return false
+	}
+	middle := origin[len(prefix) : len(origin)-len(suffix)]
+	return middle != "" && !strings.Contains(middle, "/")
+}
+
+// addVary appends value to the Vary header if not already present.
+func addVary(h http.Header, value string) {
+	existing := h.Values("Vary")
+	for _, v := range existing {
+		if strings.EqualFold(v, value) {
+			return
+		}
+	}
+	h.Add("Vary", value)
 }

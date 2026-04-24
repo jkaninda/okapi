@@ -25,8 +25,9 @@
 package okapi
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNormalizeRoutePath(t *testing.T) {
@@ -88,27 +89,6 @@ func TestNormalizeRoutePath(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestAllowOrigin(t *testing.T) {
-	origin := "http://localhost"
-	origins := make([]string, 0, 4)
-	origins = append(origins,
-		"https://test/com",
-		"https:example.com",
-		"http://localhost",
-	)
-
-	result := allowedOrigin(origins, origin)
-	assert.Equal(t, true, result)
-
-	origins = append(origins, "*")
-	result = allowedOrigin(origins, origin)
-	assert.Equal(t, true, result)
-
-	origins = append(origins, "*")
-	result = allowedOrigin(origins, origin)
-	assert.Equal(t, true, result)
 }
 
 func TestValidateAddr(t *testing.T) {

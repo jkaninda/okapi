@@ -1224,43 +1224,21 @@ func (o *Okapi) registerOptionsHandler(path string) {
 
 		o.router.muxRouter.StrictSlash(o.strictSlash).HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if !allowedOrigin(o.cors.AllowedOrigins, origin) {
+			if origin == "" || !originAllowed(o.cors.AllowedOrigins, origin) {
 				http.Error(w, "", http.StatusMethodNotAllowed)
 				return
 			}
 
-			header := w.Header()
-			header.Set(constAccessControlAllowOrigin, origin)
+			cors := o.cors
 
-			if o.cors.AllowCredentials {
-				header.Set(constAccessControlAllowCredentials, "true")
-			}
-
-			if len(o.cors.AllowedHeaders) > 0 {
-				header.Set(constAccessControlAllowHeaders, strings.Join(o.cors.AllowedHeaders, ", "))
-			} else if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-				header.Set(constAccessControlAllowHeaders, reqHeaders)
-			}
-
-			var methods []string
-			for _, route := range o.routes {
-				if route.Path == path {
-					methods = append(methods, route.Method)
+			if len(cors.AllowMethods) == 0 {
+				for _, route := range o.routes {
+					if route.Path == path {
+						cors.AllowMethods = append(cors.AllowMethods, route.Method)
+					}
 				}
 			}
-			if len(o.cors.AllowMethods) > 0 {
-				header.Set(constAccessControlAllowMethods, strings.Join(o.cors.AllowMethods, ", "))
-			} else if len(methods) > 0 {
-				header.Set(constAccessControlAllowMethods, strings.Join(methods, ", "))
-			}
-
-			if len(o.cors.ExposeHeaders) > 0 {
-				header.Set(constAccessControlExposeHeaders, strings.Join(o.cors.ExposeHeaders, ", "))
-			}
-
-			if o.cors.MaxAge > 0 {
-				header.Set(constAccessControlMaxAge, strconv.Itoa(o.cors.MaxAge))
-			}
+			cors.writeHeaders(w.Header(), r, true)
 
 			w.WriteHeader(http.StatusNoContent)
 		}).Methods(http.MethodOptions)

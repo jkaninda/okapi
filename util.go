@@ -157,15 +157,6 @@ func joinPaths(basePath, path string) string {
 	}
 	return joined
 }
-func allowedOrigin(allowed []string, origin string) bool {
-	for _, o := range allowed {
-		if o == "*" || o == origin {
-			return true
-		}
-	}
-	return false
-
-}
 
 // LoadTLSConfig creates a TLS configuration from certificate and key files
 // Parameters:

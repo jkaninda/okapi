@@ -1056,7 +1056,44 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 	}
 
+	spec.Tags = o.collectRootTags()
 	o.openapiSpec = spec
+}
+
+// collectRootTags aggregates GroupTag entries from every route
+func (o *Okapi) collectRootTags() openapi3.Tags {
+	seen := make(map[string]*openapi3.Tag)
+	for _, r := range o.routes {
+		if r.disabled || r.hidden {
+			continue
+		}
+		for _, t := range r.tagInfos {
+			if t.Name == "" {
+				continue
+			}
+			if _, ok := seen[t.Name]; ok {
+				continue
+			}
+			seen[t.Name] = &openapi3.Tag{
+				Name:         t.Name,
+				Description:  t.Description,
+				ExternalDocs: t.ExternalDocs.ToOpenAPI(),
+			}
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	tags := make(openapi3.Tags, 0, len(names))
+	for _, name := range names {
+		tags = append(tags, seen[name])
+	}
+	return tags
 }
 func (o *Okapi) hasBearerAuth() bool {
 	// Check if any route requires Bearer authentication

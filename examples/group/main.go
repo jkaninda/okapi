@@ -62,7 +62,14 @@ func main() {
 	// Create a new group with a base path
 	api := o.Group("/api")
 
-	v1 := api.Group("/v1")
+	v1 := api.Group("/v1").WithTagInfo(okapi.GroupTag{
+		Name:        "api-v1",
+		Description: "API Version 1",
+		ExternalDocs: &okapi.ExternalDocs{
+			URL:         "https://github.com/jkaninda/okapi",
+			Description: "Example of External Doc",
+		},
+	})
 
 	// Define a route with a handler
 	v1.Get("/users", func(c *okapi.Context) error {

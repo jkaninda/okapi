@@ -31,6 +31,7 @@ type Group struct {
 	Prefix string
 	// Tags is an optional tag for the group, used for documentation purposes.
 	Tags        []string
+	tagInfos    []GroupTag
 	disabled    bool
 	bearerAuth  bool
 	basicAuth   bool
@@ -38,6 +39,18 @@ type Group struct {
 	middlewares []Middleware
 	okapi       *Okapi
 	security    []map[string][]string
+}
+
+// GroupTag describes an OpenAPI tag with a human-readable description.
+// When attached to a Group via WithTagInfo, the tag is emitted at the
+// root of the OpenAPI specification.
+type GroupTag struct {
+	// Name is the tag name (matches what appears on Operation.Tags).
+	Name string
+	// Description is the human-readable description shown in the API docs.
+	Description string
+	// ExternalDocs optionally links to additional documentation for this tag.
+	ExternalDocs *ExternalDocs
 }
 
 // newGroup creates a new route group with the specified base path, Okapi reference,
@@ -100,6 +113,18 @@ func (g *Group) WithTags(tags []string) *Group {
 	return g
 }
 
+// WithTagInfo attaches one or more tag descriptions to the Group.
+func (g *Group) WithTagInfo(tags ...GroupTag) *Group {
+	for _, t := range tags {
+		if t.Name == "" {
+			continue
+		}
+		g.tagInfos = append(g.tagInfos, t)
+		g.Tags = append(g.Tags, t.Name)
+	}
+	return g
+}
+
 // Deprecated marks the Group as deprecated for its routes.
 // Returns the Group to allow method chaining.
 func (g *Group) Deprecated() *Group {
@@ -148,6 +173,7 @@ func (g *Group) add(method, path string, h HandlerFunc, opts ...RouteOption) *Ro
 	if len(route.tags) == 0 {
 		route.tags = []string{g.Prefix}
 	}
+	route.tagInfos = append(route.tagInfos, g.tagInfos...)
 	return route.setDisabled(g.disabled)
 }
 
@@ -234,7 +260,9 @@ func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http
 		tags = []string{g.Prefix}
 	}
 	// Register route
-	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).setDisabled(g.disabled)
+	route := g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...)
+	route.tagInfos = append(route.tagInfos, g.tagInfos...)
+	route.setDisabled(g.disabled)
 }
 
 // HandleHTTP registers a standard http.Handler and wraps it with the group's middleware chain.
@@ -252,7 +280,9 @@ func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 		tags = []string{g.Prefix}
 	}
 	// Register route
-	g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...).setDisabled(g.disabled)
+	route := g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...)
+	route.tagInfos = append(route.tagInfos, g.tagInfos...)
+	route.setDisabled(g.disabled)
 }
 
 // UseMiddleware registers a standard HTTP middleware function and integrates
@@ -325,6 +355,7 @@ func (g *Group) Register(routes ...RouteDefinition) {
 		if len(route.tags) == 0 {
 			route.tags = []string{g.Prefix}
 		}
+		route.tagInfos = append(route.tagInfos, r.Group.tagInfos...)
 		route.setDisabled(g.disabled)
 	}
 }

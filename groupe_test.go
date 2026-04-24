@@ -36,7 +36,14 @@ import (
 func TestGroup(t *testing.T) {
 	o := Default()
 	// create api group
-	api := o.Group("/api").setDisabled(false)
+	api := o.Group("/api").setDisabled(false).WithTagInfo(GroupTag{
+		Name:        "api",
+		Description: "API group",
+		ExternalDocs: &ExternalDocs{
+			URL:         "http://localhost:8080",
+			Description: "Example of External Doc",
+		},
+	})
 	// Okapi's Group Middleware
 	api.Use(func(c *Context) error {
 		slog.Info("Okapi's Group middleware")

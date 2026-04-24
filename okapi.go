@@ -105,6 +105,7 @@ type (
 		docPath         string
 		chain           chain
 		tags            []string
+		tagInfos        []GroupTag
 		operationId     string
 		summary         string
 		request         *openapi3.SchemaRef

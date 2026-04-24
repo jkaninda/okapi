@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/jkaninda/okapi/okapitest"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGroup(t *testing.T) {
@@ -149,4 +150,103 @@ func helloHandler(c *Context) error {
 	slog.Info("Calling route", "path", c.request.URL.Path, "method", c.request.Method)
 	return c.OK(M{"message": "Hello from Okapi!"})
 
+}
+
+func TestGroupWithTagInfo(t *testing.T) {
+	o := New()
+	api := o.Group("/api").WithTagInfo(
+		GroupTag{
+			Name:        "api",
+			Description: "API group",
+			ExternalDocs: &ExternalDocs{
+				URL:         "http://localhost:8080",
+				Description: "Example of External Doc",
+			},
+		},
+		GroupTag{Name: "shared", Description: "Shared routes"},
+	)
+	api.Get("/hello", helloHandler)
+
+	// Tag names are appended to Group.Tags so each route inherits them.
+	assert.ElementsMatch(t, []string{"api", "shared"}, api.Tags)
+
+	// The single registered route should carry the tag names and tag infos.
+	if assert.Len(t, o.routes, 1) {
+		r := o.routes[0]
+		assert.ElementsMatch(t, []string{"api", "shared"}, r.tags)
+		assert.Len(t, r.tagInfos, 2)
+	}
+
+	// Build the spec and assert root-level tags carry descriptions + externalDocs.
+	o.buildOpenAPISpec()
+	spec := o.openapiSpec
+	if assert.NotNil(t, spec) && assert.Len(t, spec.Tags, 2) {
+		// Sorted alphabetically: api, shared.
+		assert.Equal(t, "api", spec.Tags[0].Name)
+		assert.Equal(t, "API group", spec.Tags[0].Description)
+		if assert.NotNil(t, spec.Tags[0].ExternalDocs) {
+			assert.Equal(t, "http://localhost:8080", spec.Tags[0].ExternalDocs.URL)
+			assert.Equal(t, "Example of External Doc", spec.Tags[0].ExternalDocs.Description)
+		}
+		assert.Equal(t, "shared", spec.Tags[1].Name)
+		assert.Equal(t, "Shared routes", spec.Tags[1].Description)
+		assert.Nil(t, spec.Tags[1].ExternalDocs)
+	}
+}
+
+func TestGroupWithTagInfo_DedupAcrossRoutes(t *testing.T) {
+	o := New()
+	g := o.Group("/v1").WithTagInfo(
+		GroupTag{Name: "books", Description: "Books API"},
+	)
+	g.Get("/a", helloHandler)
+	g.Get("/b", helloHandler)
+	g.Post("/c", helloHandler)
+
+	o.buildOpenAPISpec()
+	spec := o.openapiSpec
+	if assert.NotNil(t, spec) && assert.Len(t, spec.Tags, 1) {
+		assert.Equal(t, "books", spec.Tags[0].Name)
+		assert.Equal(t, "Books API", spec.Tags[0].Description)
+	}
+}
+
+func TestGroupWithTagInfo_IgnoresEmptyName(t *testing.T) {
+	o := New()
+	g := o.Group("/x").WithTagInfo(
+		GroupTag{Name: "", Description: "should be dropped"},
+		GroupTag{Name: "kept", Description: "ok"},
+	)
+	g.Get("/y", helloHandler)
+
+	assert.Equal(t, []string{"kept"}, g.Tags)
+
+	o.buildOpenAPISpec()
+	if assert.Len(t, o.openapiSpec.Tags, 1) {
+		assert.Equal(t, "kept", o.openapiSpec.Tags[0].Name)
+	}
+}
+
+func TestGroupWithTagInfo_NoneProducesNoSpecTags(t *testing.T) {
+	o := New()
+	o.Group("/z").WithTags([]string{"plain"}).Get("/a", helloHandler)
+
+	o.buildOpenAPISpec()
+	assert.Empty(t, o.openapiSpec.Tags, "spec.Tags should stay empty when only WithTags is used")
+}
+
+func TestGroupWithTagInfo_RegisterPropagates(t *testing.T) {
+	o := New()
+	g := o.Group("/api").WithTagInfo(GroupTag{Name: "api", Description: "API"})
+	g.Register(RouteDefinition{
+		Method:  http.MethodGet,
+		Path:    "/ping",
+		Handler: helloHandler,
+	})
+
+	o.buildOpenAPISpec()
+	if assert.Len(t, o.openapiSpec.Tags, 1) {
+		assert.Equal(t, "api", o.openapiSpec.Tags[0].Name)
+		assert.Equal(t, "API", o.openapiSpec.Tags[0].Description)
+	}
 }

@@ -1,6 +1,6 @@
 module github.com/jkaninda/okapi
 
-go 1.24.5
+go 1.25
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -10,7 +10,7 @@ require (
 )
 
 require (
-	github.com/getkin/kin-openapi v0.135.0
+	github.com/getkin/kin-openapi v0.137.0
 	github.com/google/uuid v1.6.0
 	github.com/jkaninda/go-utils v0.1.4
 	github.com/spf13/pflag v1.0.10
@@ -25,8 +25,10 @@ require (
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/oasdiff/yaml v0.0.9 // indirect
-	github.com/oasdiff/yaml3 v0.0.9 // indirect
+	github.com/oasdiff/yaml3 v0.0.12 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/woodsbury/decimal128 v1.4.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 )

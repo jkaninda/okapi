@@ -27,7 +27,6 @@ package okapi
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
@@ -38,23 +37,36 @@ import (
 	"github.com/jkaninda/okapi/okapitest"
 )
 
-var (
-	SigningSecret      = []byte("supersecret")
-	bearerAuthSecurity = []map[string][]string{
-		{
-			"bearerAuth": {},
+// SigningSecret is shared by tests that exercise JWT/HMAC signing behaviour.
+var SigningSecret = []byte("supersecret")
+
+const userKey = "user"
+
+// makeClaims builds a jwt.MapClaims from a base set, mutating role/name/email/tags.
+func makeClaims(role, name, email string, tags []string, withAud bool) jwt.MapClaims {
+	c := jwt.MapClaims{
+		"sub": "12345",
+		"iss": "okapi.example.com",
+		"user": map[string]string{
+			"role":  role,
+			"name":  name,
+			"email": email,
 		},
+		"email_verified": true,
+		"tags":           tags,
+		"exp":            time.Now().Add(2 * time.Hour).Unix(),
 	}
-	basicAuthSecurity = map[string][]string{
-
-		"basicAuth": {},
+	if withAud {
+		c["aud"] = "okapi.example.com"
 	}
-)
+	return c
+}
 
-const user = "user"
+// -----------------------------------------------------------------------------
+// JWT middleware
+// -----------------------------------------------------------------------------
 
-func TestJwtMiddleware(t *testing.T) {
-	// Setup
+func TestJWTMiddleware(t *testing.T) {
 	auth := JWTAuth{
 		Audience:      "okapi.example.com",
 		Issuer:        "okapi.example.com",
@@ -81,9 +93,7 @@ func TestJwtMiddleware(t *testing.T) {
 			"name":  "user.name",
 		},
 		ValidateClaims: func(c *Context, claims jwt.Claims) error {
-			fPrint("Validating claims using custom function")
 			method := c.Request().Method
-			fPrint("Request method,", "method", method)
 			if method != http.MethodGet && method != http.MethodPost {
 				return fmt.Errorf("method %s is not allowed", method)
 			}
@@ -91,12 +101,9 @@ func TestJwtMiddleware(t *testing.T) {
 			if !ok {
 				return errors.New("invalid claims type")
 			}
-			role, ok := mapClaims["user"].(map[string]interface{})["role"]
+			role, ok := mapClaims[userKey].(map[string]any)["role"]
 			if !ok || role != "admin" {
-				if role != "" {
-					return fmt.Errorf("role %s is not allowed to", role)
-				}
-				return fmt.Errorf("unauthorized role")
+				return fmt.Errorf("role %v not allowed", role)
 			}
 			return nil
 		},
@@ -104,137 +111,104 @@ func TestJwtMiddleware(t *testing.T) {
 			return c.ErrorUnauthorized("Unauthorized")
 		},
 	}
-	jwtClaims := jwt.MapClaims{
-		"sub": "12345",
-		"iss": "okapi.example.com",
-		"aud": "okapi.example.com",
-		"user": map[string]string{
-			"name":  "",
-			"role":  "",
-			"email": "admin@example.com",
-		},
-		"email_verified": true,
-		"tags":           []string{},
-		"exp":            time.Now().Add(2 * time.Hour).Unix(),
-	}
-	jwtClaimsNoAud := jwt.MapClaims{
-		"sub": "12345",
-		"iss": "okapi.example.com",
-		"user": map[string]string{
-			"name":  "",
-			"role":  "",
-			"email": "admin@example.com",
-		},
-		"email_verified": true,
-		"tags":           []string{},
-		"exp":            time.Now().Add(2 * time.Hour).Unix(),
-	}
-	// Generate Admin token with audience
-	jwtClaims[user].(map[string]string)["role"] = "admin"
-	jwtClaims[user].(map[string]string)["name"] = "Administrator"
-	jwtClaims["tags"] = []string{"gold"}
-	// Generate Admin token
-	adminToken := mustGenerateToken(t, auth.SigningSecret, jwtClaims)
 
-	// Generate User token
-	jwtClaims[user].(map[string]string)["role"] = user
-	jwtClaims[user].(map[string]string)["name"] = "User Name"
-	jwtClaims[user].(map[string]string)["email"] = "user@example.com"
-	jwtClaims["tags"] = []string{"vip"}
-	token := mustGenerateToken(t, auth.SigningSecret, jwtClaims)
+	adminToken := mustGenerateToken(t, SigningSecret, makeClaims("admin", "Administrator", "admin@example.com", []string{"gold"}, true))
+	userToken := mustGenerateToken(t, SigningSecret, makeClaims("user", "User Name", "user@example.com", []string{"vip"}, true))
+	noAudToken := mustGenerateToken(t, SigningSecret, makeClaims("user", "User Name", "user@example.com", []string{"vip"}, false))
 
-	// Generate a token without audience
-	jwtClaimsNoAud[user].(map[string]string)["role"] = user
-	jwtClaimsNoAud[user].(map[string]string)["name"] = "User Name"
-	jwtClaimsNoAud[user].(map[string]string)["email"] = "user@example.com"
-	jwtClaimsNoAud["tags"] = []string{"vip"}
-
-	noAudToken := mustGenerateToken(t, auth.SigningSecret, jwtClaimsNoAud)
-
-	// Setup server
-	o := New(WithAccessLogDisabled())
-	o.WithOpenAPIDocs(OpenAPI{
-		Title:   "Okapi Web Framework Example",
-		Version: "1.0.0",
-		License: License{
-			Name: "MIT",
-		},
-		SecuritySchemes: SecuritySchemes{
-			{
-				Name:   "basicAuth",
-				Type:   "http",
-				Scheme: "basic",
-			},
-			{
-				Name:         "bearerAuth",
-				Type:         "http",
-				Scheme:       "bearer",
-				BearerFormat: "JWT",
-			},
-			{
-				Name: "OAuth2",
-				Type: "oauth2",
-				Flows: &OAuthFlows{
-					AuthorizationCode: &OAuthFlow{
-						AuthorizationURL: "https://auth.example.com/authorize",
-						TokenURL:         "https://auth.example.com/token",
-						Scopes: map[string]string{
-							"read":  "Read access",
-							"write": "Write access",
-						},
-					},
-				},
-			},
-		},
-	})
-
-	// Create a new group for the main routes
-	admin := o.Group("/admin", adminAuth.Middleware).WithSecurity(bearerAuthSecurity)
-	// Use the JWT middleware for the main routes
-	o.Use(auth.Middleware)
-	o.Use(LoggerMiddleware)
-	o.Get("/protected", whoAmIHandler)
-
+	ts := NewTestServer(t)
+	admin := ts.Group("/admin", adminAuth.Middleware).WithSecurity(bearerAuthSecurity)
+	ts.Use(auth.Middleware)
+	ts.Get("/protected", whoAmIHandler)
 	admin.Get("/protected", whoAmIHandler)
 
-	// Start server in background
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Failed to start server: %v", err)
+	tests := []struct {
+		name   string
+		path   string
+		token  string
+		status int
+	}{
+		{"protected without token", "/protected", "", http.StatusUnauthorized},
+		{"admin without token", "/admin/protected", "", http.StatusUnauthorized},
+		{"protected with user token", "/protected", userToken, http.StatusOK},
+		{"admin denied to user", "/admin/protected", userToken, http.StatusUnauthorized},
+		{"protected with admin token", "/protected", adminToken, http.StatusOK},
+		{"admin allowed for admin", "/admin/protected", adminToken, http.StatusOK},
+		{"protected rejects token without aud", "/protected", noAudToken, http.StatusUnauthorized},
+		{"admin rejects token without aud", "/admin/protected", noAudToken, http.StatusUnauthorized},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := okapitest.GET(t, ts.BaseURL+tt.path)
+			if tt.token != "" {
+				req.Header("Authorization", "Bearer "+tt.token)
+			}
+			req.ExpectStatus(tt.status)
+		})
+	}
+}
+
+func TestJWTAuth_OnUnauthorizedHook(t *testing.T) {
+	called := false
+	auth := JWTAuth{
+		SigningSecret: SigningSecret,
+		OnUnauthorized: func(c *Context) error {
+			called = true
+			return c.ErrorUnauthorized("custom unauthorized")
+		},
+	}
+
+	ts := NewTestServer(t)
+	ts.Use(auth.Middleware)
+	ts.Get("/p", func(c *Context) error { return c.OK("ok") })
+
+	okapitest.GET(t, ts.BaseURL+"/p").
+		ExpectStatusUnauthorized().
+		ExpectBodyContains("custom unauthorized")
+
+	if !called {
+		t.Error("OnUnauthorized hook was not invoked")
+	}
+}
+
+func TestJWTAuth_ContextKeyStoresClaims(t *testing.T) {
+	auth := JWTAuth{
+		SigningSecret: SigningSecret,
+		Audience:      "okapi.example.com",
+		ContextKey:    "claims",
+	}
+
+	ts := NewTestServer(t)
+	ts.Use(auth.Middleware)
+	ts.Get("/p", func(c *Context) error {
+		v, ok := c.Get("claims")
+		if !ok {
+			return c.ErrorInternalServerError("claims missing")
 		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
+		mc, ok := v.(jwt.MapClaims)
+		if !ok {
+			return c.ErrorInternalServerError("wrong type")
 		}
-	}(o)
+		return c.JSON(http.StatusOK, map[string]any{"sub": mc["sub"]})
+	})
 
-	waitForServer()
-	client := okapitest.NewClient(t, "http://localhost:8080")
+	tok := mustGenerateToken(t, SigningSecret, jwt.MapClaims{
+		"sub": "alice",
+		"aud": "okapi.example.com",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
 
-	client.GET("/protected").ExpectStatusUnauthorized()
-	client.GET("/admin/protected").ExpectStatusUnauthorized()
-
-	client.Headers["Authorization"] = "Bearer " + token
-
-	// client.Headers = headers
-	client.GET("/protected").ExpectStatusOK()
-	client.GET("/admin/protected").ExpectStatusUnauthorized()
-
-	client.Headers["Authorization"] = "Bearer " + adminToken
-	client.GET("/protected").ExpectStatusOK()
-	client.GET("/admin/protected").ExpectStatusOK()
-
-	client.Headers["Authorization"] = "Bearer " + noAudToken
-	client.GET("/protected").ExpectStatusUnauthorized()
-	client.GET("/admin/protected").ExpectStatusUnauthorized()
-
+	okapitest.GET(t, ts.BaseURL+"/p").
+		Header("Authorization", "Bearer "+tok).
+		ExpectStatusOK().
+		ExpectBodyContains(`"sub":"alice"`)
 }
 
 func TestJWTResolveKeyFunc_NilJwksFile(t *testing.T) {
-	auth := &JWTAuth{}
+	t.Parallel()
 
+	auth := &JWTAuth{}
 	keyFunc, err := auth.resolveKeyFunc()
 	if err == nil {
 		t.Fatal("expected error when no JWT verifier is configured")
@@ -244,11 +218,9 @@ func TestJWTResolveKeyFunc_NilJwksFile(t *testing.T) {
 	}
 }
 
-func TestJwtMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
+func TestJWTMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
 	original := append([]string(nil), jwtAlgo...)
-	t.Cleanup(func() {
-		jwtAlgo = original
-	})
+	t.Cleanup(func() { jwtAlgo = original })
 
 	auth := &JWTAuth{
 		SigningSecret: SigningSecret,
@@ -256,8 +228,7 @@ func TestJwtMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
 		Audience:      "okapi.example.com",
 		Issuer:        "okapi.example.com",
 	}
-
-	token := mustGenerateToken(t, SigningSecret, jwt.MapClaims{
+	tok := mustGenerateToken(t, SigningSecret, jwt.MapClaims{
 		"sub": "12345",
 		"iss": "okapi.example.com",
 		"aud": "okapi.example.com",
@@ -265,7 +236,7 @@ func TestJwtMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
 
 	ctx, _ := NewTestContext(http.MethodGet, "/protected", nil)
 	ctx.okapi = New(WithAccessLogDisabled())
-	ctx.request.Header.Set("Authorization", "Bearer "+token)
+	ctx.Request().Header.Set("Authorization", "Bearer "+tok)
 
 	called := false
 	ctx.handlers = []HandlerFunc{
@@ -276,9 +247,8 @@ func TestJwtMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
 		},
 	}
 	ctx.index = -1
-	err := ctx.Next()
-	if err != nil {
-		t.Fatalf("JWT middleware returned error: %v", err)
+	if err := ctx.Next(); err != nil {
+		t.Fatalf("middleware returned error: %v", err)
 	}
 	if !called {
 		t.Fatal("expected next handler to be called")
@@ -288,133 +258,304 @@ func TestJwtMiddleware_DoesNotMutateGlobalAlgorithms(t *testing.T) {
 	}
 }
 
+// -----------------------------------------------------------------------------
+// BasicAuth middleware
+// -----------------------------------------------------------------------------
+
 func TestBasicAuth(t *testing.T) {
-	username := "user"
-	password := "password"
+	const username, password = "user", "password"
 	auth := BasicAuth{Username: username, Password: password, ContextKey: "username"}
 
-	app := Default()
-	app.Use(auth.Middleware)
-
-	app.Get("/protected", func(c *Context) error {
-		user, exists := c.Get(auth.ContextKey)
-		if !exists {
+	ts := NewTestServer(t)
+	ts.Use(auth.Middleware)
+	ts.Get("/protected", func(c *Context) error {
+		v, ok := c.Get(auth.ContextKey)
+		if !ok {
 			return c.ErrorUnauthorized(M{"error": "Unauthorized"})
 		}
-		return c.OK(user)
+		return c.OK(v)
 	}).WithSecurity(basicAuthSecurity)
 
-	// Start server in background
-	go func() {
-		if err := app.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
-			return
-		}
-	}()
-	defer func(app *Okapi) {
-		err := app.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(app)
+	t.Run("missing credentials", func(t *testing.T) {
+		okapitest.GET(t, ts.BaseURL+"/protected").
+			ExpectStatusUnauthorized().
+			ExpectHeaderContains("WWW-Authenticate", "Basic realm=")
+	})
 
-	waitForServer()
+	t.Run("wrong credentials", func(t *testing.T) {
+		okapitest.GET(t, ts.BaseURL+"/protected").
+			SetBasicAuth(username, "wrong").
+			ExpectStatusUnauthorized()
+	})
 
-	okapitest.GET(t, "http://localhost:8080/protected").ExpectStatusUnauthorized()
-	okapitest.GET(t, "http://localhost:8080/protected").SetBasicAuth(username, password).ExpectStatusOK()
-
+	t.Run("valid credentials", func(t *testing.T) {
+		okapitest.GET(t, ts.BaseURL+"/protected").
+			SetBasicAuth(username, password).
+			ExpectStatusOK().
+			ExpectBodyContains(username)
+	})
 }
+
+func TestBasicAuth_DefaultRealm(t *testing.T) {
+	auth := BasicAuth{Username: "u", Password: "p"}
+
+	ts := NewTestServer(t)
+	ts.Use(auth.Middleware)
+	ts.Get("/p", func(c *Context) error { return c.OK("ok") })
+
+	resp, _ := okapitest.GET(t, ts.BaseURL+"/p").
+		ExpectStatusUnauthorized().
+		Execute()
+
+	if h := resp.Header.Get("WWW-Authenticate"); !strings.Contains(h, `realm=`) {
+		t.Errorf("WWW-Authenticate = %q, want realm=...", h)
+	}
+}
+
+// Deprecated BasicAuthMiddleware delegates to BasicAuth — verify behaviour.
+func TestBasicAuthMiddleware_DeprecatedDelegate(t *testing.T) {
+	auth := BasicAuthMiddleware{Username: "u", Password: "p", ContextKey: "user"}
+
+	ts := NewTestServer(t)
+	ts.Use(auth.Middleware)
+	ts.Get("/p", func(c *Context) error {
+		v, _ := c.Get("user")
+		return c.OK(v)
+	})
+
+	okapitest.GET(t, ts.BaseURL+"/p").
+		SetBasicAuth("u", "p").
+		ExpectStatusOK().
+		ExpectBodyContains("u")
+}
+
+// -----------------------------------------------------------------------------
+// BodyLimit middleware
+// -----------------------------------------------------------------------------
+
+func TestBodyLimit(t *testing.T) {
+	limit := BodyLimit{MaxBytes: 10}
+
+	ts := NewTestServer(t)
+	ts.Use(limit.Middleware)
+	ts.Post("/echo", func(c *Context) error {
+		return c.OK("ok")
+	})
+
+	t.Run("under limit", func(t *testing.T) {
+		okapitest.POST(t, ts.BaseURL+"/echo").
+			Body(strings.NewReader("hello")).
+			ExpectStatusOK()
+	})
+
+	t.Run("at limit", func(t *testing.T) {
+		okapitest.POST(t, ts.BaseURL+"/echo").
+			Body(strings.NewReader("0123456789")).
+			ExpectStatusOK()
+	})
+
+	t.Run("over limit", func(t *testing.T) {
+		okapitest.POST(t, ts.BaseURL+"/echo").
+			Body(strings.NewReader("0123456789-too-many")).
+			ExpectStatus(http.StatusRequestEntityTooLarge)
+	})
+}
+
+// -----------------------------------------------------------------------------
+// RequestID middleware
+// -----------------------------------------------------------------------------
+
+func TestRequestID_GeneratesWhenMissing(t *testing.T) {
+	ts := NewTestServer(t)
+	ts.Use(RequestID())
+	ts.Get("/p", func(c *Context) error {
+		return c.OK(M{"id": c.GetString("request_id")})
+	})
+
+	resp, body := okapitest.GET(t, ts.BaseURL+"/p").
+		ExpectStatusOK().
+		Execute()
+
+	id := resp.Header.Get(requestIDHeader)
+	if id == "" {
+		t.Fatal("expected generated X-Request-ID header")
+	}
+	if !strings.Contains(string(body), id) {
+		t.Errorf("body should echo request id %q, got %s", id, body)
+	}
+}
+
+func TestRequestID_PropagatesIncoming(t *testing.T) {
+	ts := NewTestServer(t)
+	ts.Use(RequestID())
+	ts.Get("/p", func(c *Context) error {
+		return c.OK(M{"id": c.GetString("request_id")})
+	})
+
+	const incoming = "incoming-id-123"
+	resp, body := okapitest.GET(t, ts.BaseURL+"/p").
+		Header(requestIDHeader, incoming).
+		ExpectStatusOK().
+		Execute()
+
+	if got := resp.Header.Get(requestIDHeader); got != incoming {
+		t.Errorf("response header = %q, want %q", got, incoming)
+	}
+	if !strings.Contains(string(body), incoming) {
+		t.Errorf("body should echo request id %q, got %s", incoming, body)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// LoggerMiddleware skip paths
+// -----------------------------------------------------------------------------
+
+func TestLoggerMiddleware_AlwaysCallsNext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		setup  func(c *Context)
+		expect int
+	}{
+		{
+			name:   "regular request",
+			setup:  func(c *Context) {},
+			expect: http.StatusOK,
+		},
+		{
+			name: "websocket upgrade is logged-skipped but next still runs",
+			setup: func(c *Context) {
+				c.Request().Header.Set("Upgrade", "websocket")
+			},
+			expect: http.StatusOK,
+		},
+		{
+			name: "SSE request",
+			setup: func(c *Context) {
+				c.Request().Header.Set("Accept", "text/event-stream")
+			},
+			expect: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, rec := NewTestContext(http.MethodGet, "/", nil)
+			ctx.okapi = New(WithAccessLogDisabled())
+			tt.setup(ctx)
+
+			called := false
+			ctx.handlers = []HandlerFunc{
+				LoggerMiddleware,
+				func(c *Context) error {
+					called = true
+					return c.Text(tt.expect, "ok")
+				},
+			}
+			ctx.index = -1
+			if err := ctx.Next(); err != nil {
+				t.Fatalf("middleware error: %v", err)
+			}
+			if !called {
+				t.Fatal("next handler was not called")
+			}
+			if rec.Code != tt.expect {
+				t.Errorf("status = %d, want %d", rec.Code, tt.expect)
+			}
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Std middleware: net/http handlers via UseMiddleware / HandleStd
+// -----------------------------------------------------------------------------
+
 func TestStdMiddleware(t *testing.T) {
-	o := Default()
-	o.UseMiddleware(func(handler http.Handler) http.Handler {
+	ts := NewTestServer(t)
+	ts.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Hello Go standard HTTP middleware function")
 			w.Header().Add("Version", "v1.0")
 			handler.ServeHTTP(w, r)
 		})
-
 	})
-	o.Use(RequestID())
-	o.Get("/", func(c *Context) error {
-		return c.JSON(http.StatusOK, M{"hello": "world"})
-	}).Use(helloMiddleware)
-	api := o.Group("/api")
+	ts.Use(RequestID())
+	ts.Get("/", func(c *Context) error { return c.JSON(http.StatusOK, M{"hello": "world"}) }).Use(helloMiddleware)
+
+	api := ts.Group("/api")
 	api.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			slog.Info("Hello Go standard HTTP Group middleware function")
 			w.Header().Add("Group", "api")
-
 			handler.ServeHTTP(w, r)
 		})
 	})
-	api.Get("/hello", func(c *Context) error {
-		c.Logger().Info("Hello World")
-		return c.JSON(http.StatusOK, M{"hello": "world"})
-	}, UseMiddleware(helloMiddleware),
-	).Use(helloMiddleware)
-	api.Get("/", func(c *Context) error {
-		return c.JSON(http.StatusOK, M{"hello": "world"})
-	})
-	o.Handle("GET", "hello", func(c *Context) error {
-		return c.JSON(http.StatusOK, M{"hello": "world"})
-	})
-	o.HandleStd("POST", "hello", func(w http.ResponseWriter, r *http.Request) {
+	api.Get("/hello", func(c *Context) error { return c.JSON(http.StatusOK, M{"hello": "world"}) }, UseMiddleware(helloMiddleware)).Use(helloMiddleware)
+	api.Get("/", func(c *Context) error { return c.JSON(http.StatusOK, M{"hello": "world"}) })
+
+	ts.Handle("GET", "hello", func(c *Context) error { return c.JSON(http.StatusOK, M{"hello": "world"}) })
+	ts.HandleStd("POST", "hello", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		_, err := w.Write([]byte("hello world"))
-		if err != nil {
-			return
-		}
+		_, _ = w.Write([]byte("hello world"))
 	})
+
 	apiV1 := api.Group("v1")
 	apiV1.UseMiddleware(func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if s := r.Header.Get("Authorization"); s == "" || !strings.Contains(s, "Bearer") {
 				w.WriteHeader(http.StatusUnauthorized)
-				_, err := w.Write([]byte("Unauthorized"))
-				if err != nil {
-					return
-				}
+				_, _ = w.Write([]byte("Unauthorized"))
 				return
 			}
 			handler.ServeHTTP(w, r)
-
 		})
-
 	})
 	apiV1.HandleStd("POST", "protected", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		_, err := w.Write([]byte("hello world"))
-		if err != nil {
-			return
-		}
+		_, _ = w.Write([]byte("hello world"))
 	})
 
-	slog.Info("Route count", "count", len(o.Routes()))
-	// Start server in background
-	go func() {
-		if err := o.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("Server failed to start: %v", err)
-			return
-		}
-	}()
-	defer func(o *Okapi) {
-		err := o.Stop()
-		if err != nil {
-			t.Errorf("Failed to stop server: %v", err)
-		}
-	}(o)
-
-	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/").ExpectStatusOK().ExpectHeader("Version", "v1.0")
-	okapitest.GET(t, "http://localhost:8080/api").ExpectStatusOK().ExpectHeader("Group", "api").ExpectHeaderContains(requestIDHeader, "")
-	okapitest.GET(t, "http://localhost:8080/api").ExpectStatusOK().ExpectHeaderContains("jonas", "")
-	okapitest.GET(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.POST(t, "http://localhost:8080/hello").ExpectStatusCreated().ExpectBody("hello world")
-	okapitest.POST(t, "http://localhost:8080/api/v1/protected").ExpectStatusUnauthorized().ExpectBody("Unauthorized")
-	okapitest.POST(t, "http://localhost:8080/api/v1/protected").SetBearerAuth("Token").ExpectStatusCreated().ExpectBody("hello world")
-
+	t.Run("root carries Version header from std middleware", func(t *testing.T) {
+		okapitest.GET(t, ts.BaseURL+"/").
+			ExpectStatusOK().
+			ExpectHeader("Version", "v1.0")
+	})
+	t.Run("group middleware adds Group header and request id propagates", func(t *testing.T) {
+		okapitest.GET(t, ts.BaseURL+"/api").
+			ExpectStatusOK().
+			ExpectHeader("Group", "api").
+			ExpectHeaderContains(requestIDHeader, "")
+	})
+	t.Run("nested group route", func(t *testing.T) {
+		okapitest.GET(t, ts.BaseURL+"/api/hello").ExpectStatusOK()
+	})
+	t.Run("Handle vs HandleStd both reachable", func(t *testing.T) {
+		okapitest.GET(t, ts.BaseURL+"/hello").ExpectStatusOK()
+		okapitest.POST(t, ts.BaseURL+"/hello").
+			ExpectStatusCreated().
+			ExpectBody("hello world")
+	})
+	t.Run("std middleware enforces auth", func(t *testing.T) {
+		okapitest.POST(t, ts.BaseURL+"/api/v1/protected").
+			ExpectStatusUnauthorized().
+			ExpectBody("Unauthorized")
+		okapitest.POST(t, ts.BaseURL+"/api/v1/protected").
+			SetBearerAuth("Token").
+			ExpectStatusCreated().
+			ExpectBody("hello world")
+	})
 }
+
+// -----------------------------------------------------------------------------
+// Shared helpers
+// -----------------------------------------------------------------------------
+
+var (
+	bearerAuthSecurity = []map[string][]string{{"bearerAuth": {}}}
+	basicAuthSecurity  = map[string][]string{"basicAuth": {}}
+)
+
 func mustGenerateToken(t *testing.T, secret []byte, claims jwt.MapClaims) string {
 	t.Helper()
 	token, err := GenerateJwtToken(secret, claims, 2*time.Hour)
@@ -432,17 +573,11 @@ func whoAmIHandler(c *Context) error {
 	if email == "" {
 		return c.AbortUnauthorized("Unauthorized", fmt.Errorf("user not authenticated"))
 	}
-	slog.Info("Who am I am ", "email", email, "role", c.GetString("role"), "name", c.GetString("name"))
-	// Respond with the current user information
 	return c.JSON(http.StatusOK, M{
 		"email": email,
 		"role":  c.GetString("role"),
 		"name":  c.GetString("name"),
-	},
-	)
+	})
 }
 
-func helloMiddleware(c *Context) error {
-	slog.Info("Hello Okapi Route middleware function")
-	return c.Next()
-}
+func helloMiddleware(c *Context) error { return c.Next() }

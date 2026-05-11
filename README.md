@@ -1,8 +1,8 @@
 # Okapi
 
-A **modern, minimalist HTTP web framework for Go** inspired by the elegant developer experience of FastAPI.
+**Okapi is a modern, minimalist HTTP framework for Go built** for simplicity, performance, and developer experience. It helps you create fast, scalable, and well-documented APIs with minimal boilerplate..
 
-Okapi focuses on **clarity, strong typing, automatic validation, and built-in OpenAPI documentation**, making it easy to build production-ready APIs without boilerplate.
+Designed around clarity and strong typing, Okapi provides automatic request validation and built-in OpenAPI documentation out of the box, making it easy to build production-ready APIs that are clean, maintainable, and easy to evolve..
 
 [![Tests](https://github.com/jkaninda/okapi/actions/workflows/tests.yml/badge.svg)](https://github.com/jkaninda/okapi/actions/workflows/tests.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jkaninda/okapi)](https://goreportcard.com/report/github.com/jkaninda/okapi)
@@ -14,7 +14,7 @@ Okapi focuses on **clarity, strong typing, automatic validation, and built-in Op
   <img src="https://raw.githubusercontent.com/jkaninda/okapi/main/logo.png" width="150" alt="Okapi logo">
 </p>
 
-Named after the **okapi**, a rare and graceful mammal native to the rainforests of northeastern Democratic Republic of the Congo — Okapi blends **simplicity, elegance, and strength** into a powerful framework for building Go web services.
+Named after the **okapi** (/oʊˈkɑːpiː/), a rare and graceful mammal native to the rainforests of the **Democratic Republic of the Congo**, the framework reflects the same balance of **elegance**, **adaptability**, and **strength**. Like the animal itself, Okapi combines distinct qualities into a unique and powerful experience.
 
 ---
 

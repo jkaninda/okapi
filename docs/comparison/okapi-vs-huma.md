@@ -64,21 +64,3 @@ huma.Register(api, huma.Operation{
 ```
 
 Both approaches generate OpenAPI documentation automatically.
-
----
-
-### When to Choose Which?
-
-#### Choose Okapi if you want:
-
-- A **batteries-included web framework** with routing, middleware, auth, OpenAPI, templates, and CLI in one cohesive package
-- **FastAPI-like developer experience** that feels idiomatic in Go
-- **Dynamic route control** — enable or disable routes and groups at runtime
-- To build APIs **and** serve HTML pages or static assets from the same application
-
-#### Choose Huma if you want:
-
-- A **schema-first, OpenAPI-driven API layer** where the spec drives your implementation
-- To **keep using your existing router** (Chi, Fiber, Echo, etc.) without adopting a new framework
-- **Strict typed request/response contracts** as your primary design model
-- A **minimal, API-only stack** without broader web framework concerns

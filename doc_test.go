@@ -57,5 +57,51 @@ func TestRegisterDocRoutes(t *testing.T) {
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/swagger").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/redoc").ExpectStatusOK()
+	okapitest.GET(t, "http://localhost:8080/scalar").ExpectStatusOK()
+}
+
+// TestDocUISelection verifies that the UI rendered at /docs follows the
+// configured selection (defaulting to Swagger UI), while each dedicated UI
+// route stays available regardless of the selection.
+func TestDocUISelection(t *testing.T) {
+	tests := []struct {
+		name   string
+		ui     DocUI
+		marker string // unique substring of the expected UI's HTML
+	}{
+		{"default is swagger", "", "swagger-ui"},
+		{"swagger", SwaggerUI, "swagger-ui"},
+		{"redoc", RedocUI, "redoc"},
+		{"scalar", ScalarUI, "@scalar/api-reference"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestServer(t)
+			ts.WithOpenAPIDocs(OpenAPI{UI: tt.ui})
+
+			okapitest.GET(t, ts.BaseURL+"/docs").
+				ExpectStatusOK().
+				ExpectBodyContains(tt.marker)
+
+			// Dedicated per-UI routes are always available.
+			okapitest.GET(t, ts.BaseURL+"/swagger").ExpectStatusOK().ExpectBodyContains("swagger-ui")
+			okapitest.GET(t, ts.BaseURL+"/redoc").ExpectStatusOK().ExpectBodyContains("redoc")
+			okapitest.GET(t, ts.BaseURL+"/scalar").ExpectStatusOK().ExpectBodyContains("@scalar/api-reference")
+		})
+	}
+}
+
+// TestWithDocUIAfterDocs verifies the UI is resolved at request time, so
+// WithDocUI takes effect even when called after WithOpenAPIDocs.
+func TestWithDocUIAfterDocs(t *testing.T) {
+	ts := NewTestServer(t)
+	ts.WithOpenAPIDocs()
+	ts.WithDocUI(ScalarUI)
+
+	okapitest.GET(t, ts.BaseURL+"/docs").
+		ExpectStatusOK().
+		ExpectBodyContains("@scalar/api-reference")
 }

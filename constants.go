@@ -35,11 +35,17 @@ const (
 	constTRUE              = "true"
 
 	openApiVersion                     = "3.0.0"
+	openApiVersion31                   = "3.1.1"
 	openApiDocPrefix                   = "/docs"
 	openApiDocPath                     = "/openapi.json"
+	openApiYamlPath                    = "/openapi.yaml"
+	openApiDocPath30                   = "/openapi-3.0.json"
+	openApiYamlPath30                  = "/openapi-3.0.yaml"
+	jsonSchemaDialect                  = "https://spec.openapis.org/oas/3.1/dialect/base"
 	docSwaggerPath                     = "/swagger"
 	docRedocPath                       = "/redoc"
 	docScalarPath                      = "/scalar"
+	docFaviconPath                     = "/docs/favicon.png"
 	constAccessControlAllowOrigin      = "Access-Control-Allow-Origin"
 	constAccessControlAllowHeaders     = "Access-Control-Allow-Headers"
 	constAccessControlExposeHeaders    = "Access-Control-Expose-Headers"
@@ -82,9 +88,16 @@ const (
 	tagHidden      = "hidden"
 	tagMultipleOf  = "multipleOf"
 	tagExample     = "example"
+	tagConst       = "const"
 	tagMaxItems    = "maxItems"
 	tagMinItems    = "minItems"
 	tagUniqueItems = "uniqueItems"
+
+	// extOkapiConst is an internal marker extension used to carry an OpenAPI 3.1
+	// `const` value on the version-agnostic base schema. It is promoted to a real
+	// `const` keyword when deriving the 3.1 document and stripped from the 3.0 one,
+	// so neither served document exposes the marker.
+	extOkapiConst = "x-okapi-const"
 
 	// Format types
 	formatEmail    = "email"

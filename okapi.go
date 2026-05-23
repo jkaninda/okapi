@@ -80,6 +80,8 @@ type (
 		idleTimeout        int
 		optionsRegistered  map[string]bool
 		openapiSpec        *openapi3.T
+		openapiSpec31      *openapi3.T
+		webhooks           []*Route
 		openAPI            *OpenAPI
 		openApiEnabled     bool
 		maxMultipartMemory int64 // Maximum memory for multipart forms
@@ -599,8 +601,9 @@ func (o *Okapi) WithMaxMultipartMemory(max int64) *Okapi {
 //	Swagger UI:  /swagger
 //	ReDoc:       /redoc
 //	Scalar:      /scalar
-//	JSON spec:   /openapi.json
-//	YAML spec:   /openapi.yaml
+//	JSON spec:   /openapi.json      (OpenAPI 3.1, the default)
+//	YAML spec:   /openapi.yaml      (OpenAPI 3.1, the default)
+//	3.0 spec:    /openapi-3.0.json  and /openapi-3.0.yaml
 func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	o.openApiEnabled = true
 
@@ -622,6 +625,9 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		if config.UI != "" {
 			o.openAPI.UI = config.UI
 		}
+		if config.Favicon != "" {
+			o.openAPI.Favicon = config.Favicon
+		}
 
 	}
 
@@ -629,6 +635,41 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	// Register the OpenAPI JSON and Swagger UI routes
 	o.registerDocRoutes(o.openAPI.Title)
 	return o
+}
+
+// Webhook registers an OpenAPI 3.1 webhook: an out-of-band request that the API
+// sends to a consumer-provided endpoint (e.g. an event callback).
+//
+// Webhooks are documentation-only. They are NOT added to the router and never
+// receive traffic; they appear under the `webhooks` field of the OpenAPI 3.1
+// document served at /openapi.json and /openapi.yaml (the default). Because the
+// `webhooks` field does not exist in OpenAPI 3.0, they are intentionally absent
+// from /openapi-3.0.json and /openapi-3.0.yaml.
+//
+// Describe the payload and responses with the same Doc* options used for routes:
+//
+//	o.Webhook("newPet", http.MethodPost,
+//	    okapi.DocSummary("Notifies subscribers about a newly added pet"),
+//	    okapi.DocRequestBody(Pet{}),
+//	    okapi.DocResponse(200, okapi.M{"received": true}),
+//	)
+func (o *Okapi) Webhook(name, method string, opts ...RouteOption) *Route {
+	if name == "" {
+		panic("Webhook name cannot be empty")
+	}
+	route := &Route{
+		Name:      name,
+		Method:    strings.ToUpper(method),
+		Path:      name,
+		hidden:    true,
+		internal:  true,
+		responses: make(map[int]*openapi3.SchemaRef),
+	}
+	for _, opt := range opts {
+		opt(route)
+	}
+	o.webhooks = append(o.webhooks, route)
+	return route
 }
 
 // WithErrorHandler sets a custom error handler
@@ -1372,7 +1413,8 @@ func initConfig(options ...OptionFunc) *Okapi {
 			SecuritySchemes:  SecuritySchemes{},
 			ComponentSchemas: make(map[string]*SchemaInfo),
 		},
-		openapiSpec: &openapi3.T{},
+		openapiSpec:   &openapi3.T{},
+		openapiSpec31: &openapi3.T{},
 	}
 
 	return o.With(options...)

@@ -75,7 +75,9 @@ type OpenAPI struct {
 	// Valid values: SwaggerUI (default), RedocUI, ScalarUI.
 	// Regardless of this setting, each UI is always reachable at its own
 	// route: /swagger, /redoc and /scalar.
-	UI               DocUI
+	UI DocUI
+	// Favicon is the URL of the favicon used by the documentation UIs.
+	Favicon          string
 	ComponentSchemas map[string]*SchemaInfo
 }
 type SecuritySchemes []SecurityScheme
@@ -132,6 +134,11 @@ type License struct {
 	Extensions map[string]any `json:"-" yaml:"-"`                         // Custom extensions not part of OpenAPI spec
 	Name       string         `json:"name" yaml:"name"`                   // Required license name (e.g., "MIT")
 	URL        string         `json:"url,omitempty" yaml:"url,omitempty"` // Optional URL to the license
+	// Identifier is an SPDX license expression (e.g. "MIT", "Apache-2.0").
+	// It is an OpenAPI 3.1-only field and is mutually exclusive with URL: when
+	// set, it is emitted only on the default 3.1 document (/openapi.json) and URL
+	// is dropped there. It never appears on the 3.0 document (/openapi-3.0.json).
+	Identifier string `json:"identifier,omitempty" yaml:"identifier,omitempty"`
 }
 
 // Servers is a list of Server objects representing API server locations
@@ -924,8 +931,11 @@ func withSecurity(security []map[string][]string) RouteOption {
 	}
 }
 
-// buildOpenAPISpec constructs the complete OpenAPI specification document
-// by aggregating all the route documentation into a single OpenAPI 3.0 spec
+// buildOpenAPISpec constructs the complete OpenAPI specification documents by
+// aggregating all route documentation. It first builds the OpenAPI 3.0 base
+// spec, then derives the OpenAPI 3.1 spec from it (see deriveSpec31). The 3.1
+// document is the default served at /openapi.json; both remain reachable at
+// their version-pinned routes.
 func (o *Okapi) buildOpenAPISpec() {
 	spec := &openapi3.T{
 		OpenAPI: openApiVersion,
@@ -994,53 +1004,7 @@ func (o *Okapi) buildOpenAPISpec() {
 			spec.Paths.Set(r.Path, item)
 		}
 
-		op := &openapi3.Operation{
-			OperationID: r.operationId,
-			Summary:     r.summary,
-			Description: r.description,
-			Tags:        goutils.RemoveDuplicates(r.tags), // Remove duplicates in tags
-			Parameters:  append(append(r.pathParams, r.queryParams...), r.headers...),
-			Responses:   &openapi3.Responses{},
-			Deprecated:  r.deprecated,
-		}
-
-		addSecurity(spec, op, r)
-		// Handle request body
-		if r.request != nil {
-			// Generate reusable schema component if it's a complex type
-			schemaRef := o.getOrCreateSchemaComponent(r.request, schemaRegistry, spec.Components.Schemas)
-
-			requestBody := &openapi3.RequestBody{
-				Content:  openapi3.NewContentWithJSONSchemaRef(schemaRef),
-				Required: true,
-			}
-
-			// Add example if available
-			if r.requestExample != nil {
-				requestBody.Content[constJSON].Example = r.requestExample
-			}
-
-			op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
-		}
-		if len(r.responses) != 0 {
-			for key, resp := range r.responses {
-				schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
-				apiResponse := &openapi3.Response{
-					Description: ptr(http.StatusText(key)),
-					Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
-					Headers:     r.responseHeaders,
-				}
-				op.Responses.Set(strconv.Itoa(key), &openapi3.ResponseRef{
-					Value: apiResponse,
-				})
-			}
-		}
-		// Add default responses
-		op.Responses.Set("500", &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: ptr("Internal Server Error"),
-			},
-		})
+		op := o.buildOperation(spec, r, schemaRegistry)
 
 		// Assign operation to correct HTTP verb
 		switch r.Method {
@@ -1062,7 +1026,288 @@ func (o *Okapi) buildOpenAPISpec() {
 	}
 
 	spec.Tags = o.collectRootTags()
+
+	// Derive the OpenAPI 3.1 document from the 3.0 base before the base is
+	// cleaned of internal markers (the derivation deep-copies the base).
+	o.openapiSpec31 = o.deriveSpec31(spec)
+	// Remove internal markers so the 3.0 document stays clean and valid.
+	stripConstMarkers(spec)
 	o.openapiSpec = spec
+}
+
+// buildOperation builds an OpenAPI operation from a route's documentation
+// metadata. It is shared by route generation and webhook generation, and it
+// registers reusable object schemas as components on spec via schemaRegistry.
+func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[string]*SchemaInfo) *openapi3.Operation {
+	op := &openapi3.Operation{
+		OperationID: r.operationId,
+		Summary:     r.summary,
+		Description: r.description,
+		Tags:        goutils.RemoveDuplicates(r.tags), // Remove duplicates in tags
+		Parameters:  append(append(r.pathParams, r.queryParams...), r.headers...),
+		Responses:   &openapi3.Responses{},
+		Deprecated:  r.deprecated,
+	}
+
+	addSecurity(spec, op, r)
+	// Handle request body
+	if r.request != nil {
+		// Generate reusable schema component if it's a complex type
+		schemaRef := o.getOrCreateSchemaComponent(r.request, schemaRegistry, spec.Components.Schemas)
+
+		requestBody := &openapi3.RequestBody{
+			Content:  openapi3.NewContentWithJSONSchemaRef(schemaRef),
+			Required: true,
+		}
+
+		// Add example if available
+		if r.requestExample != nil {
+			requestBody.Content[constJSON].Example = r.requestExample
+		}
+
+		op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
+	}
+	if len(r.responses) != 0 {
+		for key, resp := range r.responses {
+			schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
+			apiResponse := &openapi3.Response{
+				Description: ptr(http.StatusText(key)),
+				Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
+				Headers:     r.responseHeaders,
+			}
+			op.Responses.Set(strconv.Itoa(key), &openapi3.ResponseRef{
+				Value: apiResponse,
+			})
+		}
+	}
+	// Add default responses
+	op.Responses.Set("500", &openapi3.ResponseRef{
+		Value: &openapi3.Response{
+			Description: ptr("Internal Server Error"),
+		},
+	})
+	return op
+}
+
+// deriveSpec31 produces an OpenAPI 3.1 document from the 3.0 base spec.
+//
+// The base is deep-copied via a JSON round-trip so the 3.0 document served at
+// /openapi.json is never mutated. kin-openapi marshals whatever fields are set
+// regardless of document version, so all 3.1-only adjustments (type-array
+// nullability, jsonSchemaDialect, SPDX license identifier, examples, const,
+// webhooks) are applied here and only here.
+func (o *Okapi) deriveSpec31(base *openapi3.T) *openapi3.T {
+	clone := &openapi3.T{}
+	data, err := base.MarshalJSON()
+	if err != nil {
+		o.logger.Error("openapi: failed to marshal base spec for 3.1 derivation", "error", err)
+		return clone
+	}
+	if err := clone.UnmarshalJSON(data); err != nil {
+		o.logger.Error("openapi: failed to derive 3.1 spec", "error", err)
+		return clone
+	}
+
+	clone.OpenAPI = openApiVersion31
+	clone.JSONSchemaDialect = jsonSchemaDialect
+
+	// SPDX license identifier (3.1-only). identifier and url are mutually
+	// exclusive, so url is dropped when an identifier is provided.
+	if id := o.openAPI.License.Identifier; id != "" && clone.Info != nil {
+		if clone.Info.License == nil {
+			clone.Info.License = &openapi3.License{Name: o.openAPI.License.Name}
+		}
+		clone.Info.License.Identifier = id
+		clone.Info.License.URL = ""
+	}
+
+	// Webhooks (3.1-only). Built before the schema transform so webhook schemas
+	// are converted to 3.1 idioms as well.
+	o.buildWebhooks(clone)
+
+	// Convert every schema in the document to OpenAPI 3.1 / JSON Schema 2020-12.
+	transformSpecTo31(clone)
+	return clone
+}
+
+// buildWebhooks populates spec.Webhooks from the registered webhook routes.
+func (o *Okapi) buildWebhooks(spec *openapi3.T) {
+	if len(o.webhooks) == 0 {
+		return
+	}
+	if spec.Components == nil {
+		spec.Components = &openapi3.Components{Schemas: make(openapi3.Schemas)}
+	}
+	if spec.Components.Schemas == nil {
+		spec.Components.Schemas = make(openapi3.Schemas)
+	}
+	// Seed the schema registry with components that already exist on the spec so
+	// webhook payloads reuse them instead of creating duplicates.
+	registry := make(map[string]*SchemaInfo, len(spec.Components.Schemas))
+	for name, ref := range spec.Components.Schemas {
+		registry[name] = &SchemaInfo{Schema: ref, TypeName: name}
+	}
+
+	spec.Webhooks = make(map[string]*openapi3.PathItem, len(o.webhooks))
+	for _, r := range o.webhooks {
+		item := spec.Webhooks[r.Name]
+		if item == nil {
+			item = &openapi3.PathItem{}
+			spec.Webhooks[r.Name] = item
+		}
+		op := o.buildOperation(spec, r, registry)
+		switch r.Method {
+		case methodGet:
+			item.Get = op
+		case methodPost:
+			item.Post = op
+		case methodPut:
+			item.Put = op
+		case methodDelete:
+			item.Delete = op
+		case methodPatch:
+			item.Patch = op
+		case methodHead:
+			item.Head = op
+		case methodOptions:
+			item.Options = op
+		default:
+			item.Post = op
+		}
+	}
+}
+
+// transformSpecTo31 walks every schema reachable from spec and rewrites it to
+// OpenAPI 3.1 idioms (see transformSchemaTo31).
+func transformSpecTo31(spec *openapi3.T) {
+	walkAllSchemas(spec, transformSchemaTo31)
+}
+
+// transformSchemaTo31 rewrites a single schema from the version-agnostic base
+// form to OpenAPI 3.1 / JSON Schema 2020-12:
+//   - nullable: true        -> type becomes ["<type>", "null"]
+//   - example               -> examples: [example]
+//   - x-okapi-const marker  -> const
+func transformSchemaTo31(s *openapi3.Schema) {
+	if s == nil {
+		return
+	}
+	// Nullable -> type array
+	if s.Nullable {
+		if s.Type != nil && len(s.Type.Slice()) > 0 && !s.Type.Includes(openapi3.TypeNull) {
+			types := openapi3.Types(append(s.Type.Slice(), openapi3.TypeNull))
+			s.Type = &types
+		}
+		s.Nullable = false
+	}
+	// example -> examples (3.1 prefers the array form)
+	if s.Example != nil && len(s.Examples) == 0 {
+		s.Examples = []any{s.Example}
+		s.Example = nil
+	}
+	// const marker -> const keyword
+	if s.Extensions != nil {
+		if v, ok := s.Extensions[extOkapiConst]; ok {
+			s.Const = v
+			delete(s.Extensions, extOkapiConst)
+		}
+	}
+}
+
+// stripConstMarkers removes the internal const marker extension from every
+// schema in spec so the 3.0 document never exposes it.
+func stripConstMarkers(spec *openapi3.T) {
+	walkAllSchemas(spec, func(s *openapi3.Schema) {
+		if s.Extensions != nil {
+			delete(s.Extensions, extOkapiConst)
+		}
+	})
+}
+
+// walkAllSchemas applies fn exactly once to every schema reachable from the
+// document: component schemas, and the parameter/request/response schemas of
+// every path and webhook operation.
+func walkAllSchemas(spec *openapi3.T, fn func(*openapi3.Schema)) {
+	seen := make(map[*openapi3.Schema]bool)
+	if spec.Components != nil {
+		for _, ref := range spec.Components.Schemas {
+			walkSchemaRef(ref, seen, fn)
+		}
+	}
+	if spec.Paths != nil {
+		for _, item := range spec.Paths.Map() {
+			walkPathItemSchemas(item, seen, fn)
+		}
+	}
+	for _, item := range spec.Webhooks {
+		walkPathItemSchemas(item, seen, fn)
+	}
+}
+
+// walkPathItemSchemas applies fn to the schemas of every operation on item.
+func walkPathItemSchemas(item *openapi3.PathItem, seen map[*openapi3.Schema]bool, fn func(*openapi3.Schema)) {
+	if item == nil {
+		return
+	}
+	for _, op := range item.Operations() {
+		if op == nil {
+			continue
+		}
+		for _, p := range op.Parameters {
+			if p != nil && p.Value != nil {
+				walkSchemaRef(p.Value.Schema, seen, fn)
+			}
+		}
+		if op.RequestBody != nil && op.RequestBody.Value != nil {
+			for _, mt := range op.RequestBody.Value.Content {
+				if mt != nil {
+					walkSchemaRef(mt.Schema, seen, fn)
+				}
+			}
+		}
+		if op.Responses != nil {
+			for _, resp := range op.Responses.Map() {
+				if resp == nil || resp.Value == nil {
+					continue
+				}
+				for _, mt := range resp.Value.Content {
+					if mt != nil {
+						walkSchemaRef(mt.Schema, seen, fn)
+					}
+				}
+			}
+		}
+	}
+}
+
+// walkSchemaRef applies fn to a schema and all of its descendants once.
+func walkSchemaRef(ref *openapi3.SchemaRef, seen map[*openapi3.Schema]bool, fn func(*openapi3.Schema)) {
+	if ref == nil || ref.Value == nil {
+		return
+	}
+	s := ref.Value
+	if seen[s] {
+		return
+	}
+	seen[s] = true
+	fn(s)
+	for _, child := range s.Properties {
+		walkSchemaRef(child, seen, fn)
+	}
+	walkSchemaRef(s.Items, seen, fn)
+	if s.AdditionalProperties.Schema != nil {
+		walkSchemaRef(s.AdditionalProperties.Schema, seen, fn)
+	}
+	for _, child := range s.AllOf {
+		walkSchemaRef(child, seen, fn)
+	}
+	for _, child := range s.AnyOf {
+		walkSchemaRef(child, seen, fn)
+	}
+	for _, child := range s.OneOf {
+		walkSchemaRef(child, seen, fn)
+	}
+	walkSchemaRef(s.Not, seen, fn)
 }
 
 // collectRootTags aggregates GroupTag entries from every route
@@ -1423,6 +1668,7 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 			continue
 		}
 
+		isPointer := field.Type.Kind() == reflect.Ptr
 		fieldType := field.Type
 		for fieldType.Kind() == reflect.Ptr {
 			fieldType = fieldType.Elem()
@@ -1430,6 +1676,13 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 
 		// Create schema for the field type
 		fieldSchema := typeToSchemaWithInfo(fieldType)
+
+		// Pointer fields are nullable. Recorded here as the version-agnostic
+		// `nullable` flag (valid in 3.0); converted to a `["...","null"]` type
+		// array when the 3.1 document is derived.
+		if isPointer && fieldSchema.Value != nil {
+			fieldSchema.Value.Nullable = true
+		}
 
 		// Apply validation tags from the field
 		applyValidationTags(fieldSchema.Value, field.Tag)
@@ -1573,6 +1826,14 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	// Example
 	if example := tag.Get(tagExample); example != "" {
 		schema.Example = example
+	}
+	// Const (OpenAPI 3.1). Stored as a marker extension on the version-agnostic
+	// schema; promoted to a real `const` for 3.1 and stripped for 3.0.
+	if constVal := tag.Get(tagConst); constVal != "" {
+		if schema.Extensions == nil {
+			schema.Extensions = make(map[string]any)
+		}
+		schema.Extensions[extOkapiConst] = constVal
 	}
 }
 

@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/jkaninda/okapi"
-	"github.com/jkaninda/okapi/examples/route-definition/routes"
-	"github.com/jkaninda/okapi/okapicli"
 	"log"
 	"os"
 	"time"
+
+	"github.com/jkaninda/okapi"
+	"github.com/jkaninda/okapi/examples/route-definition/routes"
+	"github.com/jkaninda/okapi/okapicli"
 )
 
 func main() {

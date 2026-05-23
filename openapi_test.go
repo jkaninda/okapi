@@ -32,7 +32,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/jkaninda/okapi/okapitest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type input struct {
@@ -283,6 +286,136 @@ func anyHandler(c *Context) error {
 	c.SetHeader("X-RateLimit-Limit", "100")
 	return c.OK(M{"message": "Hello from Okapi!"})
 
+}
+
+// nullable31Model exercises 3.1-specific schema generation:
+//   - Nickname is a pointer -> nullable
+//   - Status carries a const tag
+type nullable31Model struct {
+	Name     string  `json:"name"`
+	Nickname *string `json:"nickname"`
+	Status   string  `json:"status" const:"active"`
+}
+
+// validateOpenAPIDoc round-trips the spec through the loader (resolving refs)
+// and validates it. kin-openapi validates against the document's own version.
+func validateOpenAPIDoc(t *testing.T, spec *openapi3.T) {
+	t.Helper()
+	data, err := spec.MarshalJSON()
+	require.NoError(t, err)
+	loader := openapi3.NewLoader()
+	doc, err := loader.LoadFromData(data)
+	require.NoError(t, err)
+	require.NoError(t, doc.Validate(loader.Context))
+}
+
+func TestOpenAPI31Derivation(t *testing.T) {
+	o := New()
+	o.WithOpenAPIDocs(OpenAPI{
+		Title:   "Okapi 3.1",
+		Version: "1.0.0",
+		License: License{Name: "MIT", Identifier: "MIT"},
+		Servers: Servers{{URL: "http://localhost:8080"}},
+	})
+	o.Post("/things", anyHandler,
+		DocSummary("Create thing"),
+		DocRequestBody(&nullable31Model{}),
+		DocResponse(200, &nullable31Model{}),
+	)
+	o.Webhook("newThing", http.MethodPost,
+		DocSummary("Notify about a new thing"),
+		DocRequestBody(&nullable31Model{}),
+		DocResponse(200, M{"received": true}),
+	)
+	// Rebuild so the routes and webhook registered above are included.
+	o.buildOpenAPISpec()
+
+	spec30 := o.openapiSpec
+	spec31 := o.openapiSpec31
+
+	// Version + dialect.
+	assert.Equal(t, "3.0.0", spec30.OpenAPI)
+	assert.Empty(t, spec30.JSONSchemaDialect)
+	assert.Equal(t, "3.1.1", spec31.OpenAPI)
+	assert.Equal(t, jsonSchemaDialect, spec31.JSONSchemaDialect)
+
+	// Webhooks only on 3.1.
+	assert.Empty(t, spec30.Webhooks)
+	require.Contains(t, spec31.Webhooks, "newThing")
+	assert.NotNil(t, spec31.Webhooks["newThing"].Post)
+
+	// SPDX license identifier only on 3.1; url cleared there.
+	assert.Empty(t, spec30.Info.License.Identifier)
+	require.NotNil(t, spec31.Info.License)
+	assert.Equal(t, "MIT", spec31.Info.License.Identifier)
+
+	// Nullable + const representation.
+	model30 := spec30.Components.Schemas["nullable31Model"].Value
+	model31 := spec31.Components.Schemas["nullable31Model"].Value
+	require.NotNil(t, model30)
+	require.NotNil(t, model31)
+
+	// 3.0: nullable flag, no const, no marker leakage.
+	nick30 := model30.Properties["nickname"].Value
+	assert.True(t, nick30.Nullable)
+	assert.False(t, nick30.Type.Includes("null"))
+	status30 := model30.Properties["status"].Value
+	assert.Nil(t, status30.Const)
+	assert.NotContains(t, status30.Extensions, extOkapiConst)
+
+	// 3.1: type array, no nullable flag, const promoted, marker removed.
+	nick31 := model31.Properties["nickname"].Value
+	assert.False(t, nick31.Nullable)
+	assert.True(t, nick31.Type.Includes("null"))
+	assert.True(t, nick31.Type.Includes("string"))
+	status31 := model31.Properties["status"].Value
+	assert.Equal(t, "active", status31.Const)
+	assert.NotContains(t, status31.Extensions, extOkapiConst)
+
+	// Both documents must be valid under their own version.
+	validateOpenAPIDoc(t, spec30)
+	validateOpenAPIDoc(t, spec31)
+}
+
+func TestOpenAPI31Endpoints(t *testing.T) {
+	app := Default().WithOpenAPIDocs(OpenAPI{
+		Title:   "Okapi 3.1 Endpoints",
+		Version: "1.0.0",
+		License: License{Name: "MIT", Identifier: "MIT"},
+	})
+	o := NewTestServerWithOkapi(t, app)
+	o.Post("/things", anyHandler).WithIO(&nullable31Model{}, &nullable31Model{})
+
+	// Default endpoints serve OpenAPI 3.1.
+	okapitest.GET(t, fmt.Sprintf("%s/openapi.json", o.BaseURL)).
+		ExpectStatusOK().ExpectJSONPath("openapi", "3.1.1")
+	okapitest.GET(t, fmt.Sprintf("%s/openapi.yaml", o.BaseURL)).
+		ExpectStatusOK().ExpectBodyContains("openapi: 3.1.1")
+
+	// Version-pinned 3.0 endpoints (preserved).
+	okapitest.GET(t, fmt.Sprintf("%s/openapi-3.0.json", o.BaseURL)).
+		ExpectStatusOK().ExpectJSONPath("openapi", "3.0.0")
+	okapitest.GET(t, fmt.Sprintf("%s/openapi-3.0.yaml", o.BaseURL)).
+		ExpectStatusOK().ExpectBodyContains("openapi: 3.0.0")
+
+	okapitest.GET(t, fmt.Sprintf("%s/docs/favicon.png", o.BaseURL)).
+		ExpectStatusOK().ExpectContentType("image/png")
+	okapitest.GET(t, fmt.Sprintf("%s/scalar", o.BaseURL)).
+		ExpectStatusOK().ExpectBodyContains(`href="/docs/favicon.png"`)
+}
+
+func TestOpenAPICustomFavicon(t *testing.T) {
+	app := Default().WithOpenAPIDocs(OpenAPI{
+		Title:   "Custom Favicon",
+		Favicon: "https://example.com/icon.png",
+	})
+	o := NewTestServerWithOkapi(t, app)
+	o.Get("/", anyHandler)
+
+	// Custom favicon is referenced; the embedded route is not registered.
+	okapitest.GET(t, fmt.Sprintf("%s/swagger", o.BaseURL)).
+		ExpectStatusOK().ExpectBodyContains(`href="https://example.com/icon.png"`)
+	okapitest.GET(t, fmt.Sprintf("%s/docs/favicon.png", o.BaseURL)).ExpectStatusNotFound()
 }
 
 func TestWithOpenAPIDocs(t *testing.T) {

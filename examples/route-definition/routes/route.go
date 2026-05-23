@@ -25,11 +25,12 @@
 package routes
 
 import (
+	"net/http"
+
 	"github.com/jkaninda/okapi"
 	"github.com/jkaninda/okapi/examples/route-definition/middlewares"
 	"github.com/jkaninda/okapi/examples/route-definition/models"
 	"github.com/jkaninda/okapi/examples/route-definition/services"
-	"net/http"
 )
 
 // ****************** Controllers ******************
@@ -87,6 +88,7 @@ func NewRouter(app *okapi.Okapi) *Router {
 			},
 		},
 	})
+	app.WithDocUI(okapi.ScalarUI)
 	return &Router{
 		app:   app,
 		group: &okapi.Group{Prefix: "/api/v1"},

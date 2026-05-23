@@ -37,7 +37,7 @@ Key goals:
 - **Intuitive API Design** – Clean, declarative syntax for routes and middleware.
 - **Automatic Request Binding** – Parse JSON, XML, forms, query params, headers, and path variables into structs
 - **Built-in Validation** – Struct tag-based validation with comprehensive error messages.
-- **Auto-Generated OpenAPI Docs** – Swagger UI and ReDoc automatically synced with your code.
+- **Auto-Generated OpenAPI Docs** – Swagger UI, ReDoc, and Scalar automatically synced with your code.
 - **Runtime Documentation Control** – Enable/disable OpenAPI docs at runtime without redeployment
 - **Authentication Ready** – Native JWT, Basic Auth, and extensible middleware support.
 - **Standard Library Compatible** – Fully compatible with Go’s `net/http`.
@@ -416,7 +416,7 @@ Okapi automatically generates interactive API documentation with multiple approa
 
 ### Enabling Documentation
 
-**With `okapi.Default()`** – Documentation is enabled by default at `/docs` and `/redoc`.
+**With `okapi.Default()`** – Documentation is enabled by default.
 
 **With `okapi.New()`** – Documentation is disabled by default. Enable it conditionally:
 
@@ -426,6 +426,38 @@ o := okapi.New()
 if os.Getenv("ENABLE_DOCS") == "true" {
     o.WithOpenAPIDocs()
 }
+```
+
+Once enabled, the following routes are served:
+
+| Route           | Content                                            |
+|-----------------|----------------------------------------------------|
+| `/docs`         | The selected UI (Swagger UI by default)            |
+| `/swagger`      | Swagger UI                                          |
+| `/redoc`        | ReDoc                                               |
+| `/scalar`       | Scalar API Reference                               |
+| `/openapi.json` | OpenAPI spec (JSON)                                 |
+| `/openapi.yaml` | OpenAPI spec (YAML)                                 |
+
+### Choosing the Documentation UI
+
+Okapi ships with three interactive UIs: **Swagger UI** (default), **ReDoc**, and **Scalar**.
+The UI rendered at `/docs` is configurable, while each UI also stays reachable at its own
+dedicated route regardless of the selection.
+
+Select it via the `UI` field on `OpenAPI`:
+
+```go
+o.WithOpenAPIDocs(okapi.OpenAPI{
+    Title: "My API",
+    UI:    okapi.ScalarUI, // okapi.SwaggerUI (default) | okapi.RedocUI | okapi.ScalarUI
+})
+```
+
+…or with the chainable `WithDocUI` method:
+
+```go
+o := okapi.New().WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
 ```
 
 ### Documenting Routes
@@ -498,7 +530,10 @@ See the full guide at **[okapi.jkaninda.dev/features/openapi](https://okapi.jkan
 
 ### Generated Documentation
 
-|                               Swagger UI (`/docs`)                               |                             ReDoc (`/redoc`)                              |
+Okapi serves **Swagger UI** (`/swagger`), **ReDoc** (`/redoc`), and **Scalar** (`/scalar`) out of the box,
+with `/docs` rendering your selected default (Swagger UI unless changed via `UI` / `WithDocUI`).
+
+|                               Swagger UI (`/swagger`)                             |                             ReDoc (`/redoc`)                              |
 |:--------------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
 | ![Swagger UI](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png) | ![ReDoc](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png) |
 

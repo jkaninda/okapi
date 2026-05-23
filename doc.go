@@ -44,7 +44,8 @@
 //     Native support for JWT, OAuth2, Basic Auth, and custom middleware.
 //
 //   - First-Class Documentation:
-//     OpenAPI 3.0 & Swagger UI integrated out of the box—auto-generate API docs with minimal effort.
+//     OpenAPI 3.0 with Swagger UI, ReDoc, and Scalar integrated out of the box—auto-generate
+//     API docs with minimal effort and pick the UI rendered at /docs.
 //
 //   - Modern Tooling:
 //     Route grouping, middleware chaining, static file serving, templating engine support,
@@ -119,12 +120,61 @@ const (
 </body>
 </html>
 `
+	scalar = `
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Scalar API Reference" />
+    <title> {{.Title }} | Scalar</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- Load the Script -->
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    
+    <!-- Initialize the Scalar API Reference -->
+    <script>
+      Scalar.createApiReference('#app', {
+        url: '/openapi.json',
+      });
+    </script>
+  </body>
+</html>
+`
+)
+
+// DocUI identifies which interactive documentation UI is rendered at /docs.
+type DocUI string
+
+const (
+	// SwaggerUI renders Swagger UI. This is the default.
+	SwaggerUI DocUI = "swagger"
+	// RedocUI renders ReDoc.
+	RedocUI DocUI = "redoc"
+	// ScalarUI renders Scalar API Reference.
+	ScalarUI DocUI = "scalar"
 )
 
 var (
 	redocTemplate   = template.Must(template.New("redoc").Parse(redoc))
 	swaggerTemplate = template.Must(template.New("swagger").Parse(swagger))
+	scalarTemplate  = template.Must(template.New("scalar").Parse(scalar))
 )
+
+// docsTemplate returns the template for the UI selected via OpenAPI.UI
+// (or WithDocUI). It falls back to Swagger UI when unset or unrecognized.
+func (o *Okapi) docsTemplate() *template.Template {
+	switch o.openAPI.UI {
+	case RedocUI:
+		return redocTemplate
+	case ScalarUI:
+		return scalarTemplate
+	default:
+		return swaggerTemplate
+	}
+}
 
 // registerDocRoutes registers the OpenAPI documentation routes for the Okapi instance.
 func (o *Okapi) registerDocRoutes(title string) {
@@ -135,19 +185,31 @@ func (o *Okapi) registerDocRoutes(title string) {
 	o.Get("/openapi.yaml", func(c *Context) error {
 		return c.YAML(http.StatusOK, o.openapiSpec)
 	}).internalRoute().Hide()
-	// Register the swagger route
+	// Register the main docs route. The UI is resolved at request time so the
+	// selection works regardless of whether WithDocUI is called before or after
+	// WithOpenAPIDocs (or before Start auto-registers the docs).
 	o.Get(openApiDocPrefix, func(c *Context) error {
-		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})
+		return c.renderHTML(http.StatusOK, o.docsTemplate(), M{"Title": title})
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// TODO: remove this route in the next major release
 	o.Get("/docs/index.html", func(c *Context) error {
+		return c.renderHTML(http.StatusOK, o.docsTemplate(), M{"Title": title})
+	},
+	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
+	// Register the Swagger UI route
+	o.Get(docSwaggerPath, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// Register the Redoc route
-	o.Get("/redoc", func(c *Context) error {
+	o.Get(docRedocPath, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, redocTemplate, M{"Title": title})
+	},
+	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
+	// Register the Scalar route
+	o.Get(docScalarPath, func(c *Context) error {
+		return c.renderHTML(http.StatusOK, scalarTemplate, M{"Title": title})
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 }

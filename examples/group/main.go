@@ -54,7 +54,7 @@ var (
 func main() {
 	// Example usage of Group handling in Okapi
 	// Create a new Okapi instance
-	o := okapi.New(okapi.WithDebug()).WithOpenAPIDocs()
+	o := okapi.New(okapi.WithDebug()).WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
 	o.Get("/", func(c *okapi.Context) error {
 		// Handler logic for the root route
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})

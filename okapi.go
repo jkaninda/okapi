@@ -471,6 +471,17 @@ func WithOpenAPIDisabled() OptionFunc {
 	}
 }
 
+// WithDocUI selects the interactive documentation UI rendered at /docs.
+//
+// Valid values: SwaggerUI (default), RedocUI, ScalarUI. Each UI also remains
+// reachable at its dedicated route (/swagger, /redoc, /scalar) regardless of
+// this setting.
+func WithDocUI(ui DocUI) OptionFunc {
+	return func(o *Okapi) {
+		o.openAPI.UI = ui
+	}
+}
+
 // WithMaxMultipartMemory Maximum memory for multipart forms
 func WithMaxMultipartMemory(max int64) OptionFunc {
 	return func(o *Okapi) {
@@ -517,6 +528,19 @@ func (o *Okapi) WithDebug() *Okapi {
 func (o *Okapi) WithOpenAPIDisabled() *Okapi {
 	return o.apply(WithOpenAPIDisabled())
 
+}
+
+// WithDocUI selects the interactive documentation UI rendered at /docs.
+//
+// Valid values: SwaggerUI (default), RedocUI, ScalarUI. Each UI also remains
+// reachable at its dedicated route (/swagger, /redoc, /scalar) regardless of
+// this setting.
+//
+// Example:
+//
+//	o := okapi.New().WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
+func (o *Okapi) WithDocUI(ui DocUI) *Okapi {
+	return o.apply(WithDocUI(ui))
 }
 
 // WithRenderer sets a custom Renderer for the server.
@@ -566,11 +590,17 @@ func (o *Okapi) WithMaxMultipartMemory(max int64) *Okapi {
 	return o.apply(WithMaxMultipartMemory(max))
 }
 
-// WithOpenAPIDocs registers the OpenAPI JSON and Swagger UI handlers
-// at the configured PathPrefix (default: /docs).
+// WithOpenAPIDocs registers the OpenAPI spec and interactive documentation handlers.
 //
-// UI Path: /docs
-// JSON Path: /openapi.json
+// The UI rendered at /docs is selected via OpenAPI.UI (or WithDocUI) and
+// defaults to Swagger UI. Each UI is also always reachable at its own route.
+//
+//	UI Path:     /docs    (Swagger UI by default; see OpenAPI.UI / WithDocUI)
+//	Swagger UI:  /swagger
+//	ReDoc:       /redoc
+//	Scalar:      /scalar
+//	JSON spec:   /openapi.json
+//	YAML spec:   /openapi.yaml
 func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	o.openApiEnabled = true
 
@@ -589,6 +619,9 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		o.openAPI.License = config.License
 		o.openAPI.Contact = config.Contact
 		o.openAPI.SecuritySchemes = config.SecuritySchemes
+		if config.UI != "" {
+			o.openAPI.UI = config.UI
+		}
 
 	}
 

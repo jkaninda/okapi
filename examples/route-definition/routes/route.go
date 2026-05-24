@@ -55,8 +55,10 @@ type Router struct {
 func NewRouter(app *okapi.Okapi) *Router {
 	// Update OpenAPI documentation with the application title and version
 	app.WithOpenAPIDocs(okapi.OpenAPI{
-		Title:   "Okapi Web Framework Example",
-		Version: "1.0.0",
+		Title:       "Okapi Web Framework Example",
+		Version:     "1.0.0",
+		Description: "Okapi Web Framework Route Definition Example",
+		Summary:     "Okapi Web Framework Route Definition Example",
 		License: okapi.License{
 			Name: "MIT",
 		},

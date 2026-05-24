@@ -86,6 +86,7 @@ Visit:
 * API → [http://localhost:8080](http://localhost:8080)
 * Swagger Docs → [http://localhost:8080/docs](http://localhost:8080/docs)
 * ReDoc → [http://localhost:8080/redoc](http://localhost:8080/redoc)
+* Scalar → [http://localhost:8080/redoc](http://localhost:8080/scalar)
 
 
 ---
@@ -562,9 +563,9 @@ See the full guide at **[okapi.jkaninda.dev/features/openapi](https://okapi.jkan
 Okapi serves **Swagger UI** (`/swagger`), **ReDoc** (`/redoc`), and **Scalar** (`/scalar`) out of the box,
 with `/docs` rendering your selected default (Swagger UI unless changed via `UI` / `WithDocUI`).
 
-|                               Swagger UI (`/swagger`)                             |                             ReDoc (`/redoc`)                              |
-|:--------------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
-| ![Swagger UI](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png) | ![ReDoc](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png) |
+|                               Swagger UI (`/swagger`)                             |                             ReDoc (`/redoc`)                              |                              Scalar (`/scalar`)                              |
+|:--------------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|:---------------------------------------------------------------------------:|
+| ![Swagger UI](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png) | ![ReDoc](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png) | ![Scalar](https://raw.githubusercontent.com/jkaninda/okapi/main/scalar.png) |
 
 ---
 
@@ -661,6 +662,7 @@ Both approaches generate OpenAPI documentation automatically.
 ## Support
 
 - **Documentation:** [okapi.jkaninda.dev](https://okapi.jkaninda.dev)
+- **AI Agent Skills:** [jkaninda/okapi-skills](https://github.com/jkaninda/okapi-skills)
 - **Issues:** [GitHub Issues](https://github.com/jkaninda/okapi/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/jkaninda/okapi/discussions)
 - **LinkedIn:** [Jonas Kaninda](https://www.linkedin.com/in/jkaninda/)

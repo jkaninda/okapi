@@ -266,3 +266,4 @@ o.Webhook("newBook", http.MethodPost,
 ![Swagger UI](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png)
 
 ![Redoc](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png)
+![Scalar](https://raw.githubusercontent.com/jkaninda/okapi/main/scalar.png)

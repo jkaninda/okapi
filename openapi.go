@@ -63,22 +63,26 @@ type RouteOption func(*Route)
 // OpenAPI contains configuration for generating OpenAPI/Swagger documentation.
 // It includes metadata about the API and its documentation.
 type OpenAPI struct {
-	Title   string  // Title of the API
-	Version string  // Version of the API
-	Servers Servers // List of server URLs where the API is hosted
-	License License // License information for the API
-	Contact Contact // Contact information for the API maintainers
+	Title          string // Title of the API
+	Summary        string // OpenAPI >=3.1
+	Description    string
+	TermsOfService string
+	Version        string  // Version of the API
+	Servers        Servers // List of server URLs where the API is hosted
+	License        License // License information for the API
+	Contact        Contact // Contact information for the API maintainers
 	// SecuritySchemes defines security schemes for the OpenAPI specification.
-	SecuritySchemes SecuritySchemes
-	ExternalDocs    *ExternalDocs
-	// UI selects the interactive documentation UI rendered at /docs.
+	SecuritySchemes  SecuritySchemes
+	ExternalDocs     *ExternalDocs
+	ComponentSchemas map[string]*SchemaInfo
+
+	// Okapi: UI selects the interactive documentation UI rendered at /docs.
 	// Valid values: SwaggerUI (default), RedocUI, ScalarUI.
 	// Regardless of this setting, each UI is always reachable at its own
 	// route: /swagger, /redoc and /scalar.
 	UI DocUI
-	// Favicon is the URL of the favicon used by the documentation UIs.
-	Favicon          string
-	ComponentSchemas map[string]*SchemaInfo
+	// Okapi: Favicon is the URL of the favicon used by the documentation UIs.
+	Favicon string
 }
 type SecuritySchemes []SecurityScheme
 
@@ -201,22 +205,6 @@ func (s Servers) ToOpenAPI() openapi3.Servers {
 	return servers
 }
 
-// ToOpenAPISpec converts OpenAPI to *openapi3.T.
-// It transforms the custom OpenAPI configuration to a complete OpenAPI specification object.
-func (o OpenAPI) ToOpenAPISpec() *openapi3.T {
-	return &openapi3.T{
-		Info: &openapi3.Info{
-			Title:   o.Title,
-			Version: o.Version,
-			License: o.License.ToOpenAPI(),
-			Contact: o.Contact.ToOpenAPI(),
-		},
-		Servers: o.Servers.ToOpenAPI(),
-		Components: &openapi3.Components{
-			SecuritySchemes: o.SecuritySchemes.ToOpenAPI(),
-		},
-	}
-}
 func (ss SecuritySchemes) ToOpenAPI() openapi3.SecuritySchemes {
 	result := make(openapi3.SecuritySchemes)
 	for _, s := range ss {
@@ -940,10 +928,13 @@ func (o *Okapi) buildOpenAPISpec() {
 	spec := &openapi3.T{
 		OpenAPI: openApiVersion,
 		Info: &openapi3.Info{
-			Title:   o.openAPI.Title,
-			Version: o.openAPI.Version,
-			License: o.openAPI.License.ToOpenAPI(),
-			Contact: o.openAPI.Contact.ToOpenAPI(),
+			Title:          o.openAPI.Title,
+			Version:        o.openAPI.Version,
+			Summary:        o.openAPI.Summary,
+			Description:    o.openAPI.Description,
+			TermsOfService: o.openAPI.TermsOfService,
+			License:        o.openAPI.License.ToOpenAPI(),
+			Contact:        o.openAPI.Contact.ToOpenAPI(),
 		},
 		Paths:   &openapi3.Paths{},
 		Servers: o.openAPI.Servers.ToOpenAPI(),

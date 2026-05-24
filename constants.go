@@ -34,8 +34,8 @@ const (
 	okapiName              = "Okapi"
 	constTRUE              = "true"
 
-	openApiVersion                     = "3.0.0"
-	openApiVersion31                   = "3.1.1"
+	openApiVersion                     = "3.0.3"
+	openApiVersion31                   = "3.1.0"
 	openApiDocPrefix                   = "/docs"
 	openApiDocPath                     = "/openapi.json"
 	openApiYamlPath                    = "/openapi.yaml"

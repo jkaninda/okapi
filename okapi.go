@@ -613,6 +613,9 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		if config.Title != "" {
 			o.openAPI.Title = config.Title
 		}
+		o.openAPI.Description = config.Description
+		o.openAPI.TermsOfService = config.TermsOfService
+		o.openAPI.Summary = config.Summary
 		if config.Version != "" {
 			o.openAPI.Version = config.Version
 		}

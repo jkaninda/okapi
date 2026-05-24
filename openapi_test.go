@@ -178,8 +178,10 @@ func TestNew(t *testing.T) {
 	o := New()
 	o.WithContext(context.Background())
 	o.WithOpenAPIDocs(OpenAPI{
-		Title:   "Okapi Web Framework Example",
-		Version: "1.0.0",
+		Title:       "Okapi Web Framework Example",
+		Version:     "1.0.0",
+		Description: "Okapi Web Framework Example",
+		Summary:     "Okapi Web Framework Example",
 		License: License{
 			Name: "MIT",
 		},

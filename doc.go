@@ -22,8 +22,7 @@
  *  SOFTWARE.
  */
 
-// Package okapi is a modern, minimalist HTTP web framework for Go,
-// inspired by FastAPI's elegance. Designed for simplicity, performance,
+// Package okapi is a modern, minimalist HTTP web framework for Go, designed for simplicity, performance,
 // and developer happiness, it helps you build fast, scalable, and well-documented APIs
 // with minimal boilerplate.
 //
@@ -44,8 +43,9 @@
 //     Native support for JWT, OAuth2, Basic Auth, and custom middleware.
 //
 //   - First-Class Documentation:
-//     OpenAPI 3.0 with Swagger UI, ReDoc, and Scalar integrated out of the box—auto-generate
-//     API docs with minimal effort and pick the UI rendered at /docs.
+//     OpenAPI 3.1 (default) and 3.0 with Swagger UI, ReDoc, and Scalar integrated out of the box—auto-generate
+//     API docs with minimal effort and pick the UI rendered at /docs. The default spec at /openapi.json and
+//     /openapi.yaml is OpenAPI 3.1; the 3.0 spec is also served at /openapi-3.0.{json,yaml}.
 //
 //   - Modern Tooling:
 //     Route grouping, middleware chaining, static file serving, templating engine support,
@@ -60,9 +60,17 @@
 package okapi
 
 import (
+	_ "embed"
 	"html/template"
 	"net/http"
 )
+
+// okapiFavicon is the default favicon served for the documentation UIs at
+// docFaviconPath: a 32x32 Okapi logo, embedded so the docs render the same
+// branding offline and without any external (CDN) dependency.
+//
+//go:embed favicon.png
+var okapiFavicon []byte
 
 const (
 	redoc = `
@@ -70,7 +78,8 @@ const (
 <!DOCTYPE html>
 <html>
   <head>
-    <title> {{.Title }}</title>
+    <title>{{.Title}} | ReDoc</title>
+    <link rel="icon" type="image/png" href="{{.Favicon}}">
     <!-- needed for adaptive design -->
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -98,10 +107,9 @@ const (
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="SwaggerUI" />
-    <title> {{.Title }}</title>
+    <title>{{.Title}} | Swagger</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.27.1/swagger-ui.css" />
-<link rel="icon" type="image/png" sizes="32x32" href="https://unpkg.com/swagger-ui-dist@5.27.1/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="https://unpkg.com/swagger-ui-dist@5.27.1/favicon-16x16.png">
+<link rel="icon" type="image/png" href="{{.Favicon}}">
 </head>
 <body>
 <div id="swagger-ui"></div>
@@ -127,7 +135,8 @@ const (
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Scalar API Reference" />
-    <title> {{.Title }} | Scalar</title>
+    <title>{{.Title}} | Scalar</title>
+    <link rel="icon" type="image/png" href="{{.Favicon}}">
   </head>
   <body>
     <div id="app"></div>
@@ -178,38 +187,51 @@ func (o *Okapi) docsTemplate() *template.Template {
 
 // registerDocRoutes registers the OpenAPI documentation routes for the Okapi instance.
 func (o *Okapi) registerDocRoutes(title string) {
-	// Register the OpenAPI JSON route
+	favicon := o.openAPI.Favicon
+	if favicon == "" {
+		favicon = docFaviconPath
+		o.Get(docFaviconPath, func(c *Context) error {
+			return c.Data(http.StatusOK, "image/png", okapiFavicon)
+		}).internalRoute().Hide()
+	}
+	docData := M{"Title": title, "Favicon": favicon}
+	// Default OpenAPI routes serve the latest version (3.1).
 	o.Get(openApiDocPath, func(c *Context) error {
-		return c.JSON(http.StatusOK, o.openapiSpec)
+		return c.JSON(http.StatusOK, o.openapiSpec31)
 	}).internalRoute().Hide() // Hide the route from the OpenAPI documentation
-	o.Get("/openapi.yaml", func(c *Context) error {
+	o.Get(openApiYamlPath, func(c *Context) error {
+		return c.YAML(http.StatusOK, o.openapiSpec31)
+	}).internalRoute().Hide()
+	// Version-pinned OpenAPI 3.0 routes
+	o.Get(openApiDocPath30, func(c *Context) error {
+		return c.JSON(http.StatusOK, o.openapiSpec)
+	}).internalRoute().Hide()
+	o.Get(openApiYamlPath30, func(c *Context) error {
 		return c.YAML(http.StatusOK, o.openapiSpec)
 	}).internalRoute().Hide()
-	// Register the main docs route. The UI is resolved at request time so the
-	// selection works regardless of whether WithDocUI is called before or after
-	// WithOpenAPIDocs (or before Start auto-registers the docs).
+	// Register the main docs route.
 	o.Get(openApiDocPrefix, func(c *Context) error {
-		return c.renderHTML(http.StatusOK, o.docsTemplate(), M{"Title": title})
+		return c.renderHTML(http.StatusOK, o.docsTemplate(), docData)
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// TODO: remove this route in the next major release
 	o.Get("/docs/index.html", func(c *Context) error {
-		return c.renderHTML(http.StatusOK, o.docsTemplate(), M{"Title": title})
+		return c.renderHTML(http.StatusOK, o.docsTemplate(), docData)
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// Register the Swagger UI route
 	o.Get(docSwaggerPath, func(c *Context) error {
-		return c.renderHTML(http.StatusOK, swaggerTemplate, M{"Title": title})
+		return c.renderHTML(http.StatusOK, swaggerTemplate, docData)
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// Register the Redoc route
 	o.Get(docRedocPath, func(c *Context) error {
-		return c.renderHTML(http.StatusOK, redocTemplate, M{"Title": title})
+		return c.renderHTML(http.StatusOK, redocTemplate, docData)
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 	// Register the Scalar route
 	o.Get(docScalarPath, func(c *Context) error {
-		return c.renderHTML(http.StatusOK, scalarTemplate, M{"Title": title})
+		return c.renderHTML(http.StatusOK, scalarTemplate, docData)
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
 }

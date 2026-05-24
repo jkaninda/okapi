@@ -86,6 +86,7 @@ Visit:
 * API → [http://localhost:8080](http://localhost:8080)
 * Swagger Docs → [http://localhost:8080/docs](http://localhost:8080/docs)
 * ReDoc → [http://localhost:8080/redoc](http://localhost:8080/redoc)
+* Scalar → [http://localhost:8080/redoc](http://localhost:8080/scalar)
 
 
 ---
@@ -430,14 +431,43 @@ if os.Getenv("ENABLE_DOCS") == "true" {
 
 Once enabled, the following routes are served:
 
-| Route           | Content                                            |
-|-----------------|----------------------------------------------------|
-| `/docs`         | The selected UI (Swagger UI by default)            |
-| `/swagger`      | Swagger UI                                          |
-| `/redoc`        | ReDoc                                               |
-| `/scalar`       | Scalar API Reference                               |
-| `/openapi.json` | OpenAPI spec (JSON)                                 |
-| `/openapi.yaml` | OpenAPI spec (YAML)                                 |
+| Route                | Content                                            |
+|----------------------|----------------------------------------------------|
+| `/docs`              | The selected UI (Swagger UI by default)            |
+| `/swagger`           | Swagger UI                                          |
+| `/redoc`             | ReDoc                                               |
+| `/scalar`            | Scalar API Reference                               |
+| `/openapi.json`      | OpenAPI spec (JSON) — **3.1 by default**            |
+| `/openapi.yaml`      | OpenAPI spec (YAML) — **3.1 by default**            |
+| `/openapi-3.0.json`  | OpenAPI **3.0** spec (JSON)                         |
+| `/openapi-3.0.yaml`  | OpenAPI **3.0** spec (YAML)                         |
+
+### OpenAPI 3.1 (default) and 3.0
+
+Okapi serves the same API description as both **OpenAPI 3.1 / JSON Schema 2020-12** and **OpenAPI 3.0**.
+The default endpoints (`/openapi.json`, `/openapi.yaml`) serve **3.1**; the documentation UIs at
+`/docs`, `/swagger`, `/redoc` and `/scalar` render it. The 3.0 document remains available at
+`/openapi-3.0.{json,yaml}`, so 3.0-only consumers stay supported.
+
+The 3.1 document is derived from the 3.0 one and adds these 3.1 features:
+
+- **Type-array nullability** – pointer fields render as `nullable: true` in 3.0 and as
+  `type: ["string", "null"]` in 3.1.
+- **`jsonSchemaDialect`** – set to the JSON Schema 2020-12 base dialect on the 3.1 document.
+- **SPDX license identifier** – set `License.Identifier` (e.g. `"Apache-2.0"`); it appears only on
+  the 3.1 document (mutually exclusive with `License.URL`).
+- **`const`** – the `const:"value"` struct tag becomes a JSON Schema `const` on the 3.1 document.
+- **Webhooks** – declare outbound callbacks with `o.Webhook(...)`; they appear under the `webhooks`
+  field of the 3.1 document only.
+
+```go
+// A webhook is documentation-only: it is not added to the router.
+o.Webhook("newPet", http.MethodPost,
+    okapi.DocSummary("Notifies subscribers about a newly added pet"),
+    okapi.DocRequestBody(Pet{}),
+    okapi.DocResponse(200, okapi.M{"received": true}),
+)
+```
 
 ### Choosing the Documentation UI
 
@@ -533,9 +563,9 @@ See the full guide at **[okapi.jkaninda.dev/features/openapi](https://okapi.jkan
 Okapi serves **Swagger UI** (`/swagger`), **ReDoc** (`/redoc`), and **Scalar** (`/scalar`) out of the box,
 with `/docs` rendering your selected default (Swagger UI unless changed via `UI` / `WithDocUI`).
 
-|                               Swagger UI (`/swagger`)                             |                             ReDoc (`/redoc`)                              |
-|:--------------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
-| ![Swagger UI](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png) | ![ReDoc](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png) |
+|                               Swagger UI (`/swagger`)                             |                             ReDoc (`/redoc`)                              |                              Scalar (`/scalar`)                              |
+|:--------------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|:---------------------------------------------------------------------------:|
+| ![Swagger UI](https://raw.githubusercontent.com/jkaninda/okapi/main/swagger.png) | ![ReDoc](https://raw.githubusercontent.com/jkaninda/okapi/main/redoc.png) | ![Scalar](https://raw.githubusercontent.com/jkaninda/okapi/main/scalar.png) |
 
 ---
 
@@ -632,6 +662,7 @@ Both approaches generate OpenAPI documentation automatically.
 ## Support
 
 - **Documentation:** [okapi.jkaninda.dev](https://okapi.jkaninda.dev)
+- **AI Agent Skills:** [jkaninda/okapi-skills](https://github.com/jkaninda/okapi-skills)
 - **Issues:** [GitHub Issues](https://github.com/jkaninda/okapi/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/jkaninda/okapi/discussions)
 - **LinkedIn:** [Jonas Kaninda](https://www.linkedin.com/in/jkaninda/)

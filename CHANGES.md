@@ -1,5 +1,30 @@
 # Changes
 
+## Unreleased
+
+### Breaking Changes
+
+- **OpenAPI 3.1 is now the default.** The default endpoints `/openapi.json` and `/openapi.yaml` (and the
+  `/docs`, `/swagger`, `/redoc`, `/scalar` UIs) now serve OpenAPI **3.1** instead of 3.0. The 3.0 document
+  is preserved at the version-pinned routes `/openapi-3.0.json` and `/openapi-3.0.yaml`. Consumers or tooling
+  that require 3.0 should point at those routes.
+
+### Features
+
+- **Scalar API Reference UI**: a third built-in documentation UI alongside Swagger UI and ReDoc, served at
+  `/scalar`.
+- **Selectable `/docs` UI**: choose which UI is rendered at `/docs` via the `UI` field on `okapi.OpenAPI`
+  (`okapi.SwaggerUI` (default), `okapi.RedocUI`, `okapi.ScalarUI`) or the chainable `WithDocUI(...)` method.
+  Each UI also stays reachable at its own route (`/swagger`, `/redoc`, `/scalar`) regardless of the selection.
+- **OpenAPI 3.1 support**: Okapi serves both an OpenAPI 3.1 / JSON Schema 2020-12 document and the original
+  OpenAPI 3.0 document. The 3.1 spec is the default (`/openapi.json`, `/openapi.yaml`); the 3.0 spec is
+  available at `/openapi-3.0.json` / `/openapi-3.0.yaml`. The 3.1 document is derived from the 3.0 base and adds:
+    - type-array nullability (`type: ["string", "null"]`) for pointer fields (rendered as `nullable: true` in 3.0),
+    - `jsonSchemaDialect`,
+    - SPDX `License.Identifier` (new field on `okapi.License`),
+    - `const` via a new `const:"value"` struct tag,
+    - webhooks via the new `(*Okapi).Webhook(name, method, ...Doc options)` API.
+
 ## v0.5.0
 
 ### Breaking Changes

@@ -25,11 +25,12 @@
 package routes
 
 import (
+	"net/http"
+
 	"github.com/jkaninda/okapi"
 	"github.com/jkaninda/okapi/examples/route-definition/middlewares"
 	"github.com/jkaninda/okapi/examples/route-definition/models"
 	"github.com/jkaninda/okapi/examples/route-definition/services"
-	"net/http"
 )
 
 // ****************** Controllers ******************
@@ -54,8 +55,10 @@ type Router struct {
 func NewRouter(app *okapi.Okapi) *Router {
 	// Update OpenAPI documentation with the application title and version
 	app.WithOpenAPIDocs(okapi.OpenAPI{
-		Title:   "Okapi Web Framework Example",
-		Version: "1.0.0",
+		Title:       "Okapi Web Framework Example",
+		Version:     "1.0.0",
+		Description: "Okapi Web Framework Route Definition Example",
+		Summary:     "Okapi Web Framework Route Definition Example",
 		License: okapi.License{
 			Name: "MIT",
 		},
@@ -87,6 +90,7 @@ func NewRouter(app *okapi.Okapi) *Router {
 			},
 		},
 	})
+	app.WithDocUI(okapi.ScalarUI)
 	return &Router{
 		app:   app,
 		group: &okapi.Group{Prefix: "/api/v1"},

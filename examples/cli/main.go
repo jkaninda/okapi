@@ -97,16 +97,16 @@ func main() {
 	// Subcommand: worker
 	cli.Command("worker", "Start application worker", func(cmd *okapicli.Command) error {
 
-		fmt.Println("Starting myapp wortker...")
+		fmt.Println("Starting myapp worker...")
 		sleepTime := cmd.GetDuration("sleep") * time.Second
 		slog.Info("Worker started successfully", "concurrency", cmd.GetInt("concurrency"), "sleep", sleepTime)
 
 		time.Sleep(sleepTime)
-		fmt.Println("Stoping myapp wortker...")
+		fmt.Println("Stopping myapp worker...")
 		return nil
 	}).Int("concurrency", "c", 3, "concurrency jobs").Duration("sleep", "", 5, "Sleep time")
 	// Subcommand: version
-	cli.Command("version", "Show the worker", func(cmd *okapicli.Command) error {
+	cli.Command("version", "Show the version", func(cmd *okapicli.Command) error {
 		fmt.Println("myapp v1.0.0")
 		return nil
 	})
@@ -117,7 +117,7 @@ func main() {
 	// Execute: parses os.Args for the subcommand and runs it
 	// Usage:
 	//   myapp serve --port 9090 --debug
-	//   myapp worker --concurrency 5 --slep 5
+	//   myapp worker --concurrency 5 --sleep 5
 	//   myapp version
 	if err := cli.Execute(); err != nil {
 		slog.Error("Error", "error", err)

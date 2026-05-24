@@ -25,12 +25,14 @@
 package main
 
 import (
-	"fmt"
-	"github.com/jkaninda/okapi"
+	"io"
 	"log/slog"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/jkaninda/okapi"
 )
 
 // A simple HTML template for the multipart form with Name, Age, and avatar fields
@@ -90,7 +92,7 @@ func main() {
 	// Define a route for the root path
 	o.Get("/", func(c *okapi.Context) error {
 		// Render the HTML template with dynamic data
-		return c.HTMLView(200, template, okapi.M{
+		return c.HTMLView(http.StatusOK, template, okapi.M{
 			"name":    "OKAPI Multipart Example",
 			"message": "This is a multipart example using Okapi.",
 			"upload":  "/upload",
@@ -98,60 +100,56 @@ func main() {
 	})
 	// Define a route for handling multipart form data
 	o.Post("/upload", func(c *okapi.Context) error {
-		// Create an instance of MultipartBody to hold the form data
-		multipartBody := &MultipartBody{}
-		// Parse the multipart form data
-		if err := c.Bind(multipartBody); err != nil {
+		// Bind the multipart form data into the struct
+		form := &MultipartBody{}
+		if err := c.Bind(form); err != nil {
 			return c.ErrorBadRequest(okapi.M{
 				"error":   "Failed to parse form data",
 				"details": err.Error(),
 			})
 		}
-		// Access the uploaded file
-		file := *multipartBody.Avatar
 
-		// Read the file content (for example, you can save it or process it)
-		fileContent, err := file.Open()
+		// Open the uploaded file
+		src, err := form.Avatar.Open()
 		if err != nil {
 			return c.ErrorBadRequest(okapi.M{
-				"error":   "Failed to parse form data",
-				"details": "avatar field is required",
+				"error":   "Failed to read uploaded file",
+				"details": err.Error(),
 			})
 		}
-		defer func(fileContent multipart.File) {
-			err = fileContent.Close()
-			if err != nil {
-				slog.Error("Failed to close file content", "details", err)
+		defer func(src multipart.File) {
+			if err := src.Close(); err != nil {
+				slog.Error("Failed to close uploaded file", "error", err)
 			}
-		}(fileContent)
+		}(src)
 
-		fileBytes := make([]byte, file.Size)
-		_, err = fileContent.Read(fileBytes)
-		if err != nil {
-			return c.JSON(400, okapi.M{"error": "Failed to read file content"})
-		}
-		// Create a directory to save the uploaded file if it doesn't exist
-		err = os.MkdirAll("uploads", 0755)
-		if err != nil {
-			return c.JSON(500, okapi.M{"error": "Failed to create uploads directory", "details": err.Error()})
+		// Create the uploads directory if it doesn't exist
+		if err := os.MkdirAll("uploads", 0o755); err != nil {
+			return c.ErrorInternalServerError(okapi.M{"error": "Failed to create uploads directory", "details": err.Error()})
 		}
 
-		f, err := os.Create(filepath.Join("uploads", file.Filename))
+		// Create the destination file and stream the upload into it
+		dst, err := os.Create(filepath.Join("uploads", form.Avatar.Filename))
 		if err != nil {
-			return c.JSON(400, okapi.M{"error": "Failed to create file", "details": err.Error()})
+			return c.ErrorInternalServerError(okapi.M{"error": "Failed to create file", "details": err.Error()})
 		}
-		defer func(f *os.File) {
-			err = f.Close()
-			if err != nil {
-				slog.Error("Failed to close file", "error", err)
+		defer func(dst *os.File) {
+			if err := dst.Close(); err != nil {
+				slog.Error("Failed to close destination file", "error", err)
 			}
-		}(f)
+		}(dst)
 
-		fmt.Printf("Tags: %v\n", multipartBody.Tags)
-		// Write the file content to the created file
-		_, err = f.Write(fileBytes)
+		if _, err := io.Copy(dst, src); err != nil {
+			return c.ErrorInternalServerError(okapi.M{"error": "Failed to save file", "details": err.Error()})
+		}
 
-		return c.HTMLView(200, successTemplate, okapi.M{})
+		slog.Info("Upload received",
+			"name", form.Name,
+			"age", form.Age,
+			"tags", form.Tags,
+			"file", form.Avatar.Filename,
+		)
+		return c.HTMLView(http.StatusOK, successTemplate, okapi.M{})
 	},
 		okapi.DocRequestBody(MultipartBody{}),
 	)

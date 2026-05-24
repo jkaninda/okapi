@@ -25,55 +25,33 @@
 package main
 
 import (
-	"github.com/jkaninda/okapi"
 	"net/http"
+
+	"github.com/jkaninda/okapi"
 )
 
-// type Template struct {
-//	templates *template.Template
-// }
-//
-// func (t *Template) Render(w io.Writer, name string, data interface{}, c *okapi.Context) error {
-//	return t.templates.ExecuteTemplate(w, name, data)
-// }
-
 func main() {
-	tmpl, _ := okapi.NewTemplateFromDirectory("public/views", ".html", ".tmpl")
-	// Or
-	// tmpl, _ := okapi.NewTemplateFromFiles("public/views/*.html")
+	// Load every .html and .tmpl template from the "views" directory.
+	// Alternatives:
+	//   okapi.NewTemplateFromFiles("views/*.html")          // glob pattern
+	//   okapi.Default().WithRendererFromDirectory("views", ".html")
+	tmpl, err := okapi.NewTemplateFromDirectory("views", ".html", ".tmpl")
+	if err != nil {
+		panic(err)
+	}
 
-	// Example usage of the Okapi framework
-	// Create a new Okapi instance and set renderer
+	// Create a new Okapi instance and register the renderer.
 	o := okapi.Default().WithRenderer(tmpl)
-	// or
-	// tmpl := &Template{
-	//	templates: template.Must(template.ParseGlob("templates/*.html")),
-	// }
-	// o.With().WithRenderer(tmpl)
-	// or you can use a custom renderer function
 
-	/*
-		o.renderer = okapi.RendererFunc(func(w io.Writer, name string, data interface{}, c *okapi.Context) error {
-			// Render the template with the provided data
-			tmpl, err := template.ParseFiles("public/views/" + name + ".html")
-			if err != nil {
-				return err
-			}
-			return tmpl.ExecuteTemplate(w, name, data)
-		})
-	*/
 	o.Get("/", func(c *okapi.Context) error {
-
-		title := "Greeting Page"
-		message := "Hello, World!"
 		return c.Render(http.StatusOK, "hello", okapi.M{
-			"title":   title,
-			"message": message})
+			"title":   "Greeting Page",
+			"message": "Hello, World!",
+		})
 	})
 
 	// Start the server
-	err := o.Start()
-	if err != nil {
-		return
+	if err := o.Start(); err != nil {
+		panic(err)
 	}
 }

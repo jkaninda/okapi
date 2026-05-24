@@ -22,21 +22,22 @@
  *  SOFTWARE.
  */
 
-package services
+package handlers
 
 import (
 	"fmt"
+	"net/http"
+	"strconv"
+
 	"github.com/google/uuid"
 	"github.com/jkaninda/okapi"
 	"github.com/jkaninda/okapi/examples/route-definition/middlewares"
 	"github.com/jkaninda/okapi/examples/route-definition/models"
-	"net/http"
-	"strconv"
 )
 
-type BookService struct{}
-type CommonService struct{}
-type AuthService struct{}
+type BookHandler struct{}
+type CommonHandler struct{}
+type AuthHandler struct{}
 
 var (
 	books = []*models.Book{
@@ -49,20 +50,20 @@ var (
 	ApiVersion = "V1"
 )
 
-// ****************** Services *****************
+// ****************** Handlers *****************
 
-func (hc *CommonService) Home(c *okapi.Context) error {
+func (h *CommonHandler) Home(c *okapi.Context) error {
 	return c.OK(okapi.M{"message": "Welcome to the Okapi Web Framework!"})
 }
-func (hc *CommonService) Version(c *okapi.Context) error {
+func (h *CommonHandler) Version(c *okapi.Context) error {
 	return c.OK(okapi.M{"version": ApiVersion})
 }
-func (bc *BookService) List(c *okapi.Context) error {
+func (b *BookHandler) List(c *okapi.Context) error {
 	// Simulate fetching books from a database
 	return c.OK(models.SuccessResponse("Books fetched successfully", books))
 }
 
-func (bc *BookService) Create(c *okapi.Context) error {
+func (b *BookHandler) Create(c *okapi.Context) error {
 	// Simulate creating a book in a database
 	book := &models.Book{}
 	err := c.Bind(book)
@@ -73,7 +74,7 @@ func (bc *BookService) Create(c *okapi.Context) error {
 	books = append(books, book)
 	return c.OK(models.SuccessResponse("Book created successfully", book))
 }
-func (bc *BookService) Get(c *okapi.Context) error {
+func (b *BookHandler) Get(c *okapi.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
@@ -88,7 +89,7 @@ func (bc *BookService) Get(c *okapi.Context) error {
 	}
 	return c.ErrorNotFound(models.ErrorResponse("Not found", fmt.Errorf("book not found with id %s", id)))
 }
-func (bc *BookService) Delete(c *okapi.Context) error {
+func (b *BookHandler) Delete(c *okapi.Context) error {
 	id := c.Param("id")
 	i, err := strconv.Atoi(id)
 	if err != nil {
@@ -110,7 +111,7 @@ func (bc *BookService) Delete(c *okapi.Context) error {
 
 // Example of Okapi using Body Field Style
 
-func (bc *BookService) Update(c *okapi.Context) error {
+func (b *BookHandler) Update(c *okapi.Context) error {
 	bookRequest := &models.BookUpdateRequest{}
 	if err := c.Bind(bookRequest); err != nil {
 		return c.ErrorBadRequest(models.ErrorResponse("Bad Request", err))
@@ -132,9 +133,9 @@ func (bc *BookService) Update(c *okapi.Context) error {
 
 }
 
-// ******************** AuthService *****************
+// ******************** AuthHandler *****************
 
-func (bc *AuthService) Login(c *okapi.Context) error {
+func (a *AuthHandler) Login(c *okapi.Context) error {
 	authRequest := &models.AuthRequest{}
 	err := c.Bind(authRequest)
 	if err != nil {
@@ -149,7 +150,7 @@ func (bc *AuthService) Login(c *okapi.Context) error {
 
 	return c.OK(models.SuccessResponse(message, authResponse))
 }
-func (bc *AuthService) WhoAmI(c *okapi.Context) error {
+func (a *AuthHandler) WhoAmI(c *okapi.Context) error {
 	// Get User Information from the context, shared by the JWT middleware using forwardClaims
 	email := c.GetString("email")
 	if email == "" {

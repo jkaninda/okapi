@@ -263,9 +263,9 @@ admin.Get("/dashboard", getDashboard)
 Ideal for controller or service-based architectures:
 
 ```go
-type BookService struct{}
+type BookHandler struct{}
 
-func (s *BookService) Routes() []okapi.RouteDefinition {
+func (s *BookHandler) Routes() []okapi.RouteDefinition {
     apiGroup := &okapi.Group{Prefix: "/api"}
     
     return []okapi.RouteDefinition{
@@ -295,8 +295,8 @@ func (s *BookService) Routes() []okapi.RouteDefinition {
 
 // Register routes
 app := okapi.Default()
-bookService := &BookService{}
-app.Register(bookService.Routes()...)
+bookHandler := &BookHandler{}
+app.Register(bookHandler.Routes()...)
 ```
 
 ---

@@ -131,7 +131,7 @@ func main() {
 
 	o.Get("/", func(c *okapi.Context) error {
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
-	}, okapi.DocSummary("Home "))
+	}, okapi.DocSummary("Home"))
 
 	// Create a new group with a base path for API routes
 	api := o.Group("/api")
@@ -231,12 +231,11 @@ func main() {
 		if err := c.Bind(loginRequest); err != nil {
 			return c.AbortBadRequest("invalid request", err)
 		}
-		fmt.Println(loginRequest.Username, loginRequest.Password)
-		if loginRequest.Username != "admin" && loginRequest.Password != "password" ||
-			loginRequest.Username != "owner" && loginRequest.Password != "password" {
-
+		// Accept either the "admin" or "owner" user with the demo password.
+		validUser := loginRequest.Password == "password" &&
+			(loginRequest.Username == "admin" || loginRequest.Username == "owner")
+		if !validUser {
 			return c.AbortUnauthorized("username or password is wrong")
-
 		}
 		// Update JWT claims with user information
 		if _, ok := jwtClaims["user"].(map[string]string); ok {
@@ -313,7 +312,6 @@ func findById(c *okapi.Context) error {
 	if ok, err := c.ShouldBind(&newBook); !ok {
 		return c.AbortBadRequest(fmt.Sprintf("Failed to bind book: %v", err))
 	}
-	// time.Sleep(2 * time.Second) // Simulate a delay for demonstration purposes
 
 	for _, book := range books {
 		if book.ID == newBook.ID {

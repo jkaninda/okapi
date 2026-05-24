@@ -85,9 +85,11 @@ func Login(authRequest *models.AuthRequest) (models.AuthResponse, error) {
 	// This is where you would typically validate the user credentials against a database
 
 	slog.Info("Login attempt", "username", authRequest.Username)
-	// Simulate a login function that returns a JWT token
-	if authRequest.Username != "admin" && authRequest.Password != "password" ||
-		authRequest.Username != "user" && authRequest.Password != "password" {
+	// Simulate a login function that returns a JWT token.
+	// Accept either the "admin" or "user" account with the demo password.
+	validUser := authRequest.Password == "password" &&
+		(authRequest.Username == "admin" || authRequest.Username == "user")
+	if !validUser {
 		return models.AuthResponse{}, fmt.Errorf("username or password is wrong")
 	}
 

@@ -336,9 +336,9 @@ func TestOpenAPI31Derivation(t *testing.T) {
 	spec31 := o.openapiSpec31
 
 	// Version + dialect.
-	assert.Equal(t, "3.0.0", spec30.OpenAPI)
+	assert.Equal(t, "3.0.3", spec30.OpenAPI)
 	assert.Empty(t, spec30.JSONSchemaDialect)
-	assert.Equal(t, "3.1.1", spec31.OpenAPI)
+	assert.Equal(t, "3.1.0", spec31.OpenAPI)
 	assert.Equal(t, jsonSchemaDialect, spec31.JSONSchemaDialect)
 
 	// Webhooks only on 3.1.
@@ -390,15 +390,15 @@ func TestOpenAPI31Endpoints(t *testing.T) {
 
 	// Default endpoints serve OpenAPI 3.1.
 	okapitest.GET(t, fmt.Sprintf("%s/openapi.json", o.BaseURL)).
-		ExpectStatusOK().ExpectJSONPath("openapi", "3.1.1")
+		ExpectStatusOK().ExpectJSONPath("openapi", "3.1.0")
 	okapitest.GET(t, fmt.Sprintf("%s/openapi.yaml", o.BaseURL)).
-		ExpectStatusOK().ExpectBodyContains("openapi: 3.1.1")
+		ExpectStatusOK().ExpectBodyContains("openapi: 3.1.0")
 
 	// Version-pinned 3.0 endpoints (preserved).
 	okapitest.GET(t, fmt.Sprintf("%s/openapi-3.0.json", o.BaseURL)).
-		ExpectStatusOK().ExpectJSONPath("openapi", "3.0.0")
+		ExpectStatusOK().ExpectJSONPath("openapi", "3.0.3")
 	okapitest.GET(t, fmt.Sprintf("%s/openapi-3.0.yaml", o.BaseURL)).
-		ExpectStatusOK().ExpectBodyContains("openapi: 3.0.0")
+		ExpectStatusOK().ExpectBodyContains("openapi: 3.0.3")
 
 	okapitest.GET(t, fmt.Sprintf("%s/docs/favicon.png", o.BaseURL)).
 		ExpectStatusOK().ExpectContentType("image/png")

@@ -1765,7 +1765,34 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 		schema.Description = desc
 	}
 
-	// String validations
+	applyStringSchemaTags(schema, tag)
+	applyNumericSchemaTags(schema, tag)
+	applyArraySchemaTags(schema, tag)
+
+	// Enum validation
+	if enum := tag.Get(tagEnum); enum != "" {
+		values := strings.Split(enum, ",")
+		schema.Enum = make([]interface{}, len(values))
+		for i, v := range values {
+			schema.Enum[i] = strings.TrimSpace(v)
+		}
+	}
+	// Example
+	if example := tag.Get(tagExample); example != "" {
+		schema.Example = example
+	}
+	// Const (OpenAPI 3.1). Stored as a marker extension on the version-agnostic
+	// schema; promoted to a real `const` for 3.1 and stripped for 3.0.
+	if constVal := tag.Get(tagConst); constVal != "" {
+		if schema.Extensions == nil {
+			schema.Extensions = make(map[string]any)
+		}
+		schema.Extensions[extOkapiConst] = constVal
+	}
+}
+
+// applyStringSchemaTags applies minLength, maxLength, pattern, and format.
+func applyStringSchemaTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if maxLen := tag.Get(tagMaxLength); maxLen != "" {
 		if val, err := strconv.ParseUint(maxLen, 10, 64); err == nil {
 			schema.MaxLength = ptr(val)
@@ -1782,8 +1809,10 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if format := tag.Get(tagFormat); format != "" {
 		schema.Format = format
 	}
+}
 
-	// Numeric validations
+// applyNumericSchemaTags applies min, max, exclusive bounds, and multipleOf.
+func applyNumericSchemaTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if maxTag := tag.Get(tagMax); maxTag != "" {
 		if val, err := strconv.ParseFloat(maxTag, 64); err == nil {
 			schema.Max = ptr(val)
@@ -1814,16 +1843,10 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 			schema.MultipleOf = ptr(val)
 		}
 	}
+}
 
-	// Enum validation
-	if enum := tag.Get(tagEnum); enum != "" {
-		values := strings.Split(enum, ",")
-		schema.Enum = make([]interface{}, len(values))
-		for i, v := range values {
-			schema.Enum[i] = strings.TrimSpace(v)
-		}
-	}
-	// Slice validations
+// applyArraySchemaTags applies slice item constraints and object property counts.
+func applyArraySchemaTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if maxItems := tag.Get(tagMaxItems); maxItems != "" {
 		if val, err := strconv.ParseUint(maxItems, 10, 64); err == nil {
 			schema.MaxItems = ptr(val)
@@ -1834,11 +1857,9 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 			schema.MinItems = val
 		}
 	}
-	// Unique items
 	if uniqueItems := tag.Get(tagUniqueItems); uniqueItems == constTRUE {
 		schema.UniqueItems = true
 	}
-	// Object property counts
 	if maxProps := tag.Get(tagMaxProperties); maxProps != "" {
 		if val, err := strconv.ParseUint(maxProps, 10, 64); err == nil {
 			schema.MaxProps = ptr(val)
@@ -1848,18 +1869,6 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 		if val, err := strconv.ParseUint(minProps, 10, 64); err == nil {
 			schema.MinProps = val
 		}
-	}
-	// Example
-	if example := tag.Get(tagExample); example != "" {
-		schema.Example = example
-	}
-	// Const (OpenAPI 3.1). Stored as a marker extension on the version-agnostic
-	// schema; promoted to a real `const` for 3.1 and stripped for 3.0.
-	if constVal := tag.Get(tagConst); constVal != "" {
-		if schema.Extensions == nil {
-			schema.Extensions = make(map[string]any)
-		}
-		schema.Extensions[extOkapiConst] = constVal
 	}
 }
 

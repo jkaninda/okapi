@@ -48,6 +48,10 @@ type SliceUUIDFormatRequest struct {
 	IDs []string `json:"ids" format:"uuid" minItems:"1"`
 }
 
+type SliceEnumRequest struct {
+	Roles []string `json:"roles" enum:"admin,editor,viewer"`
+}
+
 func TestValidateEmail(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1242,6 +1246,85 @@ func TestCheckPatternSliceDirect(t *testing.T) {
 	err = checkPattern(validValues, `^[A-Z]{2}-[0-9]{3}$`)
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
+func TestCheckEnumSliceDirect(t *testing.T) {
+	enumTag := "admin,editor,viewer"
+
+	// One element not in the allowed set
+	values := reflect.ValueOf([]string{"admin", "superuser"})
+	err := checkEnum(values, enumTag)
+	if err == nil {
+		t.Error("expected error for element not in allowed values")
+	}
+	if !strings.Contains(err.Error(), "element [1]") {
+		t.Errorf("expected error to reference element [1], got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "not one of the allowed values") {
+		t.Errorf("expected error to mention allowed values, got: %v", err)
+	}
+
+	// All valid
+	validValues := reflect.ValueOf([]string{"admin", "editor", "viewer"})
+	if err := checkEnum(validValues, enumTag); err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	// Empty slice passes
+	if err := checkEnum(reflect.ValueOf([]string{}), enumTag); err != nil {
+		t.Errorf("expected no error for empty slice, got: %v", err)
+	}
+
+	// Empty string element is skipped, like the scalar case
+	if err := checkEnum(reflect.ValueOf([]string{"admin", ""}), enumTag); err != nil {
+		t.Errorf("expected no error for empty string element, got: %v", err)
+	}
+}
+
+func TestSliceEnumValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid roles",
+			body:    `{"roles": ["admin", "viewer"]}`,
+			wantErr: false,
+		},
+		{
+			name:        "invalid role in slice",
+			body:        `{"roles": ["admin", "superuser"]}`,
+			wantErr:     true,
+			errContains: "not one of the allowed values",
+		},
+		{
+			name:    "empty slice - no validation",
+			body:    `{"roles": []}`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+
+			var req SliceEnumRequest
+			err := c.Bind(&req)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Bind() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Bind() error = %v, should contain %q", err, tt.errContains)
+				}
+			}
+		})
 	}
 }
 

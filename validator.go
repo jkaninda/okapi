@@ -25,14 +25,29 @@
 package okapi
 
 import (
+	"encoding/base64"
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+)
+
+// Precompiled patterns used by format validators.
+var (
+	semverRegex      = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+	ulidRegex        = regexp.MustCompile(`(?i)^[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
+	e164Regex        = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
+	alphaRegex       = regexp.MustCompile(`^[a-zA-Z]+$`)
+	alphanumRegex    = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	numericRegex     = regexp.MustCompile(`^[-+]?[0-9]+(?:\.[0-9]+)?$`)
+	slugRegex        = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	hexColorRegex    = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+	jsonPointerRegex = regexp.MustCompile(`^(?:/(?:[^/~]|~0|~1)*)*$`)
 )
 
 func (c *Context) bindStruct(input any) error {
@@ -137,85 +152,141 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 	return nil
 }
 
-// validateField performs tag-based validations: required, min/max, length constraints,
-// enum, multipleOf, format, pattern, and slice validations.
-func (c *Context) validateField(field reflect.Value, sf reflect.StructField) error {
-	// Required
-	if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
-		return fmt.Errorf("field %s is required", sf.Name)
-	}
+// fieldConstraintCheckers is the ordered set of grouped tag checks applied to a
+// single field. Each returns an unprefixed error; callers add the field label.
+// Shared by validateField, validateStruct, and the binder's validateStruct.
+var fieldConstraintCheckers = []func(reflect.Value, reflect.StructField) error{
+	checkNumericConstraints,
+	checkLengthConstraints,
+	checkChoiceConstraints,
+	checkFormatConstraints,
+	checkCollectionConstraints,
+}
 
-	// Numeric min/max
-	if minTag := sf.Tag.Get(tagMin); minTag != "" {
-		if err := checkMin(field, minTag); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+// checkNumericConstraints validates min, max, exclusiveMin, exclusiveMax, and multipleOf.
+func checkNumericConstraints(field reflect.Value, sf reflect.StructField) error {
+	if tag := sf.Tag.Get(tagMin); tag != "" {
+		if err := checkMin(field, tag); err != nil {
+			return err
 		}
 	}
-	if maxTag := sf.Tag.Get(tagMax); maxTag != "" {
-		if err := checkMax(field, maxTag); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+	if tag := sf.Tag.Get(tagMax); tag != "" {
+		if err := checkMax(field, tag); err != nil {
+			return err
 		}
 	}
+	if tag := sf.Tag.Get(tagExclusiveMin); tag != "" {
+		if err := checkExclusiveMin(field, tag); err != nil {
+			return err
+		}
+	}
+	if tag := sf.Tag.Get(tagExclusiveMax); tag != "" {
+		if err := checkExclusiveMax(field, tag); err != nil {
+			return err
+		}
+	}
+	if tag := sf.Tag.Get(tagMultipleOf); tag != "" {
+		if err := checkMultipleOf(field, tag); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	// String length validation
-	if minLen := sf.Tag.Get(tagMinLength); minLen != "" {
-		if err := checkMinLength(field, minLen); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+// checkLengthConstraints validates minLength and maxLength.
+func checkLengthConstraints(field reflect.Value, sf reflect.StructField) error {
+	if tag := sf.Tag.Get(tagMinLength); tag != "" {
+		if err := checkMinLength(field, tag); err != nil {
+			return err
 		}
 	}
-	if maxLen := sf.Tag.Get(tagMaxLength); maxLen != "" {
-		if err := checkMaxLength(field, maxLen); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+	if tag := sf.Tag.Get(tagMaxLength); tag != "" {
+		if err := checkMaxLength(field, tag); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	// Enum validation
-	if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
-		if err := checkEnum(field, enumTag); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+// checkChoiceConstraints validates enum and const.
+func checkChoiceConstraints(field reflect.Value, sf reflect.StructField) error {
+	if tag := sf.Tag.Get(tagEnum); tag != "" {
+		if err := checkEnum(field, tag); err != nil {
+			return err
 		}
 	}
-	// MultipleOf validation
-	if multipleOfTag := sf.Tag.Get(tagMultipleOf); multipleOfTag != "" {
-		if err := checkMultipleOf(field, multipleOfTag); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+	if tag := sf.Tag.Get(tagConst); tag != "" {
+		if err := checkConst(field, tag); err != nil {
+			return err
 		}
 	}
-	// Format validation
-	if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
-		if err := checkFormat(field, formatTag, sf); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+	return nil
+}
+
+// checkFormatConstraints validates format and pattern (both handle slices element-wise).
+func checkFormatConstraints(field reflect.Value, sf reflect.StructField) error {
+	if tag := sf.Tag.Get(tagFormat); tag != "" {
+		if err := checkFormat(field, tag, sf); err != nil {
+			return err
 		}
 	}
-	// Pattern validation
-	if patternTag := sf.Tag.Get(tagPattern); patternTag != "" {
-		if err := checkPattern(field, patternTag); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+	if tag := sf.Tag.Get(tagPattern); tag != "" {
+		if err := checkPattern(field, tag); err != nil {
+			return err
 		}
 	}
-	// Slice validations
-	if field.Kind() == reflect.Slice {
-		if minItemsTag := sf.Tag.Get(tagMinItems); minItemsTag != "" {
-			if err := checkMinItems(field, minItemsTag); err != nil {
-				return fmt.Errorf("field %s: %v", sf.Name, err)
+	return nil
+}
+
+// checkCollectionConstraints validates slice item counts/uniqueness and map property counts.
+func checkCollectionConstraints(field reflect.Value, sf reflect.StructField) error {
+	switch field.Kind() {
+	case reflect.Slice:
+		if tag := sf.Tag.Get(tagMinItems); tag != "" {
+			if err := checkMinItems(field, tag); err != nil {
+				return err
 			}
 		}
-		if maxItemsTag := sf.Tag.Get(tagMaxItems); maxItemsTag != "" {
-			if err := checkMaxItems(field, maxItemsTag); err != nil {
-				return fmt.Errorf("field %s: %v", sf.Name, err)
+		if tag := sf.Tag.Get(tagMaxItems); tag != "" {
+			if err := checkMaxItems(field, tag); err != nil {
+				return err
 			}
 		}
 		if sf.Tag.Get(tagUniqueItems) == constTRUE {
 			if err := checkUniqueItems(field); err != nil {
-				return fmt.Errorf("field %s: %v", sf.Name, err)
+				return err
+			}
+		}
+	case reflect.Map:
+		if tag := sf.Tag.Get(tagMinProperties); tag != "" {
+			if err := checkMinProperties(field, tag); err != nil {
+				return err
+			}
+		}
+		if tag := sf.Tag.Get(tagMaxProperties); tag != "" {
+			if err := checkMaxProperties(field, tag); err != nil {
+				return err
 			}
 		}
 	}
-
 	return nil
 }
 
-// validateStruct validates nested struct fields using their struct tags
+// validateField performs tag-based validations: required, min/max, length constraints,
+// enum, const, multipleOf, format, pattern, and slice/map validations.
+func (c *Context) validateField(field reflect.Value, sf reflect.StructField) error {
+	if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
+		return fmt.Errorf("field %s is required", sf.Name)
+	}
+	for _, check := range fieldConstraintCheckers {
+		if err := check(field, sf); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	return nil
+}
+
+// validateStruct validates nested struct fields using their struct tags.
 func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructField) error {
 	t := v.Type()
 
@@ -223,73 +294,12 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 		field := v.Field(i)
 		sf := t.Field(i)
 
-		// Required validation
 		if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
 			return fmt.Errorf("field %s.%s is required", parentField.Name, sf.Name)
 		}
-
-		// Numeric min/max
-		if minTag := sf.Tag.Get(tagMin); minTag != "" {
-			if err := checkMin(field, minTag); err != nil {
+		for _, check := range fieldConstraintCheckers {
+			if err := check(field, sf); err != nil {
 				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
-			}
-		}
-		if maxTag := sf.Tag.Get(tagMax); maxTag != "" {
-			if err := checkMax(field, maxTag); err != nil {
-				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
-			}
-		}
-
-		// String minLength/maxLength
-		if minLenTag := sf.Tag.Get(tagMinLength); minLenTag != "" {
-			if err := checkMinLength(field, minLenTag); err != nil {
-				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
-			}
-		}
-		if maxLenTag := sf.Tag.Get(tagMaxLength); maxLenTag != "" {
-			if err := checkMaxLength(field, maxLenTag); err != nil {
-				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
-			}
-		}
-		// Enum validation
-		if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
-			if err := checkEnum(field, enumTag); err != nil {
-				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
-			}
-		}
-		// MultipleOf validation
-		if multipleOfTag := sf.Tag.Get(tagMultipleOf); multipleOfTag != "" {
-			if err := checkMultipleOf(field, multipleOfTag); err != nil {
-				return fmt.Errorf("field %s: %w", sf.Name, err)
-			}
-		}
-		// Format validation
-		if formatTag := sf.Tag.Get(tagFormat); formatTag != "" {
-			if err := checkFormat(field, formatTag, sf); err != nil {
-				return fmt.Errorf("field %s: %w", sf.Name, err)
-			}
-		}
-		// Pattern validation
-		if patternTag := sf.Tag.Get(tagPattern); patternTag != "" {
-			if err := checkPattern(field, patternTag); err != nil {
-				return fmt.Errorf("field %s: %w", sf.Name, err)
-			}
-		}
-		// Slice validations
-		if minItemsTag := sf.Tag.Get(tagMinItems); minItemsTag != "" {
-			if err := checkMinItems(field, minItemsTag); err != nil {
-				return fmt.Errorf("field %s: %v", sf.Name, err)
-			}
-		}
-		if maxItemsTag := sf.Tag.Get(tagMaxItems); maxItemsTag != "" {
-			if err := checkMaxItems(field, maxItemsTag); err != nil {
-				return fmt.Errorf("field %s: %v", sf.Name, err)
-			}
-		}
-		// UniqueItems validation
-		if sf.Tag.Get(tagUniqueItems) == constTRUE {
-			if err := checkUniqueItems(field); err != nil {
-				return fmt.Errorf("field %s: %v", sf.Name, err)
 			}
 		}
 	}
@@ -515,6 +525,40 @@ func checkFormat(field reflect.Value, formatTag string, sf reflect.StructField) 
 	return checkFormatValue(field, formatTag, sf)
 }
 
+// formatValidators maps each format tag to its validator.
+var formatValidators = map[string]func(string) error{
+	formatEmail:        validateEmail,
+	formatDateTime:     validateDateTime,
+	formatDate:         validateDate,
+	formatTime:         validateTime,
+	formatDuration:     validateDuration,
+	formatIPv4:         validateIPv4,
+	formatIPv6:         validateIPv6,
+	formatHostname:     validateHostname,
+	formatUri:          validateUri,
+	formatUUID:         validateUUID,
+	formatURL:          validateURL,
+	formatURIReference: validateURIReference,
+	formatByte:         validateBase64,
+	formatBase64:       validateBase64,
+	formatMAC:          validateMAC,
+	formatCIDR:         validateCIDR,
+	formatE164:         validateE164,
+	formatPhone:        validateE164,
+	formatCreditCard:   validateCreditCard,
+	formatSemver:       validateSemver,
+	formatJSONPointer:  validateJSONPointer,
+	formatULID:         validateULID,
+	formatAlpha:        validateAlpha,
+	formatAlphanumeric: validateAlphanumeric,
+	formatNumeric:      validateNumeric,
+	formatASCII:        validateASCII,
+	formatLowercase:    validateLowercase,
+	formatUppercase:    validateUppercase,
+	formatSlug:         validateSlug,
+	formatHexColor:     validateHexColor,
+}
+
 // checkFormatValue validates a single value against a format tag
 func checkFormatValue(field reflect.Value, formatTag string, sf reflect.StructField) error {
 	var value string
@@ -532,34 +576,19 @@ func checkFormatValue(field reflect.Value, formatTag string, sf reflect.StructFi
 		}
 	}
 
-	switch formatTag {
-	case formatEmail:
-		return validateEmail(value)
-	case formatDateTime:
-		return validateDateTime(value)
-	case formatDate:
-		return validateDate(value)
-	case formatDuration:
-		return validateDuration(value)
-	case formatIPv4:
-		return validateIPv4(value)
-	case formatIPv6:
-		return validateIPv6(value)
-	case formatHostname:
-		return validateHostname(value)
-	case formatUri:
-		return validateUri(value)
-	case formatUUID:
-		return validateUUID(value)
-	case formatRegex:
+	// regex needs the companion pattern tag, so it is not in formatValidators.
+	if formatTag == formatRegex {
 		pattern := sf.Tag.Get(tagPattern)
 		if pattern == "" {
 			return fmt.Errorf("regex format requires 'pattern' tag")
 		}
 		return validateRegex(value, pattern)
-	default:
-		return fmt.Errorf("unsupported format: %s", formatTag)
 	}
+
+	if validate, ok := formatValidators[formatTag]; ok {
+		return validate(value)
+	}
+	return fmt.Errorf("unsupported format: %s", formatTag)
 }
 
 // checkPattern validates a field against a regex pattern.
@@ -637,6 +666,128 @@ func checkEnumValue(field reflect.Value, enumTag string) error {
 	}
 
 	return fmt.Errorf("value '%s' is not one of the allowed values: [%s]", value, strings.Join(allowedValues, ", "))
+}
+
+// checkConst validates that a string field equals a fixed constant value.
+// For slice fields, each element is validated individually.
+func checkConst(field reflect.Value, constTag string) error {
+	if field.Kind() == reflect.Slice {
+		for i := 0; i < field.Len(); i++ {
+			if err := checkConstValue(field.Index(i), constTag); err != nil {
+				return fmt.Errorf("element [%d]: %w", i, err)
+			}
+		}
+		return nil
+	}
+	return checkConstValue(field, constTag)
+}
+
+func checkConstValue(field reflect.Value, constTag string) error {
+	if field.Kind() != reflect.String {
+		return fmt.Errorf("const validation can only be applied to string fields")
+	}
+
+	value := field.String()
+	if value == "" {
+		return nil
+	}
+
+	if value != constTag {
+		return fmt.Errorf("value '%s' must equal the constant '%s'", value, constTag)
+	}
+	return nil
+}
+
+// checkExclusiveMin validates that a numeric field is strictly greater than the bound.
+func checkExclusiveMin(field reflect.Value, tag string) error {
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		bound, err := strconv.ParseInt(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMin value: %s", tag)
+		}
+		if field.Int() <= bound {
+			return fmt.Errorf("value %d must be > %d", field.Int(), bound)
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		bound, err := strconv.ParseUint(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMin value: %s", tag)
+		}
+		if field.Uint() <= bound {
+			return fmt.Errorf("value %d must be > %d", field.Uint(), bound)
+		}
+	case reflect.Float32, reflect.Float64:
+		bound, err := strconv.ParseFloat(tag, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMin value: %s", tag)
+		}
+		if field.Float() <= bound {
+			return fmt.Errorf("value %g must be > %g", field.Float(), bound)
+		}
+	}
+	return nil
+}
+
+// checkExclusiveMax validates that a numeric field is strictly less than the bound.
+func checkExclusiveMax(field reflect.Value, tag string) error {
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		bound, err := strconv.ParseInt(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMax value: %s", tag)
+		}
+		if field.Int() >= bound {
+			return fmt.Errorf("value %d must be < %d", field.Int(), bound)
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		bound, err := strconv.ParseUint(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMax value: %s", tag)
+		}
+		if field.Uint() >= bound {
+			return fmt.Errorf("value %d must be < %d", field.Uint(), bound)
+		}
+	case reflect.Float32, reflect.Float64:
+		bound, err := strconv.ParseFloat(tag, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMax value: %s", tag)
+		}
+		if field.Float() >= bound {
+			return fmt.Errorf("value %g must be < %g", field.Float(), bound)
+		}
+	}
+	return nil
+}
+
+// checkMinProperties validates the minimum number of entries in a map field.
+func checkMinProperties(field reflect.Value, tag string) error {
+	if field.Kind() != reflect.Map {
+		return nil
+	}
+	minValue, err := strconv.Atoi(tag)
+	if err != nil {
+		return fmt.Errorf("invalid minProperties value: %s", tag)
+	}
+	if field.Len() < minValue {
+		return fmt.Errorf("map has %d properties, must have at least %d", field.Len(), minValue)
+	}
+	return nil
+}
+
+// checkMaxProperties validates the maximum number of entries in a map field.
+func checkMaxProperties(field reflect.Value, tag string) error {
+	if field.Kind() != reflect.Map {
+		return nil
+	}
+	maxValue, err := strconv.Atoi(tag)
+	if err != nil {
+		return fmt.Errorf("invalid maxProperties value: %s", tag)
+	}
+	if field.Len() > maxValue {
+		return fmt.Errorf("map has %d properties, must have at most %d", field.Len(), maxValue)
+	}
+	return nil
 }
 func validateEmail(value string) error {
 	emailRegex := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
@@ -743,6 +894,175 @@ func validateUri(value string) error {
 	}
 	return nil
 }
+
+func validateTime(value string) error {
+	// RFC3339 full-time: 15:04:05Z, 15:04:05+07:00, 15:04:05.123Z, or local 15:04:05
+	layouts := []string{"15:04:05Z07:00", "15:04:05.999999999Z07:00", "15:04:05"}
+	for _, layout := range layouts {
+		if _, err := time.Parse(layout, value); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid time format (expected RFC3339 full-time, e.g. 15:04:05Z07:00): %s", value)
+}
+
+func validateURL(value string) error {
+	u, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s", value)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid URL (must use http or https scheme): %s", value)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("invalid URL (missing host): %s", value)
+	}
+	return nil
+}
+
+func validateURIReference(value string) error {
+	if _, err := url.Parse(value); err != nil {
+		return fmt.Errorf("invalid URI reference: %s", value)
+	}
+	return nil
+}
+
+func validateBase64(value string) error {
+	if _, err := base64.StdEncoding.DecodeString(value); err != nil {
+		return fmt.Errorf("invalid base64 value: %s", value)
+	}
+	return nil
+}
+
+func validateMAC(value string) error {
+	if _, err := net.ParseMAC(value); err != nil {
+		return fmt.Errorf("invalid MAC address: %s", value)
+	}
+	return nil
+}
+
+func validateCIDR(value string) error {
+	if _, _, err := net.ParseCIDR(value); err != nil {
+		return fmt.Errorf("invalid CIDR notation: %s", value)
+	}
+	return nil
+}
+
+func validateE164(value string) error {
+	if !e164Regex.MatchString(value) {
+		return fmt.Errorf("invalid phone number (expected E.164 format, e.g. +14155552671): %s", value)
+	}
+	return nil
+}
+
+// validateCreditCard verifies the number passes the Luhn checksum.
+func validateCreditCard(value string) error {
+	cleaned := strings.NewReplacer(" ", "", "-", "").Replace(value)
+	if len(cleaned) < 12 || len(cleaned) > 19 {
+		return fmt.Errorf("invalid credit card number: %s", value)
+	}
+
+	var sum int
+	double := false
+	for i := len(cleaned) - 1; i >= 0; i-- {
+		ch := cleaned[i]
+		if ch < '0' || ch > '9' {
+			return fmt.Errorf("invalid credit card number: %s", value)
+		}
+		digit := int(ch - '0')
+		if double {
+			digit *= 2
+			if digit > 9 {
+				digit -= 9
+			}
+		}
+		sum += digit
+		double = !double
+	}
+	if sum%10 != 0 {
+		return fmt.Errorf("invalid credit card number (failed Luhn check): %s", value)
+	}
+	return nil
+}
+
+func validateSemver(value string) error {
+	if !semverRegex.MatchString(value) {
+		return fmt.Errorf("invalid semantic version: %s", value)
+	}
+	return nil
+}
+
+func validateJSONPointer(value string) error {
+	if !jsonPointerRegex.MatchString(value) {
+		return fmt.Errorf("invalid JSON pointer (RFC 6901): %s", value)
+	}
+	return nil
+}
+
+func validateULID(value string) error {
+	if !ulidRegex.MatchString(value) {
+		return fmt.Errorf("invalid ULID: %s", value)
+	}
+	return nil
+}
+
+func validateAlpha(value string) error {
+	if !alphaRegex.MatchString(value) {
+		return fmt.Errorf("value must contain only letters: %s", value)
+	}
+	return nil
+}
+
+func validateAlphanumeric(value string) error {
+	if !alphanumRegex.MatchString(value) {
+		return fmt.Errorf("value must contain only letters and digits: %s", value)
+	}
+	return nil
+}
+
+func validateNumeric(value string) error {
+	if !numericRegex.MatchString(value) {
+		return fmt.Errorf("value must be numeric: %s", value)
+	}
+	return nil
+}
+
+func validateASCII(value string) error {
+	for i := 0; i < len(value); i++ {
+		if value[i] > 127 {
+			return fmt.Errorf("value must contain only ASCII characters: %s", value)
+		}
+	}
+	return nil
+}
+
+func validateLowercase(value string) error {
+	if value != strings.ToLower(value) {
+		return fmt.Errorf("value must be lowercase: %s", value)
+	}
+	return nil
+}
+
+func validateUppercase(value string) error {
+	if value != strings.ToUpper(value) {
+		return fmt.Errorf("value must be uppercase: %s", value)
+	}
+	return nil
+}
+
+func validateSlug(value string) error {
+	if !slugRegex.MatchString(value) {
+		return fmt.Errorf("value must be a valid slug (lowercase alphanumeric and hyphens): %s", value)
+	}
+	return nil
+}
+
+func validateHexColor(value string) error {
+	if !hexColorRegex.MatchString(value) {
+		return fmt.Errorf("invalid hex color (expected #RGB or #RRGGBB): %s", value)
+	}
+	return nil
+}
 func checkMultipleOf(field reflect.Value, tag string) error {
 	switch field.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -782,7 +1102,7 @@ func checkMultipleOf(field reflect.Value, tag string) error {
 	}
 	return nil
 }
-func checkUniqueItems(field reflect.Value) interface{} {
+func checkUniqueItems(field reflect.Value) error {
 	if field.Kind() == reflect.Slice {
 		seen := make(map[interface{}]bool)
 		for i := 0; i < field.Len(); i++ {
@@ -797,7 +1117,7 @@ func checkUniqueItems(field reflect.Value) interface{} {
 
 }
 
-func checkMaxItems(field reflect.Value, tag string) interface{} {
+func checkMaxItems(field reflect.Value, tag string) error {
 	maxItems, err := strconv.Atoi(tag)
 	if err != nil {
 		return fmt.Errorf("invalid maxItems value: %s", tag)
@@ -812,7 +1132,7 @@ func checkMaxItems(field reflect.Value, tag string) interface{} {
 
 }
 
-func checkMinItems(field reflect.Value, tag string) interface{} {
+func checkMinItems(field reflect.Value, tag string) error {
 	minItems, err := strconv.Atoi(tag)
 	if err != nil {
 		return fmt.Errorf("invalid minItems value: %s", tag)

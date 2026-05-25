@@ -13,47 +13,98 @@ Okapi provides declarative validation and automatic default value assignment usi
 
 ### Basic Validation Tags
 
-| Field Type | Tag                            | Description                                              |
-|------------|--------------------------------|----------------------------------------------------------|
-| `string`   | `minLength:"10"`               | Ensures the string has at least 10 characters.           |
-| `string`   | `maxLength:"50"`               | Ensures the string does not exceed 50 characters.        |
-| `number`   | `min:"5"`                      | Ensures the number is greater than or equal to 5.        |
-| `number`   | `max:"100"`                    | Ensures the number is less than or equal to 100.         |
-| `number`   | `multipleOf:"5"`               | Ensures the number is a multiple of the given value.     |
-| `slice`    | `maxItems:"5"`                 | Ensures the slice contains at most 5 items.              |
-| `slice`    | `minItems:"2"`                 | Ensures the slice contains at least 2 items.             |
-| `slice`    | `uniqueItems:"true"`           | Ensures all items in the slice are unique.               |
-| `any`      | `required:"true"`              | Marks the field as required.                             |
-| `any`      | `default:"..."`                | Assigns a default value when the field is missing/empty. |
-| `any`      | `enum:"pending,paid,canceled"` | Restricts the field to one of the listed values.         |
-| `any`      | `format:"email"`               | Enables format validation (e.g. `email`, `uuid`, etc.).  |
-| `any`      | `pattern:"^[a-zA-Z]+$"`        | Validates the field against a regular expression.        |
+| Field Type            | Tag                            | Description                                              |
+|-----------------------|--------------------------------|----------------------------------------------------------|
+| `string`              | `minLength:"10"`               | Ensures the string has at least 10 characters.           |
+| `string`              | `maxLength:"50"`               | Ensures the string does not exceed 50 characters.        |
+| `number`              | `min:"5"`                      | Ensures the number is greater than or equal to 5.        |
+| `number`              | `max:"100"`                    | Ensures the number is less than or equal to 100.         |
+| `number`              | `exclusiveMin:"0"`             | Ensures the number is strictly greater than 0.           |
+| `number`              | `exclusiveMax:"100"`           | Ensures the number is strictly less than 100.            |
+| `number`              | `multipleOf:"5"`               | Ensures the number is a multiple of the given value.     |
+| `slice`               | `maxItems:"5"`                 | Ensures the slice contains at most 5 items.              |
+| `slice`               | `minItems:"2"`                 | Ensures the slice contains at least 2 items.             |
+| `slice`               | `uniqueItems:"true"`           | Ensures all items in the slice are unique.               |
+| `map`                 | `minProperties:"1"`            | Ensures the map has at least 1 entry.                    |
+| `map`                 | `maxProperties:"10"`           | Ensures the map has at most 10 entries.                  |
+| `any`                 | `required:"true"`              | Marks the field as required.                             |
+| `any`                 | `default:"..."`                | Assigns a default value when the field is missing/empty. |
+| `string` / `[]string` | `enum:"pending,paid,canceled"` | Restricts the field to one of the listed values.         |
+| `string` / `[]string` | `const:"active"`               | Requires the field to equal a fixed value.               |
+| `string` / `[]string` | `format:"email"`               | Enables format validation (e.g. `email`, `uuid`, etc.).  |
+| `string` / `[]string` | `pattern:"^[a-zA-Z]+$"`        | Validates the field against a regular expression.        |
+
+> **Slices:** `enum`, `const`, `format`, and `pattern` apply to **each element** of a `[]string` field. Failures are reported per index, e.g. `element [2]: ...`.
+
+> **Empty values:** `enum`, `const`, `format`, and `pattern` skip empty strings — combine with `required:"true"` to also enforce presence.
 
 
 
 ### Data Type & Format Validation
 
-| Field Type  | Tag / Attribute                               | Description                                            |
-|-------------|-----------------------------------------------|--------------------------------------------------------|
-| `date`      | `format:"date"`                               | Validates the field as a date (YYYY-MM-DD).            |
-| `date-time` | `format:"date-time"`                          | Validates the field as a date and time (RFC3339).      |
-| `email`     | `format:"email"`                              | Validates the field as a valid email address.          |
-| `duration`  | `format:"duration"`                           | Validates the field as a Go duration (e.g., `1h30m`).  |
-| `uuid`      | `format:"uuid"`                               | Validates the field as a valid UUID.                   |
-| `hostname`  | `format:"hostname"`                           | Validates the field as a valid hostname.               |
-| `ipv4`      | `format:"ipv4"`                               | Validates the field as a valid IPv4 address.           |
-| `ipv6`      | `format:"ipv6"`                               | Validates the field as a valid IPv6 address.           |
-| `uri`       | `format:"uri"`                                | Validates the field as a valid URI.                    |
-| `regex`     | `format:"regex" pattern="^\+?[1-9]\d{1,14}$"` | Validates the field using a custom regular expression. |
+Format validation is enabled with the `format` tag. All formats apply to `string`
+fields (and each element of `[]string` fields).
+
+#### Date & time
+
+| Format      | Tag                  | Description                                          |
+|-------------|----------------------|-----------------------------------------------------|
+| `date`      | `format:"date"`      | Date in `YYYY-MM-DD` form.                          |
+| `date-time` | `format:"date-time"` | Date and time (RFC3339).                            |
+| `time`      | `format:"time"`      | Time of day (RFC3339 full-time, e.g. `15:04:05Z`). |
+| `duration`  | `format:"duration"`  | Go duration (e.g. `1h30m`, `300ms`).               |
+
+#### Network, web & identifiers
+
+| Format          | Tag                     | Description                                                  |
+|-----------------|-------------------------|-------------------------------------------------------------|
+| `email`         | `format:"email"`        | Valid email address.                                        |
+| `hostname`      | `format:"hostname"`     | Valid hostname.                                             |
+| `ipv4`          | `format:"ipv4"`         | Valid IPv4 address.                                         |
+| `ipv6`          | `format:"ipv6"`         | Valid IPv6 address.                                         |
+| `mac`           | `format:"mac"`          | Valid MAC address.                                          |
+| `cidr`          | `format:"cidr"`         | CIDR notation (e.g. `192.168.1.0/24`).                     |
+| `uri`           | `format:"uri"`          | Valid URI (any scheme).                                    |
+| `uri-reference` | `format:"uri-reference"`| URI reference (relative references allowed).               |
+| `url`           | `format:"url"`          | Absolute URL using the `http` or `https` scheme.          |
+| `uuid`          | `format:"uuid"`         | Valid UUID.                                                 |
+| `ulid`          | `format:"ulid"`         | Valid ULID.                                                 |
+| `e164` / `phone`| `format:"e164"`         | Phone number in E.164 format (e.g. `+14155552671`).       |
+| `credit-card`   | `format:"credit-card"`  | Credit card number (passes the Luhn checksum).            |
+| `semver`        | `format:"semver"`       | Semantic version (e.g. `1.2.3-alpha.1`).                  |
+| `json-pointer`  | `format:"json-pointer"` | JSON Pointer (RFC 6901).                                   |
+| `byte` / `base64`| `format:"byte"`        | Base64-encoded value.                                     |
+
+#### String content
+
+| Format         | Tag                     | Description                                          |
+|----------------|-------------------------|-----------------------------------------------------|
+| `alpha`        | `format:"alpha"`        | Letters only (`a–z`, `A–Z`).                        |
+| `alphanumeric` | `format:"alphanumeric"` | Letters and digits only.                            |
+| `numeric`      | `format:"numeric"`      | A numeric string (e.g. `123`, `-12.5`).            |
+| `ascii`        | `format:"ascii"`        | ASCII characters only.                              |
+| `lowercase`    | `format:"lowercase"`    | No uppercase characters.                            |
+| `uppercase`    | `format:"uppercase"`    | No lowercase characters.                            |
+| `slug`         | `format:"slug"`         | URL slug (e.g. `my-post-123`).                     |
+| `hexcolor`     | `format:"hexcolor"`     | Hex color (`#RGB` or `#RRGGBB`).                   |
+
+#### Custom pattern
+
+| Format  | Tag / Attribute                               | Description                                            |
+|---------|-----------------------------------------------|--------------------------------------------------------|
+| `regex` | `format:"regex" pattern:"^\+?[1-9]\d{1,14}$"` | Validates the field using a custom regular expression. |
 
 ### Example
 
 ```go
 type CreateUserRequest struct {
-    Email    string   `json:"email" required:"true" format:"email" example:"user@example.com"`
-    Password string   `json:"password" minLength:"8" description:"User password"`
-    Age      int      `json:"age" min:"18" max:"120" default:"18"`
-    Roles    []string `json:"roles" minItems:"1" uniqueItems:"true"`
+    Email    string            `json:"email" required:"true" format:"email" example:"user@example.com"`
+    Password string            `json:"password" minLength:"8" description:"User password"`
+    Age      int               `json:"age" exclusiveMin:"0" max:"120" default:"18"`
+    Website  string            `json:"website" format:"url"`
+    Kind     string            `json:"kind" const:"user"`
+    Roles    []string          `json:"roles" minItems:"1" uniqueItems:"true" enum:"admin,editor,viewer"`
+    Metadata map[string]string `json:"metadata" minProperties:"1" maxProperties:"10"`
 }
 ```
 

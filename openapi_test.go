@@ -447,3 +447,66 @@ func TestWithOpenAPIDocs(t *testing.T) {
 	okapitest.GET(t, fmt.Sprintf("%s/openapi.json", o.BaseURL)).ExpectStatusOK()
 	okapitest.GET(t, fmt.Sprintf("%s/redoc", o.BaseURL)).ExpectStatusOK()
 }
+
+// validationKeywordsModel exercises the OpenAPI emission of the new validation
+// keywords: exclusive numeric bounds, string format, and object property counts.
+type validationKeywordsModel struct {
+	Age     int               `json:"age" exclusiveMin:"0" exclusiveMax:"150"`
+	Website string            `json:"website" format:"url"`
+	Labels  map[string]string `json:"labels" minProperties:"1" maxProperties:"5"`
+}
+
+func TestOpenAPIValidationKeywords(t *testing.T) {
+	o := New()
+	o.WithOpenAPIDocs(OpenAPI{
+		Title:   "Validation Keywords",
+		Version: "1.0.0",
+		License: License{Name: "MIT"},
+		Servers: Servers{{URL: "http://localhost:8080"}},
+	})
+	o.Post("/things", anyHandler,
+		DocRequestBody(&validationKeywordsModel{}),
+		DocResponse(200, &validationKeywordsModel{}),
+	)
+	o.buildOpenAPISpec()
+
+	spec30 := o.openapiSpec
+	spec31 := o.openapiSpec31
+
+	m30 := spec30.Components.Schemas["validationKeywordsModel"].Value
+	m31 := spec31.Components.Schemas["validationKeywordsModel"].Value
+	require.NotNil(t, m30)
+	require.NotNil(t, m31)
+
+	// 3.0: exclusive bounds are minimum/maximum + boolean exclusive flags.
+	age30 := m30.Properties["age"].Value
+	require.NotNil(t, age30.Min)
+	assert.Equal(t, 0.0, *age30.Min)
+	assert.True(t, age30.ExclusiveMin.IsTrue())
+	require.NotNil(t, age30.Max)
+	assert.Equal(t, 150.0, *age30.Max)
+	assert.True(t, age30.ExclusiveMax.IsTrue())
+
+	// 3.1: exclusive bounds are numeric; minimum/maximum cleared.
+	age31 := m31.Properties["age"].Value
+	assert.Nil(t, age31.Min)
+	require.NotNil(t, age31.ExclusiveMin.Value)
+	assert.Equal(t, 0.0, *age31.ExclusiveMin.Value)
+	assert.Nil(t, age31.Max)
+	require.NotNil(t, age31.ExclusiveMax.Value)
+	assert.Equal(t, 150.0, *age31.ExclusiveMax.Value)
+
+	// format flows through from the format tag (previously a no-op).
+	assert.Equal(t, "url", m30.Properties["website"].Value.Format)
+	assert.Equal(t, "url", m31.Properties["website"].Value.Format)
+
+	// object property counts.
+	labels30 := m30.Properties["labels"].Value
+	assert.Equal(t, uint64(1), labels30.MinProps)
+	require.NotNil(t, labels30.MaxProps)
+	assert.Equal(t, uint64(5), *labels30.MaxProps)
+
+	// Both documents must validate under their own version.
+	validateOpenAPIDoc(t, spec30)
+	validateOpenAPIDoc(t, spec31)
+}

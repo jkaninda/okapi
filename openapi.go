@@ -1203,6 +1203,15 @@ func transformSchemaTo31(s *openapi3.Schema) {
 			delete(s.Extensions, extOkapiConst)
 		}
 	}
+	// exclusiveMinimum/Maximum: boolean modifier (3.0) -> numeric bound (3.1).
+	if s.ExclusiveMin.IsTrue() && s.Min != nil {
+		s.ExclusiveMin = openapi3.ExclusiveBound{Value: s.Min}
+		s.Min = nil
+	}
+	if s.ExclusiveMax.IsTrue() && s.Max != nil {
+		s.ExclusiveMax = openapi3.ExclusiveBound{Value: s.Max}
+		s.Max = nil
+	}
 }
 
 // stripConstMarkers removes the internal const marker extension from every
@@ -1756,7 +1765,34 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 		schema.Description = desc
 	}
 
-	// String validations
+	applyStringSchemaTags(schema, tag)
+	applyNumericSchemaTags(schema, tag)
+	applyArraySchemaTags(schema, tag)
+
+	// Enum validation
+	if enum := tag.Get(tagEnum); enum != "" {
+		values := strings.Split(enum, ",")
+		schema.Enum = make([]interface{}, len(values))
+		for i, v := range values {
+			schema.Enum[i] = strings.TrimSpace(v)
+		}
+	}
+	// Example
+	if example := tag.Get(tagExample); example != "" {
+		schema.Example = example
+	}
+	// Const (OpenAPI 3.1). Stored as a marker extension on the version-agnostic
+	// schema; promoted to a real `const` for 3.1 and stripped for 3.0.
+	if constVal := tag.Get(tagConst); constVal != "" {
+		if schema.Extensions == nil {
+			schema.Extensions = make(map[string]any)
+		}
+		schema.Extensions[extOkapiConst] = constVal
+	}
+}
+
+// applyStringSchemaTags applies minLength, maxLength, pattern, and format.
+func applyStringSchemaTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if maxLen := tag.Get(tagMaxLength); maxLen != "" {
 		if val, err := strconv.ParseUint(maxLen, 10, 64); err == nil {
 			schema.MaxLength = ptr(val)
@@ -1770,11 +1806,13 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if pattern := tag.Get(tagPattern); pattern != "" {
 		schema.Pattern = pattern
 	}
-	if format := tag.Get(tagForm); format != "" {
+	if format := tag.Get(tagFormat); format != "" {
 		schema.Format = format
 	}
+}
 
-	// Numeric validations
+// applyNumericSchemaTags applies min, max, exclusive bounds, and multipleOf.
+func applyNumericSchemaTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if maxTag := tag.Get(tagMax); maxTag != "" {
 		if val, err := strconv.ParseFloat(maxTag, 64); err == nil {
 			schema.Max = ptr(val)
@@ -1785,21 +1823,30 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 			schema.Min = ptr(val)
 		}
 	}
+	// Exclusive bounds. The base document is OpenAPI 3.0, where these are
+	// booleans modifying minimum/maximum; the bound goes in Min/Max with the
+	// flag set. transformSchemaTo31 rewrites this to the 3.1 numeric form.
+	if exclusiveMin := tag.Get(tagExclusiveMin); exclusiveMin != "" {
+		if val, err := strconv.ParseFloat(exclusiveMin, 64); err == nil {
+			schema.Min = ptr(val)
+			schema.ExclusiveMin = openapi3.ExclusiveBound{Bool: ptr(true)}
+		}
+	}
+	if exclusiveMax := tag.Get(tagExclusiveMax); exclusiveMax != "" {
+		if val, err := strconv.ParseFloat(exclusiveMax, 64); err == nil {
+			schema.Max = ptr(val)
+			schema.ExclusiveMax = openapi3.ExclusiveBound{Bool: ptr(true)}
+		}
+	}
 	if multipleOf := tag.Get(tagMultipleOf); multipleOf != "" {
 		if val, err := strconv.ParseFloat(multipleOf, 64); err == nil {
 			schema.MultipleOf = ptr(val)
 		}
 	}
+}
 
-	// Enum validation
-	if enum := tag.Get(tagEnum); enum != "" {
-		values := strings.Split(enum, ",")
-		schema.Enum = make([]interface{}, len(values))
-		for i, v := range values {
-			schema.Enum[i] = strings.TrimSpace(v)
-		}
-	}
-	// Slice validations
+// applyArraySchemaTags applies slice item constraints and object property counts.
+func applyArraySchemaTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if maxItems := tag.Get(tagMaxItems); maxItems != "" {
 		if val, err := strconv.ParseUint(maxItems, 10, 64); err == nil {
 			schema.MaxItems = ptr(val)
@@ -1810,21 +1857,18 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 			schema.MinItems = val
 		}
 	}
-	// Unique items
 	if uniqueItems := tag.Get(tagUniqueItems); uniqueItems == constTRUE {
 		schema.UniqueItems = true
 	}
-	// Example
-	if example := tag.Get(tagExample); example != "" {
-		schema.Example = example
-	}
-	// Const (OpenAPI 3.1). Stored as a marker extension on the version-agnostic
-	// schema; promoted to a real `const` for 3.1 and stripped for 3.0.
-	if constVal := tag.Get(tagConst); constVal != "" {
-		if schema.Extensions == nil {
-			schema.Extensions = make(map[string]any)
+	if maxProps := tag.Get(tagMaxProperties); maxProps != "" {
+		if val, err := strconv.ParseUint(maxProps, 10, 64); err == nil {
+			schema.MaxProps = ptr(val)
 		}
-		schema.Extensions[extOkapiConst] = constVal
+	}
+	if minProps := tag.Get(tagMinProperties); minProps != "" {
+		if val, err := strconv.ParseUint(minProps, 10, 64); err == nil {
+			schema.MinProps = val
+		}
 	}
 }
 

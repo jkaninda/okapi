@@ -1339,3 +1339,265 @@ func BenchmarkCheckEnum(b *testing.B) {
 		}
 	}
 }
+
+// --- Tier 2 & 3 format validations ---
+
+func TestNewFormatValidations(t *testing.T) {
+	tests := []struct {
+		format  string
+		value   string
+		wantErr bool
+	}{
+		// time (RFC3339 full-time)
+		{formatTime, "15:04:05Z", false},
+		{formatTime, "23:59:59+02:00", false},
+		{formatTime, "12:00:00", false},
+		{formatTime, "25:00:00", true},
+		{formatTime, "noon", true},
+		// url
+		{formatURL, "https://example.com", false},
+		{formatURL, "http://example.com/path?q=1", false},
+		{formatURL, "ftp://example.com", true},
+		{formatURL, "example.com", true},
+		// uri-reference
+		{formatURIReference, "/path/to/resource", false},
+		{formatURIReference, "../relative", false},
+		{formatURIReference, "://bad", true},
+		// byte / base64
+		{formatByte, "aGVsbG8=", false},
+		{formatBase64, "aGVsbG8=", false},
+		{formatBase64, "not base64!!!", true},
+		// mac
+		{formatMAC, "00:1A:2B:3C:4D:5E", false},
+		{formatMAC, "00:1A:2B", true},
+		// cidr
+		{formatCIDR, "192.168.1.0/24", false},
+		{formatCIDR, "2001:db8::/32", false},
+		{formatCIDR, "192.168.1.0", true},
+		// e164 / phone
+		{formatE164, "+14155552671", false},
+		{formatPhone, "+14155552671", false},
+		{formatE164, "14155552671", true},
+		{formatE164, "+0123", true},
+		// credit-card (Luhn)
+		{formatCreditCard, "4242424242424242", false},
+		{formatCreditCard, "4242 4242 4242 4242", false},
+		{formatCreditCard, "4242424242424241", true},
+		{formatCreditCard, "1234", true},
+		// semver
+		{formatSemver, "1.0.0", false},
+		{formatSemver, "2.1.3-alpha.1", false},
+		{formatSemver, "1.0.0+build.123", false},
+		{formatSemver, "1.0", true},
+		{formatSemver, "v1.0.0", true},
+		// json-pointer
+		{formatJSONPointer, "/foo/0", false},
+		{formatJSONPointer, "/a~1b", false},
+		{formatJSONPointer, "foo", true},
+		{formatJSONPointer, "/~2", true},
+		// ulid
+		{formatULID, "01ARZ3NDEKTSV4RRFFQ69G5FAV", false},
+		{formatULID, "01arz3ndektsv4rrffq69g5fav", false},
+		{formatULID, "8ZZZZZZZZZZZZZZZZZZZZZZZZZ", true},
+		{formatULID, "01ARZ3NDEKTSV4RRFFQ69G5FA", true},
+		// alpha
+		{formatAlpha, "Hello", false},
+		{formatAlpha, "Hello1", true},
+		// alphanumeric
+		{formatAlphanumeric, "abc123", false},
+		{formatAlphanumeric, "abc-123", true},
+		// numeric
+		{formatNumeric, "123", false},
+		{formatNumeric, "-12.5", false},
+		{formatNumeric, "12a", true},
+		// ascii
+		{formatASCII, "Hello123!", false},
+		{formatASCII, "héllo", true},
+		// lowercase
+		{formatLowercase, "hello123", false},
+		{formatLowercase, "Hello", true},
+		// uppercase
+		{formatUppercase, "HELLO", false},
+		{formatUppercase, "Hello", true},
+		// slug
+		{formatSlug, "my-post-123", false},
+		{formatSlug, "My-Post", true},
+		{formatSlug, "a--b", true},
+		// hexcolor
+		{formatHexColor, "#fff", false},
+		{formatHexColor, "#1A2b3C", false},
+		{formatHexColor, "fff", true},
+		{formatHexColor, "#ffff", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.format+"/"+tt.value, func(t *testing.T) {
+			err := checkFormatValue(reflect.ValueOf(tt.value), tt.format, reflect.StructField{})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("checkFormatValue(%q, %q) error = %v, wantErr %v", tt.value, tt.format, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestNewFormatEmptyValueSkipped(t *testing.T) {
+	for _, format := range []string{formatTime, formatURL, formatMAC, formatSemver, formatHexColor, formatULID} {
+		if err := checkFormatValue(reflect.ValueOf(""), format, reflect.StructField{}); err != nil {
+			t.Errorf("empty value should be skipped for format %q, got: %v", format, err)
+		}
+	}
+}
+
+// --- Tier 1: const ---
+
+func TestCheckConst(t *testing.T) {
+	// scalar
+	if err := checkConst(reflect.ValueOf("v1"), "v1"); err != nil {
+		t.Errorf("expected match, got: %v", err)
+	}
+	if err := checkConst(reflect.ValueOf("v2"), "v1"); err == nil {
+		t.Error("expected error for mismatched const")
+	}
+	// empty string skipped (use required for presence)
+	if err := checkConst(reflect.ValueOf(""), "v1"); err != nil {
+		t.Errorf("empty value should be skipped, got: %v", err)
+	}
+	// slice: each element must equal the const
+	if err := checkConst(reflect.ValueOf([]string{"v1", "v1"}), "v1"); err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+	err := checkConst(reflect.ValueOf([]string{"v1", "x"}), "v1")
+	if err == nil || !strings.Contains(err.Error(), "element [1]") {
+		t.Errorf("expected element [1] error, got: %v", err)
+	}
+	// non-string field
+	if err := checkConst(reflect.ValueOf(5), "5"); err == nil {
+		t.Error("expected error for non-string field")
+	}
+}
+
+// --- Tier 1: exclusiveMin / exclusiveMax ---
+
+func TestCheckExclusiveMinMax(t *testing.T) {
+	// int: strictly greater / less than
+	if err := checkExclusiveMin(reflect.ValueOf(5), "5"); err == nil {
+		t.Error("5 is not > 5, expected error")
+	}
+	if err := checkExclusiveMin(reflect.ValueOf(6), "5"); err != nil {
+		t.Errorf("6 > 5, expected no error, got: %v", err)
+	}
+	if err := checkExclusiveMax(reflect.ValueOf(5), "5"); err == nil {
+		t.Error("5 is not < 5, expected error")
+	}
+	if err := checkExclusiveMax(reflect.ValueOf(4), "5"); err != nil {
+		t.Errorf("4 < 5, expected no error, got: %v", err)
+	}
+	// float
+	if err := checkExclusiveMin(reflect.ValueOf(1.5), "1.5"); err == nil {
+		t.Error("1.5 is not > 1.5, expected error")
+	}
+	if err := checkExclusiveMin(reflect.ValueOf(1.6), "1.5"); err != nil {
+		t.Errorf("1.6 > 1.5, expected no error, got: %v", err)
+	}
+	// uint
+	var u uint = 5
+	if err := checkExclusiveMin(reflect.ValueOf(u), "5"); err == nil {
+		t.Error("uint 5 is not > 5, expected error")
+	}
+}
+
+// --- Tier 1: minProperties / maxProperties ---
+
+func TestCheckMinMaxProperties(t *testing.T) {
+	m := map[string]int{"a": 1, "b": 2}
+	if err := checkMinProperties(reflect.ValueOf(m), "2"); err != nil {
+		t.Errorf("2 properties >= 2, expected no error, got: %v", err)
+	}
+	if err := checkMinProperties(reflect.ValueOf(m), "3"); err == nil {
+		t.Error("2 properties < 3, expected error")
+	}
+	if err := checkMaxProperties(reflect.ValueOf(m), "2"); err != nil {
+		t.Errorf("2 properties <= 2, expected no error, got: %v", err)
+	}
+	if err := checkMaxProperties(reflect.ValueOf(m), "1"); err == nil {
+		t.Error("2 properties > 1, expected error")
+	}
+	// non-map skipped
+	if err := checkMinProperties(reflect.ValueOf("x"), "5"); err != nil {
+		t.Errorf("non-map should be skipped, got: %v", err)
+	}
+}
+
+// --- Tier 1 integration via Bind (JSON body) ---
+
+type tier1Request struct {
+	Kind    string            `json:"kind" const:"user"`
+	Age     int               `json:"age" exclusiveMin:"0" exclusiveMax:"150"`
+	Labels  map[string]string `json:"labels" minProperties:"1" maxProperties:"3"`
+	Website string            `json:"website" format:"url"`
+}
+
+func TestTier1ValidationIntegration(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "all valid",
+			body:    `{"kind":"user","age":30,"labels":{"team":"a"},"website":"https://example.com"}`,
+			wantErr: false,
+		},
+		{
+			name:        "const mismatch",
+			body:        `{"kind":"admin","age":30,"labels":{"team":"a"},"website":"https://example.com"}`,
+			wantErr:     true,
+			errContains: "must equal the constant",
+		},
+		{
+			name:        "exclusiveMin violation",
+			body:        `{"kind":"user","age":0,"labels":{"team":"a"},"website":"https://example.com"}`,
+			wantErr:     true,
+			errContains: "must be >",
+		},
+		{
+			name:        "exclusiveMax violation",
+			body:        `{"kind":"user","age":150,"labels":{"team":"a"},"website":"https://example.com"}`,
+			wantErr:     true,
+			errContains: "must be <",
+		},
+		{
+			name:        "minProperties violation",
+			body:        `{"kind":"user","age":30,"labels":{},"website":"https://example.com"}`,
+			wantErr:     true,
+			errContains: "at least",
+		},
+		{
+			name:        "format url violation",
+			body:        `{"kind":"user","age":30,"labels":{"team":"a"},"website":"not-a-url"}`,
+			wantErr:     true,
+			errContains: "invalid URL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+
+			var req tier1Request
+			err := c.Bind(&req)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Bind() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Bind() error = %v, should contain %q", err, tt.errContains)
+				}
+			}
+		})
+	}
+}

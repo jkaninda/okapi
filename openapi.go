@@ -1203,6 +1203,15 @@ func transformSchemaTo31(s *openapi3.Schema) {
 			delete(s.Extensions, extOkapiConst)
 		}
 	}
+	// exclusiveMinimum/Maximum: boolean modifier (3.0) -> numeric bound (3.1).
+	if s.ExclusiveMin.IsTrue() && s.Min != nil {
+		s.ExclusiveMin = openapi3.ExclusiveBound{Value: s.Min}
+		s.Min = nil
+	}
+	if s.ExclusiveMax.IsTrue() && s.Max != nil {
+		s.ExclusiveMax = openapi3.ExclusiveBound{Value: s.Max}
+		s.Max = nil
+	}
 }
 
 // stripConstMarkers removes the internal const marker extension from every
@@ -1770,7 +1779,7 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if pattern := tag.Get(tagPattern); pattern != "" {
 		schema.Pattern = pattern
 	}
-	if format := tag.Get(tagForm); format != "" {
+	if format := tag.Get(tagFormat); format != "" {
 		schema.Format = format
 	}
 
@@ -1783,6 +1792,21 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if minTag := tag.Get(tagMin); minTag != "" {
 		if val, err := strconv.ParseFloat(minTag, 64); err == nil {
 			schema.Min = ptr(val)
+		}
+	}
+	// Exclusive bounds. The base document is OpenAPI 3.0, where these are
+	// booleans modifying minimum/maximum; the bound goes in Min/Max with the
+	// flag set. transformSchemaTo31 rewrites this to the 3.1 numeric form.
+	if exclusiveMin := tag.Get(tagExclusiveMin); exclusiveMin != "" {
+		if val, err := strconv.ParseFloat(exclusiveMin, 64); err == nil {
+			schema.Min = ptr(val)
+			schema.ExclusiveMin = openapi3.ExclusiveBound{Bool: ptr(true)}
+		}
+	}
+	if exclusiveMax := tag.Get(tagExclusiveMax); exclusiveMax != "" {
+		if val, err := strconv.ParseFloat(exclusiveMax, 64); err == nil {
+			schema.Max = ptr(val)
+			schema.ExclusiveMax = openapi3.ExclusiveBound{Bool: ptr(true)}
 		}
 	}
 	if multipleOf := tag.Get(tagMultipleOf); multipleOf != "" {
@@ -1813,6 +1837,17 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	// Unique items
 	if uniqueItems := tag.Get(tagUniqueItems); uniqueItems == constTRUE {
 		schema.UniqueItems = true
+	}
+	// Object property counts
+	if maxProps := tag.Get(tagMaxProperties); maxProps != "" {
+		if val, err := strconv.ParseUint(maxProps, 10, 64); err == nil {
+			schema.MaxProps = ptr(val)
+		}
+	}
+	if minProps := tag.Get(tagMinProperties); minProps != "" {
+		if val, err := strconv.ParseUint(minProps, 10, 64); err == nil {
+			schema.MinProps = val
+		}
 	}
 	// Example
 	if example := tag.Get(tagExample); example != "" {

@@ -25,14 +25,29 @@
 package okapi
 
 import (
+	"encoding/base64"
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+)
+
+// Precompiled patterns used by format validators.
+var (
+	semverRegex      = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+	ulidRegex        = regexp.MustCompile(`(?i)^[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
+	e164Regex        = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
+	alphaRegex       = regexp.MustCompile(`^[a-zA-Z]+$`)
+	alphanumRegex    = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	numericRegex     = regexp.MustCompile(`^[-+]?[0-9]+(?:\.[0-9]+)?$`)
+	slugRegex        = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	hexColorRegex    = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+	jsonPointerRegex = regexp.MustCompile(`^(?:/(?:[^/~]|~0|~1)*)*$`)
 )
 
 func (c *Context) bindStruct(input any) error {
@@ -156,6 +171,16 @@ func (c *Context) validateField(field reflect.Value, sf reflect.StructField) err
 			return fmt.Errorf("field %s: %w", sf.Name, err)
 		}
 	}
+	if exclusiveMinTag := sf.Tag.Get(tagExclusiveMin); exclusiveMinTag != "" {
+		if err := checkExclusiveMin(field, exclusiveMinTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	if exclusiveMaxTag := sf.Tag.Get(tagExclusiveMax); exclusiveMaxTag != "" {
+		if err := checkExclusiveMax(field, exclusiveMaxTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
 
 	// String length validation
 	if minLen := sf.Tag.Get(tagMinLength); minLen != "" {
@@ -172,6 +197,12 @@ func (c *Context) validateField(field reflect.Value, sf reflect.StructField) err
 	// Enum validation
 	if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
 		if err := checkEnum(field, enumTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	// Const validation
+	if constTag := sf.Tag.Get(tagConst); constTag != "" {
+		if err := checkConst(field, constTag); err != nil {
 			return fmt.Errorf("field %s: %w", sf.Name, err)
 		}
 	}
@@ -211,6 +242,19 @@ func (c *Context) validateField(field reflect.Value, sf reflect.StructField) err
 			}
 		}
 	}
+	// Map validations
+	if field.Kind() == reflect.Map {
+		if minPropsTag := sf.Tag.Get(tagMinProperties); minPropsTag != "" {
+			if err := checkMinProperties(field, minPropsTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+		if maxPropsTag := sf.Tag.Get(tagMaxProperties); maxPropsTag != "" {
+			if err := checkMaxProperties(field, maxPropsTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
+	}
 
 	return nil
 }
@@ -239,6 +283,16 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
 			}
 		}
+		if exclusiveMinTag := sf.Tag.Get(tagExclusiveMin); exclusiveMinTag != "" {
+			if err := checkExclusiveMin(field, exclusiveMinTag); err != nil {
+				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
+			}
+		}
+		if exclusiveMaxTag := sf.Tag.Get(tagExclusiveMax); exclusiveMaxTag != "" {
+			if err := checkExclusiveMax(field, exclusiveMaxTag); err != nil {
+				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
+			}
+		}
 
 		// String minLength/maxLength
 		if minLenTag := sf.Tag.Get(tagMinLength); minLenTag != "" {
@@ -254,6 +308,12 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 		// Enum validation
 		if enumTag := sf.Tag.Get(tagEnum); enumTag != "" {
 			if err := checkEnum(field, enumTag); err != nil {
+				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
+			}
+		}
+		// Const validation
+		if constTag := sf.Tag.Get(tagConst); constTag != "" {
+			if err := checkConst(field, constTag); err != nil {
 				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
 			}
 		}
@@ -290,6 +350,17 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 		if sf.Tag.Get(tagUniqueItems) == constTRUE {
 			if err := checkUniqueItems(field); err != nil {
 				return fmt.Errorf("field %s: %v", sf.Name, err)
+			}
+		}
+		// Map validations
+		if minPropsTag := sf.Tag.Get(tagMinProperties); minPropsTag != "" {
+			if err := checkMinProperties(field, minPropsTag); err != nil {
+				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
+			}
+		}
+		if maxPropsTag := sf.Tag.Get(tagMaxProperties); maxPropsTag != "" {
+			if err := checkMaxProperties(field, maxPropsTag); err != nil {
+				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
 			}
 		}
 	}
@@ -539,6 +610,8 @@ func checkFormatValue(field reflect.Value, formatTag string, sf reflect.StructFi
 		return validateDateTime(value)
 	case formatDate:
 		return validateDate(value)
+	case formatTime:
+		return validateTime(value)
 	case formatDuration:
 		return validateDuration(value)
 	case formatIPv4:
@@ -557,6 +630,42 @@ func checkFormatValue(field reflect.Value, formatTag string, sf reflect.StructFi
 			return fmt.Errorf("regex format requires 'pattern' tag")
 		}
 		return validateRegex(value, pattern)
+	case formatURL:
+		return validateURL(value)
+	case formatURIReference:
+		return validateURIReference(value)
+	case formatByte, formatBase64:
+		return validateBase64(value)
+	case formatMAC:
+		return validateMAC(value)
+	case formatCIDR:
+		return validateCIDR(value)
+	case formatE164, formatPhone:
+		return validateE164(value)
+	case formatCreditCard:
+		return validateCreditCard(value)
+	case formatSemver:
+		return validateSemver(value)
+	case formatJSONPointer:
+		return validateJSONPointer(value)
+	case formatULID:
+		return validateULID(value)
+	case formatAlpha:
+		return validateAlpha(value)
+	case formatAlphanumeric:
+		return validateAlphanumeric(value)
+	case formatNumeric:
+		return validateNumeric(value)
+	case formatASCII:
+		return validateASCII(value)
+	case formatLowercase:
+		return validateLowercase(value)
+	case formatUppercase:
+		return validateUppercase(value)
+	case formatSlug:
+		return validateSlug(value)
+	case formatHexColor:
+		return validateHexColor(value)
 	default:
 		return fmt.Errorf("unsupported format: %s", formatTag)
 	}
@@ -637,6 +746,128 @@ func checkEnumValue(field reflect.Value, enumTag string) error {
 	}
 
 	return fmt.Errorf("value '%s' is not one of the allowed values: [%s]", value, strings.Join(allowedValues, ", "))
+}
+
+// checkConst validates that a string field equals a fixed constant value.
+// For slice fields, each element is validated individually.
+func checkConst(field reflect.Value, constTag string) error {
+	if field.Kind() == reflect.Slice {
+		for i := 0; i < field.Len(); i++ {
+			if err := checkConstValue(field.Index(i), constTag); err != nil {
+				return fmt.Errorf("element [%d]: %w", i, err)
+			}
+		}
+		return nil
+	}
+	return checkConstValue(field, constTag)
+}
+
+func checkConstValue(field reflect.Value, constTag string) error {
+	if field.Kind() != reflect.String {
+		return fmt.Errorf("const validation can only be applied to string fields")
+	}
+
+	value := field.String()
+	if value == "" {
+		return nil
+	}
+
+	if value != constTag {
+		return fmt.Errorf("value '%s' must equal the constant '%s'", value, constTag)
+	}
+	return nil
+}
+
+// checkExclusiveMin validates that a numeric field is strictly greater than the bound.
+func checkExclusiveMin(field reflect.Value, tag string) error {
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		bound, err := strconv.ParseInt(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMin value: %s", tag)
+		}
+		if field.Int() <= bound {
+			return fmt.Errorf("value %d must be > %d", field.Int(), bound)
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		bound, err := strconv.ParseUint(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMin value: %s", tag)
+		}
+		if field.Uint() <= bound {
+			return fmt.Errorf("value %d must be > %d", field.Uint(), bound)
+		}
+	case reflect.Float32, reflect.Float64:
+		bound, err := strconv.ParseFloat(tag, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMin value: %s", tag)
+		}
+		if field.Float() <= bound {
+			return fmt.Errorf("value %g must be > %g", field.Float(), bound)
+		}
+	}
+	return nil
+}
+
+// checkExclusiveMax validates that a numeric field is strictly less than the bound.
+func checkExclusiveMax(field reflect.Value, tag string) error {
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		bound, err := strconv.ParseInt(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMax value: %s", tag)
+		}
+		if field.Int() >= bound {
+			return fmt.Errorf("value %d must be < %d", field.Int(), bound)
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		bound, err := strconv.ParseUint(tag, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMax value: %s", tag)
+		}
+		if field.Uint() >= bound {
+			return fmt.Errorf("value %d must be < %d", field.Uint(), bound)
+		}
+	case reflect.Float32, reflect.Float64:
+		bound, err := strconv.ParseFloat(tag, 64)
+		if err != nil {
+			return fmt.Errorf("invalid exclusiveMax value: %s", tag)
+		}
+		if field.Float() >= bound {
+			return fmt.Errorf("value %g must be < %g", field.Float(), bound)
+		}
+	}
+	return nil
+}
+
+// checkMinProperties validates the minimum number of entries in a map field.
+func checkMinProperties(field reflect.Value, tag string) error {
+	if field.Kind() != reflect.Map {
+		return nil
+	}
+	minValue, err := strconv.Atoi(tag)
+	if err != nil {
+		return fmt.Errorf("invalid minProperties value: %s", tag)
+	}
+	if field.Len() < minValue {
+		return fmt.Errorf("map has %d properties, must have at least %d", field.Len(), minValue)
+	}
+	return nil
+}
+
+// checkMaxProperties validates the maximum number of entries in a map field.
+func checkMaxProperties(field reflect.Value, tag string) error {
+	if field.Kind() != reflect.Map {
+		return nil
+	}
+	maxValue, err := strconv.Atoi(tag)
+	if err != nil {
+		return fmt.Errorf("invalid maxProperties value: %s", tag)
+	}
+	if field.Len() > maxValue {
+		return fmt.Errorf("map has %d properties, must have at most %d", field.Len(), maxValue)
+	}
+	return nil
 }
 func validateEmail(value string) error {
 	emailRegex := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
@@ -740,6 +971,175 @@ func validateUri(value string) error {
 	}
 	if !matched {
 		return fmt.Errorf("invalid URI format: %s", value)
+	}
+	return nil
+}
+
+func validateTime(value string) error {
+	// RFC3339 full-time: 15:04:05Z, 15:04:05+07:00, 15:04:05.123Z, or local 15:04:05
+	layouts := []string{"15:04:05Z07:00", "15:04:05.999999999Z07:00", "15:04:05"}
+	for _, layout := range layouts {
+		if _, err := time.Parse(layout, value); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid time format (expected RFC3339 full-time, e.g. 15:04:05Z07:00): %s", value)
+}
+
+func validateURL(value string) error {
+	u, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s", value)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid URL (must use http or https scheme): %s", value)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("invalid URL (missing host): %s", value)
+	}
+	return nil
+}
+
+func validateURIReference(value string) error {
+	if _, err := url.Parse(value); err != nil {
+		return fmt.Errorf("invalid URI reference: %s", value)
+	}
+	return nil
+}
+
+func validateBase64(value string) error {
+	if _, err := base64.StdEncoding.DecodeString(value); err != nil {
+		return fmt.Errorf("invalid base64 value: %s", value)
+	}
+	return nil
+}
+
+func validateMAC(value string) error {
+	if _, err := net.ParseMAC(value); err != nil {
+		return fmt.Errorf("invalid MAC address: %s", value)
+	}
+	return nil
+}
+
+func validateCIDR(value string) error {
+	if _, _, err := net.ParseCIDR(value); err != nil {
+		return fmt.Errorf("invalid CIDR notation: %s", value)
+	}
+	return nil
+}
+
+func validateE164(value string) error {
+	if !e164Regex.MatchString(value) {
+		return fmt.Errorf("invalid phone number (expected E.164 format, e.g. +14155552671): %s", value)
+	}
+	return nil
+}
+
+// validateCreditCard verifies the number passes the Luhn checksum.
+func validateCreditCard(value string) error {
+	cleaned := strings.NewReplacer(" ", "", "-", "").Replace(value)
+	if len(cleaned) < 12 || len(cleaned) > 19 {
+		return fmt.Errorf("invalid credit card number: %s", value)
+	}
+
+	var sum int
+	double := false
+	for i := len(cleaned) - 1; i >= 0; i-- {
+		ch := cleaned[i]
+		if ch < '0' || ch > '9' {
+			return fmt.Errorf("invalid credit card number: %s", value)
+		}
+		digit := int(ch - '0')
+		if double {
+			digit *= 2
+			if digit > 9 {
+				digit -= 9
+			}
+		}
+		sum += digit
+		double = !double
+	}
+	if sum%10 != 0 {
+		return fmt.Errorf("invalid credit card number (failed Luhn check): %s", value)
+	}
+	return nil
+}
+
+func validateSemver(value string) error {
+	if !semverRegex.MatchString(value) {
+		return fmt.Errorf("invalid semantic version: %s", value)
+	}
+	return nil
+}
+
+func validateJSONPointer(value string) error {
+	if !jsonPointerRegex.MatchString(value) {
+		return fmt.Errorf("invalid JSON pointer (RFC 6901): %s", value)
+	}
+	return nil
+}
+
+func validateULID(value string) error {
+	if !ulidRegex.MatchString(value) {
+		return fmt.Errorf("invalid ULID: %s", value)
+	}
+	return nil
+}
+
+func validateAlpha(value string) error {
+	if !alphaRegex.MatchString(value) {
+		return fmt.Errorf("value must contain only letters: %s", value)
+	}
+	return nil
+}
+
+func validateAlphanumeric(value string) error {
+	if !alphanumRegex.MatchString(value) {
+		return fmt.Errorf("value must contain only letters and digits: %s", value)
+	}
+	return nil
+}
+
+func validateNumeric(value string) error {
+	if !numericRegex.MatchString(value) {
+		return fmt.Errorf("value must be numeric: %s", value)
+	}
+	return nil
+}
+
+func validateASCII(value string) error {
+	for i := 0; i < len(value); i++ {
+		if value[i] > 127 {
+			return fmt.Errorf("value must contain only ASCII characters: %s", value)
+		}
+	}
+	return nil
+}
+
+func validateLowercase(value string) error {
+	if value != strings.ToLower(value) {
+		return fmt.Errorf("value must be lowercase: %s", value)
+	}
+	return nil
+}
+
+func validateUppercase(value string) error {
+	if value != strings.ToUpper(value) {
+		return fmt.Errorf("value must be uppercase: %s", value)
+	}
+	return nil
+}
+
+func validateSlug(value string) error {
+	if !slugRegex.MatchString(value) {
+		return fmt.Errorf("value must be a valid slug (lowercase alphanumeric and hyphens): %s", value)
+	}
+	return nil
+}
+
+func validateHexColor(value string) error {
+	if !hexColorRegex.MatchString(value) {
+		return fmt.Errorf("invalid hex color (expected #RGB or #RRGGBB): %s", value)
 	}
 	return nil
 }

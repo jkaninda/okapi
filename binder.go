@@ -650,6 +650,12 @@ func validateStruct(v any) error {
 				return fmt.Errorf("field %s.%s: %w", sf.Name, sf.Name, err)
 			}
 		}
+		// Const validation
+		if constTag := sf.Tag.Get(tagConst); constTag != "" {
+			if err := checkConst(field, constTag); err != nil {
+				return fmt.Errorf("field %s: %w", sf.Name, err)
+			}
+		}
 		// MultipleOf validation
 		if multipleOfTag := sf.Tag.Get(tagMultipleOf); multipleOfTag != "" {
 			if err := checkMultipleOf(field, multipleOfTag); err != nil {
@@ -675,6 +681,19 @@ func validateStruct(v any) error {
 				return err
 			}
 		}
+		// Map validations
+		if field.Kind() == reflect.Map {
+			if minPropsTag := sf.Tag.Get(tagMinProperties); minPropsTag != "" {
+				if err := checkMinProperties(field, minPropsTag); err != nil {
+					return fmt.Errorf("field %s: %w", sf.Name, err)
+				}
+			}
+			if maxPropsTag := sf.Tag.Get(tagMaxProperties); maxPropsTag != "" {
+				if err := checkMaxProperties(field, maxPropsTag); err != nil {
+					return fmt.Errorf("field %s: %w", sf.Name, err)
+				}
+			}
+		}
 
 	}
 	return nil
@@ -690,6 +709,16 @@ func validateMinMax(field reflect.Value, sf reflect.StructField) error {
 	}
 	if maxTag := sf.Tag.Get(tagMax); maxTag != "" {
 		if err := checkMax(field, maxTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	if exclusiveMinTag := sf.Tag.Get(tagExclusiveMin); exclusiveMinTag != "" {
+		if err := checkExclusiveMin(field, exclusiveMinTag); err != nil {
+			return fmt.Errorf("field %s: %w", sf.Name, err)
+		}
+	}
+	if exclusiveMaxTag := sf.Tag.Get(tagExclusiveMax); exclusiveMaxTag != "" {
+		if err := checkExclusiveMax(field, exclusiveMaxTag); err != nil {
 			return fmt.Errorf("field %s: %w", sf.Name, err)
 		}
 	}

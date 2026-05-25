@@ -597,8 +597,22 @@ func checkPatternValue(field reflect.Value, pattern string) error {
 	return nil
 }
 
-// checkEnum validates that the field value is one of the allowed enum values
+// checkEnum validates that the field value is one of the allowed enum values.
+// For slice fields, each element is validated individually.
 func checkEnum(field reflect.Value, enumTag string) error {
+	if field.Kind() == reflect.Slice {
+		for i := 0; i < field.Len(); i++ {
+			elem := field.Index(i)
+			if err := checkEnumValue(elem, enumTag); err != nil {
+				return fmt.Errorf("element [%d]: %w", i, err)
+			}
+		}
+		return nil
+	}
+	return checkEnumValue(field, enumTag)
+}
+
+func checkEnumValue(field reflect.Value, enumTag string) error {
 	if field.Kind() != reflect.String {
 		return fmt.Errorf("enum validation can only be applied to string fields")
 	}

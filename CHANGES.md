@@ -1,5 +1,16 @@
 # Changes
 
+## v0.6.2
+
+### Fixes
+
+- **Response writers are now idempotent.** Once a response is committed (e.g., by an `Abort*` call),
+  subsequent calls to `c.JSON`, `c.OK`, `c.XML`, `c.Text`, `c.Render`, `c.Data`, `c.Error`,
+  `c.AbortNotModified`, etc. are silent no-ops instead of appending a second body to the wire.
+  This fixes the double-response bug where a helper called `c.AbortBadRequest(...)` without
+  propagating its return value and the caller then wrote a success body, producing two concatenated
+  JSON objects in the response. Skipped writes emit a `Debug`-level log to aid troubleshooting.
+
 ## v0.6.0
 
 ### Breaking Changes

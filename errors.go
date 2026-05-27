@@ -261,7 +261,12 @@ func (c *Context) getContextErrorHandler() ErrorHandler {
 // ********** Core Error Methods *************
 
 // Error writes a basic error response with the given status code and message.
+// If the response has already been committed, this is a no-op.
 func (c *Context) Error(code int, message string) error {
+	if c.committed() {
+		c.logDiscardedWrite(code)
+		return nil
+	}
 	c.response.WriteHeader(code)
 	_, err := c.response.Write([]byte(message))
 	if err != nil {
@@ -571,14 +576,24 @@ func (c *Context) AbortValidationErrorsWithProblemDetail(errors []ValidationErro
 }
 
 // ErrorNotModified writes a 304 Not Modified response.
+// If the response has already been committed, this is a no-op.
 func (c *Context) ErrorNotModified() error {
+	if c.committed() {
+		c.logDiscardedWrite(http.StatusNotModified)
+		return nil
+	}
 	c.response.WriteHeader(http.StatusNotModified)
 	return nil
 }
 
 // AbortNotModified writes a 304 Not Modified response.
 // Per HTTP spec, 304 responses must not contain a body.
+// If the response has already been committed, this is a no-op.
 func (c *Context) AbortNotModified() error {
+	if c.committed() {
+		c.logDiscardedWrite(http.StatusNotModified)
+		return nil
+	}
 	c.response.WriteHeader(http.StatusNotModified)
 	return nil
 }

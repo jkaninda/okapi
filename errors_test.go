@@ -733,7 +733,7 @@ func TestAbortDoesNotDoubleWrite_FunctionForgetsToReturn(t *testing.T) {
 		book := &Book{}
 		if err := c.Bind(book); err != nil {
 			// Intentionally not returned — simulates a user mistake.
-			c.AbortBadRequest("Bad request", err)
+			_ = c.AbortBadRequest("Bad request", err)
 		}
 		return nil
 	}

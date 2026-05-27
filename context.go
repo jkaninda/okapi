@@ -434,9 +434,21 @@ func (c *Context) WriteStatus(code int) {
 	c.response.WriteHeader(code)
 }
 
+// committed reports whether the response has already been written.
+// Once a response is committed (typically by an Abort* or a successful body write),
+// subsequent attempts to write a full response are skipped to prevent appending
+// extra bytes to a body that is already on the wire.
+func (c *Context) committed() bool {
+	return c.response != nil && c.response.StatusCode() != 0
+}
+
 // writeResponse is a helper for writing responses with common headers and status.
 // Takes care of content type, status code, and error handling.
 func (c *Context) writeResponse(code int, contentType string, writeFunc func() error) error {
+	if c.committed() {
+		c.logDiscardedWrite(code)
+		return nil
+	}
 	c.response.Header().Set(constContentTypeHeader, contentType)
 	c.response.WriteHeader(code)
 	if err := writeFunc(); err != nil {
@@ -444,6 +456,19 @@ func (c *Context) writeResponse(code int, contentType string, writeFunc func() e
 		return err
 	}
 	return nil
+}
+
+func (c *Context) logDiscardedWrite(attemptedCode int) {
+	if c.okapi == nil || c.okapi.logger == nil {
+		return
+	}
+	c.okapi.logger.Debug(
+		"[okapi] response already committed; skipping write",
+		"attempted_status", attemptedCode,
+		"committed_status", c.response.StatusCode(),
+		"method", c.request.Method,
+		"path", c.request.URL.Path,
+	)
 }
 
 // JSON writes a JSON response with the given status code.

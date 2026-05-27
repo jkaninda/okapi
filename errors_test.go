@@ -1,9 +1,12 @@
 package okapi
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -710,6 +713,121 @@ func TestOkapi_WithSimpleProblemDetailErrorHandler(t *testing.T) {
 	app.WithSimpleProblemDetailErrorHandler()
 
 	okapitest.GET(t, app.BaseURL+"/test").ExpectStatusNotFound().ExpectBodyContains("page not found")
+}
+
+// TestAbortDoesNotDoubleWrite_FunctionForgetsToReturn covers the scenario where
+// a helper calls Abort* without propagating the result, and the caller continues
+// to write a success response. After the fix, the success write is a no-op so
+// only the Abort* body lands on the wire.
+//
+// Reproduces examples/sample/main.go where testFunc calls c.AbortBadRequest
+// without `return`, and the outer handler then calls c.OK.
+func TestAbortDoesNotDoubleWrite_FunctionForgetsToReturn(t *testing.T) {
+	o := New()
+
+	type Book struct {
+		Name string `json:"name" required:"true"`
+	}
+
+	testFunc := func(c *Context) error {
+		book := &Book{}
+		if err := c.Bind(book); err != nil {
+			// Intentionally not returned — simulates a user mistake.
+			c.AbortBadRequest("Bad request", err)
+		}
+		return nil
+	}
+
+	o.Post("/", func(c *Context) error {
+		if err := testFunc(c); err != nil {
+			return err
+		}
+		return c.OK(M{"message": "Book Created"})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	o.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Code)
+	}
+
+	// Body should contain exactly one JSON object — the Abort body.
+	dec := json.NewDecoder(bytes.NewReader(rec.Body.Bytes()))
+	objects := 0
+	for {
+		var v any
+		if err := dec.Decode(&v); err != nil {
+			break
+		}
+		objects++
+	}
+	if objects != 1 {
+		t.Fatalf("expected exactly 1 JSON object in body, got %d. Body:\n%s", objects, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "Book Created") {
+		t.Fatalf("post-Abort success body leaked into response: %s", rec.Body.String())
+	}
+}
+
+// TestAbortDoesNotDoubleWrite_CustomHandlerReturnsErr covers the scenario where
+// a custom ErrorHandler returns the input error (non-nil) and the caller
+// propagates it through a helper. Without the idempotency guard, a downstream
+// error-catching middleware could trigger a second write of the formatted error.
+func TestAbortDoesNotDoubleWrite_CustomHandlerReturnsErr(t *testing.T) {
+	o := New().With(WithErrorHandler(func(c *Context, code int, message string, err error) error {
+		_ = c.JSON(code, map[string]any{
+			"success": false,
+			"code":    code,
+			"message": message,
+		})
+		return err
+	}))
+
+	// Simulate a user-defined error-catching middleware that re-aborts on any
+	// returned error — a common (if buggy) pattern that previously caused the
+	// double-write.
+	o.Use(func(c *Context) error {
+		if err := c.Next(); err != nil {
+			return c.Abort(err)
+		}
+		return nil
+	})
+
+	helper := func(c *Context, err error) error {
+		return c.AbortNotFound(err.Error())
+	}
+
+	o.Get("/test", func(c *Context) error {
+		err := errors.New("unsubscribe list not found in scope: list_id 42")
+		if resp := helper(c, err); resp != nil {
+			return resp
+		}
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	o.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Code)
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(rec.Body.Bytes()))
+	objects := 0
+	for {
+		var v any
+		if err := dec.Decode(&v); err != nil {
+			break
+		}
+		objects++
+	}
+	if objects != 1 {
+		t.Fatalf("expected exactly 1 JSON object in body, got %d. Body:\n%s", objects, rec.Body.String())
+	}
 }
 
 func TestProblemDetailMarshalJSON(t *testing.T) {

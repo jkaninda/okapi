@@ -1,6 +1,6 @@
 # Changes
 
-## Unreleased
+## v0.6.2
 
 ### Fixes
 

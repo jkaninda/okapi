@@ -218,6 +218,19 @@ o.WithOpenAPIDocs(okapi.OpenAPI{
 o := okapi.New().WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
 ```
 
+### Restricting to a single UI
+
+By default every UI stays reachable at its own route regardless of which one `/docs` renders.
+Set `StrictDocUI: true` to register only the selected UI — the other UI routes then return `404`:
+
+```go
+o.WithOpenAPIDocs(okapi.OpenAPI{
+    Title:       "My API",
+    UI:          okapi.ScalarUI,
+    StrictDocUI: true, // only /docs and /scalar are served; /swagger and /redoc return 404
+})
+```
+
 ## OpenAPI 3.1 and 3.0
 
 Okapi serves the same API description as both **OpenAPI 3.1 / JSON Schema 2020-12** and **OpenAPI 3.0**.

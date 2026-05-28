@@ -715,13 +715,6 @@ func TestOkapi_WithSimpleProblemDetailErrorHandler(t *testing.T) {
 	okapitest.GET(t, app.BaseURL+"/test").ExpectStatusNotFound().ExpectBodyContains("page not found")
 }
 
-// TestAbortDoesNotDoubleWrite_FunctionForgetsToReturn covers the scenario where
-// a helper calls Abort* without propagating the result, and the caller continues
-// to write a success response. After the fix, the success write is a no-op so
-// only the Abort* body lands on the wire.
-//
-// Reproduces examples/sample/main.go where testFunc calls c.AbortBadRequest
-// without `return`, and the outer handler then calls c.OK.
 func TestAbortDoesNotDoubleWrite_FunctionForgetsToReturn(t *testing.T) {
 	o := New()
 

@@ -490,6 +490,17 @@ o.WithOpenAPIDocs(okapi.OpenAPI{
 o := okapi.New().WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
 ```
 
+By default every UI stays reachable at its own route regardless of the selection. Set
+`StrictDocUI: true` to register only the selected UI — the other UI routes then return `404`:
+
+```go
+o.WithOpenAPIDocs(okapi.OpenAPI{
+    Title:       "My API",
+    UI:          okapi.ScalarUI,
+    StrictDocUI: true, // only /docs is served
+})
+```
+
 ### Documenting Routes
 
 #### Composable Functions

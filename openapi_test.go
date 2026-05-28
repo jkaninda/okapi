@@ -420,6 +420,32 @@ func TestOpenAPICustomFavicon(t *testing.T) {
 	okapitest.GET(t, fmt.Sprintf("%s/docs/favicon.png", o.BaseURL)).ExpectStatusNotFound()
 }
 
+func TestStrictDocUI(t *testing.T) {
+	app := Default().WithOpenAPIDocs(OpenAPI{
+		Title:       "Strict Docs",
+		UI:          ScalarUI,
+		StrictDocUI: true,
+	})
+	o := NewTestServerWithOkapi(t, app)
+	o.Get("/", anyHandler)
+
+	okapitest.GET(t, fmt.Sprintf("%s/docs", o.BaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/scalar", o.BaseURL)).ExpectStatusNotFound()
+	okapitest.GET(t, fmt.Sprintf("%s/swagger", o.BaseURL)).ExpectStatusNotFound()
+	okapitest.GET(t, fmt.Sprintf("%s/redoc", o.BaseURL)).ExpectStatusNotFound()
+}
+
+func TestNonStrictDocUIDefault(t *testing.T) {
+	app := Default().WithOpenAPIDocs(OpenAPI{Title: "Default Docs", UI: ScalarUI})
+	o := NewTestServerWithOkapi(t, app)
+	o.Get("/", anyHandler)
+
+	// Without StrictDocUI, all UI routes stay reachable regardless of selection.
+	okapitest.GET(t, fmt.Sprintf("%s/scalar", o.BaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/swagger", o.BaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/redoc", o.BaseURL)).ExpectStatusOK()
+}
+
 func TestWithOpenAPIDocs(t *testing.T) {
 	app := Default().
 		WithOpenAPIDocs(OpenAPI{

@@ -48,6 +48,8 @@ GEM
       sass (~> 3.4)
     jekyll-seo-tag (2.8.0)
       jekyll (>= 3.8, < 5.0)
+    jekyll-sitemap (1.4.0)
+      jekyll (>= 3.7, < 5.0)
     jekyll-watch (2.2.1)
       listen (~> 3.0)
     just-the-docs (0.10.0)
@@ -103,6 +105,8 @@ DEPENDENCIES
   http_parser.rb (~> 0.6.0)
   jekyll (~> 3.10.0)
   jekyll-feed (~> 0.6)
+  jekyll-seo-tag (~> 2.8)
+  jekyll-sitemap (~> 1.4)
   just-the-docs
   kramdown-parser-gfm
   minima (~> 2.0)

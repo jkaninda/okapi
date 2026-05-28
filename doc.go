@@ -172,10 +172,21 @@ var (
 	scalarTemplate  = template.Must(template.New("scalar").Parse(scalar))
 )
 
+// selectedDocUI returns the UI rendered at /docs, normalized to a known value.
+// It falls back to Swagger UI when unset or unrecognized.
+func (o *Okapi) selectedDocUI() DocUI {
+	switch o.openAPI.UI {
+	case RedocUI, ScalarUI, SwaggerUI:
+		return o.openAPI.UI
+	default:
+		return SwaggerUI
+	}
+}
+
 // docsTemplate returns the template for the UI selected via OpenAPI.UI
 // (or WithDocUI). It falls back to Swagger UI when unset or unrecognized.
 func (o *Okapi) docsTemplate() *template.Template {
-	switch o.openAPI.UI {
+	switch o.selectedDocUI() {
 	case RedocUI:
 		return redocTemplate
 	case ScalarUI:
@@ -219,6 +230,10 @@ func (o *Okapi) registerDocRoutes(title string) {
 		return c.renderHTML(http.StatusOK, o.docsTemplate(), docData)
 	},
 	).internalRoute().Hide() // Hide the route from the OpenAPI documentation
+
+	if o.openAPI.StrictDocUI {
+		return
+	}
 	// Register the Swagger UI route
 	o.Get(docSwaggerPath, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, docData)

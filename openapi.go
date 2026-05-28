@@ -78,10 +78,15 @@ type OpenAPI struct {
 
 	// Okapi: UI selects the interactive documentation UI rendered at /docs.
 	// Valid values: SwaggerUI (default), RedocUI, ScalarUI.
-	// Regardless of this setting, each UI is always reachable at its own
-	// route: /swagger, /redoc and /scalar.
+	// By default each UI is also reachable at its own route (/swagger, /redoc
+	// and /scalar) regardless of this setting; set StrictDocUI to serve only /docs.
 	UI DocUI
-	// Okapi: Favicon is the URL of the favicon used by the documentation UIs.
+	// Okapi: StrictDocUI restricts documentation serving to /docs only. When false
+	// (default), /swagger, /redoc and /scalar are all registered alongside /docs
+	// so each UI stays reachable directly. When true, only /docs is served and
+	// every per-UI route returns 404.
+	StrictDocUI bool
+	// Favicon is the URL of the favicon used by the documentation UIs.
 	Favicon string
 }
 type SecuritySchemes []SecurityScheme

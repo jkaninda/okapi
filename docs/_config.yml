@@ -1,27 +1,85 @@
-# Welcome to Jekyll!
-#
-# This config file is meant for settings that affect your whole blog, values
-# which you are expected to set up once and rarely edit after that. If you find
-# yourself editing this file very often, consider using Jekyll's data files
-# feature for the data you need to update frequently.
-#
-# For technical reasons, this file is *NOT* reloaded automatically when you use
-# 'bundle exec jekyll serve'. If you change this file, please restart the server process.
-
-# Site settings
-# These are used to personalize your new site. If you look in the HTML files,
-# you will see them accessed via {{ site.title }}, {{ site.email }}, and so on.
-# You can create any custom variable you would like, and they will be accessible
-# in the templates via {{ site.myvariable }}.
+# ---------------------------------------------------------------------------
+# Site
+# ---------------------------------------------------------------------------
 title: Okapi
-email: me@jkaninda.dev
-description: >- # this means to ignore newlines until "baseurl:"
-  Okapi is a lightweight, fast, and modular web framework for Go (Golang) that simplifies the development of web applications and APIs. With its minimalistic design and powerful features, Okapi enables developers to build scalable and maintainable web services with ease.
-baseurl: "/" # the subpath of your site, e.g. /blog
-url: "https://okapi.jkaninda.dev"#"jkaninda.github.io/okapi/" # the base hostname & protocol for your site, e.g. http://example.com
-twitter_username: jonaskaninda
-github_username:  jkaninda
+description: >-
+  Okapi is a lightweight, fast, modular HTTP framework for Go with automatic
+  request validation and built-in OpenAPI documentation.
+url: https://okapi.jkaninda.dev
+baseurl: ""
+lang: en
+logo: /favicon.ico
 
+# ---------------------------------------------------------------------------
+# Author & socials
+# ---------------------------------------------------------------------------
+author:
+  name: Jonas Kaninda
+  url: https://www.jkaninda.dev
+email: me@jkaninda.dev
+twitter_username: jonaskaninda
+github_username: jkaninda
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+markdown: kramdown
+theme: just-the-docs
+permalink: pretty
+include:
+  - robots.txt
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# ---------------------------------------------------------------------------
+# Theme: just-the-docs
+# https://just-the-docs.com/docs/configuration/
+# ---------------------------------------------------------------------------
+color_scheme: light
+heading_anchors: true
+back_to_top: true
+back_to_top_text: "Back to top"
+
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s\-/]+/
+  rel_url: true
+  button: false
+
+# "Edit this page on GitHub" links at the bottom of each doc page.
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: https://github.com/jkaninda/okapi
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: edit
+
+# ---------------------------------------------------------------------------
+# Navigation
+# ---------------------------------------------------------------------------
+aux_links:
+  "GitHub Repository":
+    - https://github.com/jkaninda/okapi
+aux_links_new_tab: true
+
+nav_external_links:
+  - title: GitHub Repository
+    url: https://github.com/jkaninda/okapi
+  - title: Basic example
+    url: https://github.com/jkaninda/okapi-example
+  - title: Examples
+    url: https://github.com/jkaninda/okapi/tree/main/examples
+nav_external_links_new_tab: true
+
+# ---------------------------------------------------------------------------
+# Callouts
+# ---------------------------------------------------------------------------
 callouts_level: quiet
 callouts:
   highlight:
@@ -38,40 +96,18 @@ callouts:
   warning:
     title: Warning
     color: red
-# Build settings
-markdown: kramdown
-theme: just-the-docs
-plugins:
-  - jekyll-feed
-aux_links:
-  'GitHub Repository':
-    - https://github.com/jkaninda/okapi
 
-nav_external_links:
-  - title: GitHub Repository
-    url: https://github.com/jkaninda/okapi
-
-  - title: Basic example of Okapi
-    url: https://github.com/jkaninda/okapi-example
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
 footer_content: >-
   Copyright &copy; 2026 <a target="_blank" href="https://www.jkaninda.dev">Jonas Kaninda</a>.
-  Distributed under the <a href="https://github.com/jkaninda/okapi/tree/main/LICENSE">MIT.</a><br>
+  Distributed under the <a href="https://github.com/jkaninda/okapi/tree/main/LICENSE">MIT License</a>.<br>
   Something missing, unclear or not working? Open <a href="https://github.com/jkaninda/okapi/issues">an issue</a>.
 
-# Exclude from processing.
-# The following items will not be processed, by default. Create a custom list
-# to override the default setting.
-# exclude:
-#   - Gemfile
-#   - Gemfile2.lock
-#   - node_modules
-#   - vendor/bundle/
-#   - vendor/cache/
-#   - vendor/gems/
-#   - vendor/ruby/
-include:
-  - robots.txt
+# ---------------------------------------------------------------------------
+# Mermaid diagrams
+# ---------------------------------------------------------------------------
 mermaid:
-  # Version of mermaid library
   # Pick an available version from https://cdn.jsdelivr.net/npm/mermaid/
   version: "11.12.2"

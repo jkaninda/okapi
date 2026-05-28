@@ -628,6 +628,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		if config.UI != "" {
 			o.openAPI.UI = config.UI
 		}
+		o.openAPI.StrictDocUI = config.StrictDocUI
 		if config.Favicon != "" {
 			o.openAPI.Favicon = config.Favicon
 		}

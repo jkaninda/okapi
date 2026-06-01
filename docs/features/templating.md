@@ -190,3 +190,8 @@ app.StaticFS("/assets", AssetsFS)
 ```
 
 This pairs naturally with the [Embedded Templates](#embedded-templates) example above, where `AssetsFS` is derived from the same `embed.FS`.
+
+### Serve a single-page application
+
+To serve a client-side routed app (React, Vue, …) with index fallback, use
+`SPA` / `SPAFS` instead of `Static`. See [Single-Page Applications](spa.md).

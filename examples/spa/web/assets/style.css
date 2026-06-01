@@ -1,0 +1,43 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  background: #1b1f28;
+  color: #e2e8f0;
+}
+
+main {
+  text-align: center;
+  max-width: 32rem;
+  padding: 2rem;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+a {
+  color: #38bdf8;
+}
+
+button {
+  background: #38bdf8;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+pre {
+  text-align: left;
+  background: #1e293b;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow: auto;
+}

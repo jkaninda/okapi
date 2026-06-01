@@ -33,6 +33,7 @@ const (
 	constLocationHeader    = "Location"
 	okapiName              = "Okapi"
 	constTRUE              = "true"
+	constIndex             = "index.html"
 
 	openApiVersion                     = "3.0.3"
 	openApiVersion31                   = "3.1.0"

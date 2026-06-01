@@ -38,7 +38,7 @@ func TestRegisterDocRoutes(t *testing.T) {
 		return c.Text(http.StatusOK, "Hello World!")
 	})
 
-	o.registerDocRoutes(o.openAPI.Title)
+	o.registerDocRoutes()
 
 	// Start server in background
 	go func() {

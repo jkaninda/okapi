@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/jkaninda/okapi/okapitest"
 )
 
 func writeSPAFixture(t *testing.T) string {
@@ -141,4 +143,22 @@ func TestFirstPathSegment(t *testing.T) {
 			t.Errorf("firstPathSegment(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+func TestSPA(t *testing.T) {
+	dir := writeSPAFixture(t)
+	ts := DefaultTestServer(t)
+
+	ts.Group("/api/v1")
+	ts.Get("/health", func(c *Context) error {
+		return c.OK(M{"status": "ok"})
+	})
+	ts.SPA("/", dir, SPAConfig{MaxAge: time.Hour})
+
+	okapitest.GET(t, ts.BaseURL+"/docs").
+		ExpectStatusOK()
+
+	okapitest.GET(t, ts.BaseURL+"/swagger").ExpectStatusOK().ExpectBodyContains("swagger-ui")
+	okapitest.GET(t, ts.BaseURL+"/redoc").ExpectStatusOK().ExpectBodyContains("redoc")
+	okapitest.GET(t, ts.BaseURL+"/scalar").ExpectStatusOK().ExpectBodyContains("@scalar/api-reference")
+
 }

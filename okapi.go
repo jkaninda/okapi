@@ -56,38 +56,39 @@ type (
 	// Okapi represents the core application structure of the framework,
 	// holding configuration, routers, middleware, server settings, and documentation components.
 	Okapi struct {
-		context            *Context
-		ctx                context.Context
-		router             *Router
-		middlewares        []Middleware
-		server             *http.Server
-		tlsServer          *http.Server
-		baseCancel         context.CancelFunc
-		tlsConfig          *tls.Config
-		tlsServerConfig    *tls.Config
-		withTlsServer      bool
-		tlsAddr            string
-		routes             []*Route
-		debug              bool
-		accessLog          bool
-		strictSlash        bool
-		logger             *slog.Logger
-		renderer           Renderer
-		corsEnabled        bool
-		cors               Cors
-		writeTimeout       int
-		readTimeout        int
-		idleTimeout        int
-		optionsRegistered  map[string]bool
-		openapiSpec        *openapi3.T
-		openapiSpec31      *openapi3.T
-		webhooks           []*Route
-		openAPI            *OpenAPI
-		openApiEnabled     bool
-		maxMultipartMemory int64 // Maximum memory for multipart forms
-		noRoute            HandlerFunc
-		noMethod           HandlerFunc
-		errorHandler       ErrorHandler
+		context             *Context
+		ctx                 context.Context
+		router              *Router
+		middlewares         []Middleware
+		server              *http.Server
+		tlsServer           *http.Server
+		baseCancel          context.CancelFunc
+		tlsConfig           *tls.Config
+		tlsServerConfig     *tls.Config
+		withTlsServer       bool
+		tlsAddr             string
+		routes              []*Route
+		debug               bool
+		accessLog           bool
+		strictSlash         bool
+		logger              *slog.Logger
+		renderer            Renderer
+		corsEnabled         bool
+		cors                Cors
+		writeTimeout        int
+		readTimeout         int
+		idleTimeout         int
+		optionsRegistered   map[string]bool
+		openapiSpec         *openapi3.T
+		openapiSpec31       *openapi3.T
+		webhooks            []*Route
+		openAPI             *OpenAPI
+		openApiEnabled      bool
+		docRoutesRegistered bool
+		maxMultipartMemory  int64 // Maximum memory for multipart forms
+		noRoute             HandlerFunc
+		noMethod            HandlerFunc
+		errorHandler        ErrorHandler
 	}
 
 	Router struct {
@@ -637,7 +638,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 
 	o.buildOpenAPISpec()
 	// Register the OpenAPI JSON and Swagger UI routes
-	o.registerDocRoutes(o.openAPI.Title)
+	o.registerDocRoutes()
 	return o
 }
 
@@ -791,15 +792,7 @@ func New(options ...OptionFunc) *Okapi {
 
 // Default creates a new Okapi instance with default settings.
 func Default() *Okapi {
-	return New(
-		withDefaultConfig(),
-	)
-}
-
-func withDefaultConfig() OptionFunc {
-	return func(o *Okapi) {
-		o.openApiEnabled = true
-	}
+	return New().WithOpenAPIDocs()
 }
 
 // With applies the provided options to the Okapi instance

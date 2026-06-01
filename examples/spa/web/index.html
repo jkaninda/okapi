@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Okapi SPA Example</title>
+  <link rel="stylesheet" href="/assets/style.css" />
+</head>
+<body>
+  <main>
+    <h1>Okapi SPA</h1>
+    <p id="route"></p>
+    <nav>
+      <a href="/" data-link>Home</a>
+      <a href="/dashboard" data-link>Dashboard</a>
+      <a href="/users/1" data-link>User 1</a>
+    </nav>
+
+    <section>
+      <h2>Users</h2>
+      <button id="load-users">Load users</button>
+      <ul id="users"></ul>
+    </section>
+
+    <section>
+      <h2>Find user by ID</h2>
+      <input id="user-id" type="number" min="1" value="1" />
+      <button id="find-user">Find</button>
+      <pre id="out"></pre>
+    </section>
+  </main>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

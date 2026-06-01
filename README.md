@@ -40,6 +40,7 @@ Key goals:
 - **Auto-Generated OpenAPI Docs** – Swagger UI, ReDoc, and Scalar automatically synced with your code.
 - **Runtime Documentation Control** – Enable/disable OpenAPI docs at runtime without redeployment
 - **Authentication Ready** – Native JWT, Basic Auth, and extensible middleware support.
+- **SPA Serving** – Serve single-page apps (React, Vue, …) with index fallback, from disk or an embedded filesystem.
 - **Standard Library Compatible** – Fully compatible with Go’s `net/http`.
 - **Dynamic Route Management** – Enable/disable routes at runtime without code changes
 - **Production Ready** –  TLS support, CORS, graceful shutdown, middleware system, and more.
@@ -364,6 +365,51 @@ func main() {
     app.Start()
 }
 ```
+
+---
+
+## Single-Page Applications
+
+Serve a client-side routed app (React, Vue, Svelte, …) alongside your API.
+
+Register the SPA after your API routes.
+
+```go
+func main() {
+    o := okapi.Default()
+
+    o.Get("/api/v1/users", listUsers)
+
+    // From disk 
+    o.SPA("/", "./web")
+
+    o.Start()
+}
+```
+
+For single-binary deployments, embed the built front-end and serve it with
+`SPAFS`:
+
+```go
+//go:embed all:web/dist
+var dist embed.FS
+
+func main() {
+    o := okapi.Default()
+
+    o.Get("/api/v1/users", listUsers)
+
+    o.SPAFS("/", dist, okapi.SPAConfig{
+        Root:   "web/dist", // sub-directory inside the embed.FS
+        MaxAge: time.Hour,  // Cache-Control for assets; index stays no-cache
+    })
+
+    o.Start()
+}
+```
+
+See the [SPA guide](https://okapi.jkaninda.dev/features/spa.html) and the
+[`examples/spa`](examples/spa) example for the full configuration.
 
 ---
 

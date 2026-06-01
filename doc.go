@@ -211,62 +211,65 @@ func (o *Okapi) registerDocRoutes() {
 	}
 	o.docRoutesRegistered = true
 	o.openApiEnabled = true
-	enabled := func(h HandlerFunc) HandlerFunc {
-		return func(c *Context) error {
-			if !o.openApiEnabled {
-				return c.AbortNotFound("Not Found")
-			}
-			return h(c)
+
+	enabled := func(c *Context) error {
+		if !o.openApiEnabled {
+			return c.AbortNotFound("Not Found")
 		}
+		return c.Next()
 	}
-	strict := func(h HandlerFunc) HandlerFunc {
-		return enabled(func(c *Context) error {
-			if o.openAPI.StrictDocUI {
-				return c.AbortNotFound("Not Found")
-			}
-			return h(c)
-		})
+
+	strict := func(c *Context) error {
+		if o.openAPI.StrictDocUI {
+			return c.AbortNotFound("Not Found")
+		}
+		return c.Next()
+	}
+
+	doc := func(path string, h HandlerFunc, mw ...Middleware) {
+		route := o.Get(path, h)
+		route.internalRoute().Hide() // Hide the route from the OpenAPI documentation
+		route.Use(mw...)
 	}
 
 	// Default favicon endpoint, suppressed when a custom favicon is configured.
-	o.Get(docFaviconPath, enabled(func(c *Context) error {
+	doc(docFaviconPath, func(c *Context) error {
 		if o.openAPI.Favicon != "" {
 			return c.AbortNotFound("Not Found")
 		}
 		return c.Data(http.StatusOK, "image/png", okapiFavicon)
-	})).internalRoute().Hide()
+	}, enabled)
 	// Default OpenAPI routes serve the latest version (3.1).
-	o.Get(openApiDocPath, enabled(func(c *Context) error {
+	doc(openApiDocPath, func(c *Context) error {
 		return c.JSON(http.StatusOK, o.openapiSpec31)
-	})).internalRoute().Hide() // Hide the route from the OpenAPI documentation
-	o.Get(openApiYamlPath, enabled(func(c *Context) error {
+	}, enabled)
+	doc(openApiYamlPath, func(c *Context) error {
 		return c.YAML(http.StatusOK, o.openapiSpec31)
-	})).internalRoute().Hide()
+	}, enabled)
 	// Version-pinned OpenAPI 3.0 routes
-	o.Get(openApiDocPath30, enabled(func(c *Context) error {
+	doc(openApiDocPath30, func(c *Context) error {
 		return c.JSON(http.StatusOK, o.openapiSpec)
-	})).internalRoute().Hide()
-	o.Get(openApiYamlPath30, enabled(func(c *Context) error {
+	}, enabled)
+	doc(openApiYamlPath30, func(c *Context) error {
 		return c.YAML(http.StatusOK, o.openapiSpec)
-	})).internalRoute().Hide()
-	// Register the main docs route.
-	o.Get(openApiDocPrefix, enabled(func(c *Context) error {
+	}, enabled)
+	// Main docs route.
+	doc(openApiDocPrefix, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, o.docsTemplate(), o.docData())
-	})).internalRoute().Hide() // Hide the route from the OpenAPI documentation
+	}, enabled)
 	// TODO: remove this route in the next major release
-	o.Get("/docs/index.html", enabled(func(c *Context) error {
+	doc("/docs/index.html", func(c *Context) error {
 		return c.renderHTML(http.StatusOK, o.docsTemplate(), o.docData())
-	})).internalRoute().Hide()
+	}, enabled)
 
-	// Register the Swagger UI route
-	o.Get(docSwaggerPath, strict(func(c *Context) error {
+	// Dedicated UI routes additionally respect StrictDocUI.
+	doc(docSwaggerPath, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, swaggerTemplate, o.docData())
-	})).internalRoute().Hide()
-	// Register the Redoc route
-	o.Get(docRedocPath, strict(func(c *Context) error {
+	}, enabled, strict)
+	doc(docRedocPath, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, redocTemplate, o.docData())
-	})).internalRoute().Hide()
-	o.Get(docScalarPath, strict(func(c *Context) error {
+	}, enabled, strict)
+	doc(docScalarPath, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, scalarTemplate, o.docData())
-	})).internalRoute().Hide()
+	}, enabled, strict)
 }

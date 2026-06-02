@@ -621,6 +621,84 @@ o.Get("/books", handler).WithOutput(&BooksResponse{})               // Response 
 
 See the full guide at **[okapi.jkaninda.dev/features/openapi](https://okapi.jkaninda.dev/features/openapi.html)**
 
+#### Route Definition
+
+With the declarative `okapi.RouteDefinition`, documentation lives right next to the
+route. Common fields — `Summary`, `Description`, `Tags`, `Request`, `Response`, and
+`Security` — are set directly on the struct:
+
+```go
+routes := []okapi.RouteDefinition{
+    {
+        Method:      http.MethodPost,
+        Path:        "/books",
+        Handler:     createBookHandler,
+        Summary:     "Add a new book",
+        Description: "Create a new book in the inventory",
+        Tags:        []string{"Books"},
+        Request:     &BookRequest{},
+        Response:    &Book{},             // 200 response schema
+        Security: []map[string][]string{  // requires bearer auth
+            {"bearerAuth": {}},
+        },
+    },
+}
+
+app := okapi.New()
+okapi.RegisterRoutes(app, routes)
+```
+
+For anything the struct fields don't cover (extra status codes, headers, query
+params, …), drop down to the `Options` field with the same `Doc*` helpers used
+elsewhere. Struct fields and `Options` can be mixed freely:
+
+```go
+routes := []okapi.RouteDefinition{
+    {
+        Method:  http.MethodGet,
+        Path:    "/books/{id:int}",
+        Handler: getBookHandler,
+        Tags:    []string{"Books"},
+        Options: []okapi.RouteOption{
+            okapi.DocSummary("Get a book by ID"),
+            okapi.DocPathParam("id", "int", "The ID of the book"),
+            okapi.DocResponse(Book{}),                       // 200
+            okapi.DocResponse(404, ErrorResponse{}),         // 404
+            okapi.DocResponseHeader("X-Request-Id", "string", "Request ID"),
+        },
+    },
+}
+```
+
+Attach routes to a group to share a prefix, tags, middleware, and security across
+several definitions:
+
+```go
+books := &okapi.Group{Prefix: "/api/v1", Tags: []string{"Books"}}
+
+routes := []okapi.RouteDefinition{
+    {
+        Method:   http.MethodGet,
+        Path:     "/books",
+        Handler:  listBooksHandler,
+        Group:    books,
+        Summary:  "List all books",
+        Response: &BooksResponse{},
+    },
+    {
+        Method:   http.MethodPost,
+        Path:     "/books",
+        Handler:  createBookHandler,
+        Group:    books,
+        Summary:  "Add a new book",
+        Request:  &BookRequest{},
+        Response: &Book{},
+    },
+}
+
+app.Register(routes...) // or okapi.RegisterRoutes(app, routes)
+```
+
 ### Generated Documentation
 
 With `okapi.Default()`, Okapi serves **Swagger UI** (`/swagger`), **ReDoc** (`/redoc`), and **Scalar**

@@ -491,20 +491,9 @@ Once enabled, the following routes are served:
 ### OpenAPI 3.1 (default) and 3.0
 
 Okapi serves the same API description as both **OpenAPI 3.1 / JSON Schema 2020-12** and **OpenAPI 3.0**.
-The default endpoints (`/openapi.json`, `/openapi.yaml`) serve **3.1**; the documentation UIs at
-`/docs`, `/swagger`, `/redoc` and `/scalar` render it. The 3.0 document remains available at
-`/openapi-3.0.{json,yaml}`, so 3.0-only consumers stay supported.
 
-The 3.1 document is derived from the 3.0 one and adds these 3.1 features:
 
-- **Type-array nullability** – pointer fields render as `nullable: true` in 3.0 and as
-  `type: ["string", "null"]` in 3.1.
-- **`jsonSchemaDialect`** – set to the JSON Schema 2020-12 base dialect on the 3.1 document.
-- **SPDX license identifier** – set `License.Identifier` (e.g. `"Apache-2.0"`); it appears only on
-  the 3.1 document (mutually exclusive with `License.URL`).
-- **`const`** – the `const:"value"` struct tag becomes a JSON Schema `const` on the 3.1 document.
-- **Webhooks** – declare outbound callbacks with `o.Webhook(...)`; they appear under the `webhooks`
-  field of the 3.1 document only.
+> **Webhooks** – declare outbound callbacks with `o.Webhook(...)`; they appear under the `webhooks` field of the 3.1 document only.
 
 ```go
 // A webhook is documentation-only: it is not added to the router.
@@ -536,14 +525,31 @@ o.WithOpenAPIDocs(okapi.OpenAPI{
 o := okapi.New().WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
 ```
 
-By default every UI stays reachable at its own route regardless of the selection. Set
-`StrictDocUI: true` to register only the selected UI — the other UI routes then return `404`:
+Whether the non-selected UIs stay reachable depends on how you create the instance:
+
+* `okapi.Default()` — all UI routes (`/swagger`, `/redoc`, `/scalar`) stay reachable
+  alongside `/docs` (`StrictDocUI` is **disabled**).
+* `okapi.New()` — only the selected UI is served at `/docs`; the other routes return
+  `404` (`StrictDocUI` is **enabled**).
+
+Override the behavior explicitly via the `StrictDocUI` field. Set it to `true` to register
+only the selected UI — the other UI routes then return `404`:
 
 ```go
 o.WithOpenAPIDocs(okapi.OpenAPI{
     Title:       "My API",
     UI:          okapi.ScalarUI,
     StrictDocUI: true, // only /docs is served
+})
+```
+
+or set it to `false` to keep every UI reachable regardless of the selection:
+
+```go
+o.WithOpenAPIDocs(okapi.OpenAPI{
+    Title:       "My API",
+    UI:          okapi.ScalarUI,
+    StrictDocUI: false, // /swagger, /redoc and /scalar all stay reachable
 })
 ```
 
@@ -617,8 +623,10 @@ See the full guide at **[okapi.jkaninda.dev/features/openapi](https://okapi.jkan
 
 ### Generated Documentation
 
-Okapi serves **Swagger UI** (`/swagger`), **ReDoc** (`/redoc`), and **Scalar** (`/scalar`) out of the box,
-with `/docs` rendering your selected default (Swagger UI unless changed via `UI` / `WithDocUI`).
+With `okapi.Default()`, Okapi serves **Swagger UI** (`/swagger`), **ReDoc** (`/redoc`), and **Scalar**
+(`/scalar`) out of the box, with `/docs` rendering your selected default (Swagger UI unless changed via
+`UI` / `WithDocUI`). With `okapi.New()`, only `/docs` is served — see
+[Choosing the Documentation UI](#choosing-the-documentation-ui) to change this.
 
 |                               Swagger UI (`/swagger`)                             |                             ReDoc (`/redoc`)                              |                              Scalar (`/scalar`)                              |
 |:--------------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|:---------------------------------------------------------------------------:|

@@ -200,8 +200,9 @@ o.Get("/books", handler).WithOutput(&BooksResponse{})
 ## Choosing the Documentation UI
 
 Okapi ships with three interactive UIs: **Swagger UI** (default), **ReDoc**, and **Scalar**.
-The UI rendered at `/docs` is selectable, while each UI also stays reachable at its own
-dedicated route (`/swagger`, `/redoc`, `/scalar`) regardless of the selection.
+The UI rendered at `/docs` is selectable. With `okapi.Default()`, each UI also stays reachable at
+its own dedicated route (`/swagger`, `/redoc`, `/scalar`); with `okapi.New()`, only `/docs` is served
+(see [Restricting to a single UI](#restricting-to-a-single-ui)).
 
 Select it with the `UI` field on `okapi.OpenAPI`:
 
@@ -220,14 +221,31 @@ o := okapi.New().WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
 
 ### Restricting to a single UI
 
-By default every UI stays reachable at its own route regardless of which one `/docs` renders.
-Set `StrictDocUI: true` to register only the selected UI — the other UI routes then return `404`:
+Whether the non-selected UIs stay reachable depends on how you create the instance:
+
+* `okapi.Default()` — all UI routes (`/swagger`, `/redoc`, `/scalar`) stay reachable
+  alongside `/docs` (`StrictDocUI` is **disabled**).
+* `okapi.New()` — only the selected UI is served at `/docs`; the other routes return
+  `404` (`StrictDocUI` is **enabled**).
+
+Override this explicitly via the `StrictDocUI` field. Set it to `true` to register only the
+selected UI — the other UI routes then return `404`:
 
 ```go
 o.WithOpenAPIDocs(okapi.OpenAPI{
     Title:       "My API",
     UI:          okapi.ScalarUI,
     StrictDocUI: true, // only /docs and /scalar are served; /swagger and /redoc return 404
+})
+```
+
+…or set it to `false` to keep every UI reachable regardless of which one `/docs` renders:
+
+```go
+o.WithOpenAPIDocs(okapi.OpenAPI{
+    Title:       "My API",
+    UI:          okapi.ScalarUI,
+    StrictDocUI: false, // /swagger, /redoc and /scalar all stay reachable
 })
 ```
 

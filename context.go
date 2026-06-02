@@ -276,6 +276,8 @@ func (c *Context) Path() string {
 }
 
 // Params returns all URL path parameters as a map.
+//
+// Deprecated: use PathParam to retrieve individual path parameters instead.
 func (c *Context) Params() map[string]string {
 	return mux.Vars(c.request)
 }

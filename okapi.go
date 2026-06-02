@@ -287,7 +287,11 @@ func (r *Route) Use(m ...Middleware) {
 
 // ****** OKAPI OPTIONS ******
 
-// WithMuxRouter sets the router for the Okapi instance
+// WithMuxRouter sets the router for the Okapi instance.
+//
+// Deprecated: injecting a custom *mux.Router is no longer supported; Okapi
+// manages its own router internally. This option will be removed in a future
+// release.
 func WithMuxRouter(router *mux.Router) OptionFunc {
 	return func(o *Okapi) {
 		if router != nil {

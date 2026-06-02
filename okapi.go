@@ -476,9 +476,7 @@ func WithOpenAPIDisabled() OptionFunc {
 
 // WithDocUI selects the interactive documentation UI rendered at /docs.
 //
-// Valid values: SwaggerUI (default), RedocUI, ScalarUI. Each UI also remains
-// reachable at its dedicated route (/swagger, /redoc, /scalar) regardless of
-// this setting.
+// Valid values: SwaggerUI (default), RedocUI, ScalarUI.
 func WithDocUI(ui DocUI) OptionFunc {
 	return func(o *Okapi) {
 		o.openAPI.UI = ui
@@ -596,7 +594,7 @@ func (o *Okapi) WithMaxMultipartMemory(max int64) *Okapi {
 // WithOpenAPIDocs registers the OpenAPI spec and interactive documentation handlers.
 //
 // The UI rendered at /docs is selected via OpenAPI.UI (or WithDocUI) and
-// defaults to Swagger UI. Each UI is also always reachable at its own route.
+// defaults to Swagger UI.
 //
 //	UI Path:     /docs    (Swagger UI by default; see OpenAPI.UI / WithDocUI)
 //	Swagger UI:  /swagger
@@ -637,7 +635,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 	}
 
 	o.buildOpenAPISpec()
-	// Register the OpenAPI JSON and Swagger UI routes
+	// Register the OpenAPI JSON and UI routes
 	o.registerDocRoutes()
 	return o
 }
@@ -792,7 +790,9 @@ func New(options ...OptionFunc) *Okapi {
 
 // Default creates a new Okapi instance with default settings.
 func Default() *Okapi {
-	return New().WithOpenAPIDocs()
+	o := initConfig()
+	o.openAPI.StrictDocUI = false
+	return o.WithOpenAPIDocs()
 }
 
 // With applies the provided options to the Okapi instance
@@ -1409,6 +1409,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 			Servers:          Servers{{}},
 			SecuritySchemes:  SecuritySchemes{},
 			ComponentSchemas: make(map[string]*SchemaInfo),
+			StrictDocUI:      true,
 		},
 		openapiSpec:   &openapi3.T{},
 		openapiSpec31: &openapi3.T{},

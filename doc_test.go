@@ -57,9 +57,7 @@ func TestRegisterDocRoutes(t *testing.T) {
 	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusOK()
 	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/swagger").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/redoc").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/scalar").ExpectStatusOK()
+
 }
 
 // TestDocUISelection verifies that the UI rendered at /docs follows the

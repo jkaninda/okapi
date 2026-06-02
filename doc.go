@@ -257,10 +257,6 @@ func (o *Okapi) registerDocRoutes() {
 	doc(openApiDocPrefix, func(c *Context) error {
 		return c.renderHTML(http.StatusOK, o.docsTemplate(), o.docData())
 	}, enabled)
-	// TODO: remove this route in the next major release
-	doc("/docs/index.html", func(c *Context) error {
-		return c.renderHTML(http.StatusOK, o.docsTemplate(), o.docData())
-	}, enabled)
 
 	// Dedicated UI routes additionally respect StrictDocUI.
 	doc(docSwaggerPath, func(c *Context) error {

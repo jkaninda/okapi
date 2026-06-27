@@ -1,11 +1,15 @@
 package okapi
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/jkaninda/okapi/okapitest"
@@ -127,6 +131,78 @@ func TestSPACustomIndexAndCache(t *testing.T) {
 	// Real assets get the configured max-age.
 	if cc := serveSPARequest(o, "/assets/app.js").Header().Get("Cache-Control"); cc != "public, max-age=3600" {
 		t.Fatalf("asset Cache-Control = %q, want public, max-age=3600 (1h)", cc)
+	}
+}
+
+// captureStderr redirects os.Stderr while fn runs and returns what was written.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = old }()
+
+	fn()
+
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	return buf.String()
+}
+
+func TestWebFSWarnsOnInvalidRoot(t *testing.T) {
+	dir := writeSPAFixture(t)
+	o := New()
+
+	// A leading slash is not a valid fs.Sub path, so Root is rejected.
+	out := captureStderr(t, func() {
+		o.WebFS("/", os.DirFS(dir), WebConfig{Root: "/bad"})
+	})
+	if !strings.Contains(out, "invalid Root") {
+		t.Fatalf("expected invalid-Root warning, got %q", out)
+	}
+
+	// It falls back to the filesystem root, where index.html still resolves.
+	if rec := serveSPARequest(o, "/route"); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (served from root)", rec.Code)
+	}
+}
+
+func TestWebFSWarnsOnMissingIndex(t *testing.T) {
+	o := New()
+
+	// An fs.FS with assets but no index.html.
+	fsys := fstest.MapFS{"assets/app.js": {Data: []byte("console.log('hi')")}}
+	out := captureStderr(t, func() {
+		o.WebFS("/", fsys)
+	})
+	if !strings.Contains(out, "index file not found") {
+		t.Fatalf("expected missing-index warning, got %q", out)
+	}
+
+	// Real assets still serve; client routes fall back to the missing index → 404.
+	if rec := serveSPARequest(o, "/assets/app.js"); rec.Code != http.StatusOK {
+		t.Fatalf("asset status = %d, want 200", rec.Code)
+	}
+	if rec := serveSPARequest(o, "/route"); rec.Code != http.StatusNotFound {
+		t.Fatalf("fallback status = %d, want 404", rec.Code)
+	}
+}
+
+func TestWebFSNoWarningWhenValid(t *testing.T) {
+	dir := writeSPAFixture(t)
+	o := New()
+
+	out := captureStderr(t, func() {
+		o.WebFS("/", os.DirFS(dir))
+	})
+	if strings.Contains(out, "WebFS:") {
+		t.Fatalf("expected no WebFS warning for a valid filesystem, got %q", out)
 	}
 }
 

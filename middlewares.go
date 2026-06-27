@@ -109,6 +109,11 @@ type (
 		//   - "header:Authorization" (default)
 		//   - "query:token"
 		//   - "cookie:jwt"
+		//
+		// Multiple sources can be combined with commas; they are tried in order and
+		// the first source that yields a non-empty token is used. For example:
+		//   - "header:Authorization,query:token"
+		//   - "header:Authorization,query:token,cookie:jwt"
 		TokenLookup string
 		// ContextKey is the key used to store the full validated JWT claims in the request context.
 		//

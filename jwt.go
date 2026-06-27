@@ -27,25 +27,56 @@ package okapi
 import (
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // ********** Helpers **********************
 
-// extractToken pulls the token from header, query or cookie
+// extractToken pulls the token from header, query or cookie.
+//
+// TokenLookup may combine multiple sources separated by commas; the first
+// source that yields a non-empty token wins. For example:
+//
+//	"header:Authorization,query:token,cookie:jwt"
 func (jwtAuth *JWTAuth) extractToken(c *Context) (string, error) {
 	tokenLookup := jwtAuth.TokenLookup
 	if tokenLookup == "" {
 		tokenLookup = "header:Authorization"
 	}
-	parts := strings.Split(tokenLookup, ":")
+
+	var lastErr error
+	for _, lookup := range strings.Split(tokenLookup, ",") {
+		lookup = strings.TrimSpace(lookup)
+		if lookup == "" {
+			continue
+		}
+		token, err := jwtAuth.extractTokenFrom(c, lookup)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if token != "" {
+			return token, nil
+		}
+	}
+
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", nil
+}
+
+// extractTokenFrom pulls the token from a single "source:name" lookup.
+func (jwtAuth *JWTAuth) extractTokenFrom(c *Context, lookup string) (string, error) {
+	parts := strings.Split(lookup, ":")
 	if len(parts) != 2 {
 		return "", errors.New("invalid token lookup config")
 	}
 
-	source, name := parts[0], parts[1]
+	source, name := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 	switch source {
 	case "header":
 		auth := c.request.Header.Get(name)

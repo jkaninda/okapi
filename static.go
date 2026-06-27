@@ -59,37 +59,43 @@ func (n noDirListing) Open(name string) (http.File, error) {
 	return f, nil
 }
 
-// SPAConfig configures how a single-page application (SPA) is served by
-// Okapi.SPA and Okapi.SPAFS. The zero value is valid and produces sensible
-// defaults (serve index.html, auto-exclude registered API routes).
-type SPAConfig struct {
+// WebConfig configures how a web application (typically a single-page
+// application) is served by Okapi.Web and Okapi.WebFS. The zero value is valid
+// and produces sensible defaults (serve index.html, auto-exclude registered
+// API routes).
+type WebConfig struct {
 	// Index is the file served for client-side routes that do not map to a
 	// real file on disk. Defaults to "index.html".
 	Index string
 
 	// Root is the sub-directory inside the http.FileSystem / fs.FS that holds
-	// the built SPA. It is only used by SPAFS (e.g. "web/dist" for an
-	// embed.FS rooted at the module). Ignored by SPA.
+	// the built application. It is only used by WebFS (e.g. "web/dist" for an
+	// embed.FS rooted at the module). Ignored by Web.
 	Root string
 
 	// Exclude lists additional path prefixes that must never fall back to the
-	// SPA index.
+	// index document.
 	Exclude []string
 
 	// DisableAutoExclude turns off the default behaviour of excluding the
-	// top-level segment of every registered route from the SPA fallback. When
+	// top-level segment of every registered route from the index fallback. When
 	// true, only Exclude is consulted.
 	DisableAutoExclude bool
 
 	// MaxAge sets the Cache-Control max-age for real asset files (JS, CSS,
-	// images...). The SPA index document is always served with "no-cache" so a
+	// images...). The index document is always served with "no-cache" so a
 	// new deploy is picked up immediately. Zero means no Cache-Control header
 	// is added for assets.
 	MaxAge time.Duration
 }
 
-func resolveSPAConfig(cfg ...SPAConfig) SPAConfig {
-	c := SPAConfig{}
+// SPAConfig configures how a single-page application is served.
+//
+// Deprecated: use WebConfig instead.
+type SPAConfig = WebConfig
+
+func resolveWebConfig(cfg ...WebConfig) WebConfig {
+	c := WebConfig{}
 	if len(cfg) > 0 {
 		c = cfg[0]
 	}
@@ -99,25 +105,27 @@ func resolveSPAConfig(cfg ...SPAConfig) SPAConfig {
 	return c
 }
 
-// SPA serves a single-page application from a directory on disk.
+// Web serves a web application (typically a single-page application) from a
+// directory on disk.
 //
 // Real files (assets, the index, etc.) are served directly; any unmatched
-// path that is not excluded falls back to the SPA index document so the
+// path that is not excluded falls back to the index document so the
 // client-side router can take over. Registered API routes keep precedence,
 // and their top-level path segments are excluded from the fallback
-// automatically (see SPAConfig.DisableAutoExclude).
+// automatically (see WebConfig.DisableAutoExclude).
 //
-// SPA should be registered after your API routes so they win the match.
+// Web should be registered after your API routes so they win the match.
 //
 // Example:
 //
 //	app.Get("/api/v1/users", listUsers)
-//	app.SPA("/", "./web") // serves ./web/index.html for "/", "/login", ...
-func (o *Okapi) SPA(prefix, dir string, cfg ...SPAConfig) {
-	o.spaHandler(prefix, http.Dir(dir), resolveSPAConfig(cfg...))
+//	app.Web("/", "./web") // serves ./web/index.html for "/", "/login", ...
+func (o *Okapi) Web(prefix, dir string, cfg ...WebConfig) {
+	o.webHandler(prefix, http.Dir(dir), resolveWebConfig(cfg...))
 }
 
-// SPAFS serves a single-page application from an fs.FS.
+// WebFS serves a web application (typically a single-page application) from an
+// fs.FS, such as an embed.FS.
 //
 // Example:
 //
@@ -125,42 +133,56 @@ func (o *Okapi) SPA(prefix, dir string, cfg ...SPAConfig) {
 //	var dist embed.FS
 //
 //	app.Get("/api/v1/users", listUsers)
-//	app.SPAFS("/", dist, okapi.SPAConfig{Root: "web/dist"})
-func (o *Okapi) SPAFS(prefix string, fsys fs.FS, cfg ...SPAConfig) {
-	c := resolveSPAConfig(cfg...)
+//	app.WebFS("/", dist, okapi.WebConfig{Root: "web/dist"})
+func (o *Okapi) WebFS(prefix string, fsys fs.FS, cfg ...WebConfig) {
+	c := resolveWebConfig(cfg...)
 	if c.Root != "" {
 		if sub, err := fs.Sub(fsys, c.Root); err == nil {
 			fsys = sub
 		}
 	}
-	o.spaHandler(prefix, http.FS(fsys), c)
+	o.webHandler(prefix, http.FS(fsys), c)
 }
 
-// spaHandler registers the SPA fallback handler under prefix.
-func (o *Okapi) spaHandler(prefix string, root http.FileSystem, c SPAConfig) {
+// SPA serves a single-page application from a directory on disk.
+//
+// Deprecated: use Web instead.
+func (o *Okapi) SPA(prefix, dir string, cfg ...WebConfig) {
+	o.Web(prefix, dir, cfg...)
+}
+
+// SPAFS serves a single-page application from an fs.FS.
+//
+// Deprecated: use WebFS instead.
+func (o *Okapi) SPAFS(prefix string, fsys fs.FS, cfg ...WebConfig) {
+	o.WebFS(prefix, fsys, cfg...)
+}
+
+// webHandler registers the index-fallback handler under prefix.
+func (o *Okapi) webHandler(prefix string, root http.FileSystem, c WebConfig) {
 	if prefix == "" {
 		prefix = "/"
 	}
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		if o.spaExcluded(r.URL.Path, prefix, c) {
-			o.spaNotFound(w, r)
+		if o.webExcluded(r.URL.Path, prefix, c) {
+			o.webNotFound(w, r)
 			return
 		}
 
 		rel := strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(prefix, "/"))
 		clean := path.Clean("/" + strings.TrimPrefix(rel, "/"))
 
-		if clean != "/" && serveSPAFile(w, r, root, clean, c.MaxAge) {
+		if clean != "/" && serveWebFile(w, r, root, clean, c.MaxAge) {
 			return
 		}
-		serveSPAIndex(w, r, root, c.Index)
+		serveWebIndex(w, r, root, c.Index)
 	}
 	o.router.muxRouter.PathPrefix(prefix).
 		HandlerFunc(handler).
 		Methods(http.MethodGet, http.MethodHead)
 }
 
-func (o *Okapi) spaExcluded(urlPath, prefix string, c SPAConfig) bool {
+func (o *Okapi) webExcluded(urlPath, prefix string, c WebConfig) bool {
 	for _, ex := range c.Exclude {
 		ex = strings.TrimSuffix(ex, "/")
 		if ex != "" && (urlPath == ex || strings.HasPrefix(urlPath, ex+"/")) {
@@ -182,7 +204,7 @@ func (o *Okapi) spaExcluded(urlPath, prefix string, c SPAConfig) bool {
 	return false
 }
 
-func (o *Okapi) spaNotFound(w http.ResponseWriter, r *http.Request) {
+func (o *Okapi) webNotFound(w http.ResponseWriter, r *http.Request) {
 	if h := o.router.muxRouter.NotFoundHandler; h != nil {
 		h.ServeHTTP(w, r)
 		return
@@ -190,7 +212,7 @@ func (o *Okapi) spaNotFound(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func serveSPAFile(w http.ResponseWriter, r *http.Request, root http.FileSystem, name string, maxAge time.Duration) bool {
+func serveWebFile(w http.ResponseWriter, r *http.Request, root http.FileSystem, name string, maxAge time.Duration) bool {
 	f, err := root.Open(name)
 	if err != nil {
 		return false
@@ -208,7 +230,7 @@ func serveSPAFile(w http.ResponseWriter, r *http.Request, root http.FileSystem, 
 	return true
 }
 
-func serveSPAIndex(w http.ResponseWriter, r *http.Request, root http.FileSystem, index string) {
+func serveWebIndex(w http.ResponseWriter, r *http.Request, root http.FileSystem, index string) {
 	f, err := root.Open("/" + strings.TrimPrefix(index, "/"))
 	if err != nil {
 		http.NotFound(w, r)

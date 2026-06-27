@@ -80,14 +80,14 @@ func main() {
 	// any other path falls back to index.html so the client-side router takes
 	// over. Try "/", "/dashboard", "/users/2".
 	// Embedded (single binary) — recommended for deployments:
-	o.SPAFS("/", webFS, okapi.SPAConfig{
+	o.WebFS("/", webFS, okapi.WebConfig{
 		Root:   "web",     // sub-directory inside the embed.FS
 		MaxAge: time.Hour, // Cache-Control for assets; index.html stays no-cache
 	})
 
 	// From disk — during front-end development:
 	//
-	//	o.SPA("/", "./web", okapi.SPAConfig{MaxAge: time.Hour})
+	//	o.Web("/", "./web", okapi.WebConfig{MaxAge: time.Hour})
 
 	// Visit http://localhost:8080
 	if err := o.Start(); err != nil {

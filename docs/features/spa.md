@@ -14,11 +14,14 @@ client-side router can take over.
 
 Two entry points are provided:
 
-- `SPA(prefix, dir)` — serve from a directory on disk.
-- `SPAFS(prefix, fsys)` — serve from any `fs.FS`, including an `embed.FS`
+- `Web(prefix, dir)` — serve from a directory on disk.
+- `WebFS(prefix, fsys)` — serve from any `fs.FS`, including an `embed.FS`
   for single-binary deployments.
 
-Register the SPA **after** your API routes so the API keeps precedence.
+Register the handler **after** your API routes so the API keeps precedence.
+
+> The `SPA` / `SPAFS` / `SPAConfig` names are deprecated aliases of
+> `Web` / `WebFS` / `WebConfig` and continue to work unchanged.
 
 ## Serve from disk
 
@@ -31,7 +34,7 @@ func main() {
     o.Get("/api/v1/users", listUsers)
 
     // Serves ./web/index.html for "/", "/login", "/users/42", ...
-    o.SPA("/", "./web")
+    o.Web("/", "./web")
 
     o.Start()
 }
@@ -51,7 +54,7 @@ func main() {
 
     o.Get("/api/v1/users", listUsers)
 
-    o.SPAFS("/", dist, okapi.SPAConfig{
+    o.WebFS("/", dist, okapi.WebConfig{
         Root:   "web/dist", // sub-directory inside the embed.FS
         MaxAge: time.Hour,  // Cache-Control for assets
     })
@@ -78,19 +81,19 @@ serving the index. For example, with `/api/v1/users` registered,
 
 - The **index document** is always served with `Cache-Control: no-cache`, so
   a new deploy is picked up immediately.
-- **Asset files** honour `SPAConfig.MaxAge`. With `MaxAge: time.Hour`, assets
+- **Asset files** honour `WebConfig.MaxAge`. With `MaxAge: time.Hour`, assets
   are served with `Cache-Control: public, max-age=3600`. When `MaxAge` is
   zero, no `Cache-Control` header is added for assets.
 
 ## Configuration
 
-`SPAConfig` is optional — the zero value serves `index.html` and
+`WebConfig` is optional — the zero value serves `index.html` and
 auto-excludes registered API routes.
 
 | Field | Description |
 | --- | --- |
 | `Index` | File served for client-side routes. Defaults to `index.html`. |
-| `Root` | Sub-directory inside the `fs.FS` that holds the built SPA (`SPAFS` only). |
+| `Root` | Sub-directory inside the `fs.FS` that holds the built app (`WebFS` only). |
 | `Exclude` | Additional path prefixes that must never fall back to the index. |
 | `DisableAutoExclude` | Turn off auto-excluding registered route segments; only `Exclude` is consulted. |
 | `MaxAge` | `Cache-Control` max-age for asset files. The index is always `no-cache`. |
@@ -98,10 +101,10 @@ auto-excludes registered API routes.
 ### Excluding extra paths
 
 ```go
-o.SPA("/", "./web", okapi.SPAConfig{
+o.Web("/", "./web", okapi.WebConfig{
     Exclude: []string{"/metrics", "/healthz"},
 })
 ```
 
 A full, runnable example lives in
-[`examples/spa`](https://github.com/jkaninda/okapi/tree/main/examples/spa).
+[`examples/web`](https://github.com/jkaninda/okapi/tree/main/examples/web).

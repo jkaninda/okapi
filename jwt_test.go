@@ -125,6 +125,35 @@ func TestExtractToken(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:   "combined lookup falls back to query",
+			lookup: "header:Authorization,query:token",
+			setup: func(req *http.Request) {
+				q := req.URL.Query()
+				q.Set("token", "from-query")
+				req.URL.RawQuery = q.Encode()
+			},
+			wantToken: "from-query",
+		},
+		{
+			name:   "combined lookup prefers first source",
+			lookup: "header:Authorization,query:token",
+			setup: func(req *http.Request) {
+				req.Header.Set("Authorization", "Bearer from-header")
+				q := req.URL.Query()
+				q.Set("token", "from-query")
+				req.URL.RawQuery = q.Encode()
+			},
+			wantToken: "from-header",
+		},
+		{
+			name:   "combined lookup falls back past missing cookie",
+			lookup: "cookie:jwt,header:Authorization",
+			setup: func(req *http.Request) {
+				req.Header.Set("Authorization", "Bearer from-header")
+			},
+			wantToken: "from-header",
+		},
+		{
 			name:    "invalid lookup format",
 			lookup:  "garbage",
 			setup:   func(req *http.Request) {},

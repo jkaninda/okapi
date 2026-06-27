@@ -137,9 +137,15 @@ func (o *Okapi) Web(prefix, dir string, cfg ...WebConfig) {
 func (o *Okapi) WebFS(prefix string, fsys fs.FS, cfg ...WebConfig) {
 	c := resolveWebConfig(cfg...)
 	if c.Root != "" {
-		if sub, err := fs.Sub(fsys, c.Root); err == nil {
+		sub, err := fs.Sub(fsys, c.Root)
+		if err != nil {
+			fPrintError("WebFS: invalid Root, serving filesystem root instead ", "root", c.Root, "error", err)
+		} else {
 			fsys = sub
 		}
+	}
+	if _, err := fs.Stat(fsys, strings.TrimPrefix(c.Index, "/")); err != nil {
+		fPrintError("WebFS: index file not found, the app will fall back to 404 ", "root", c.Root, "index", c.Index, "error", err)
 	}
 	o.webHandler(prefix, http.FS(fsys), c)
 }

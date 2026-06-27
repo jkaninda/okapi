@@ -372,7 +372,7 @@ func main() {
 
 Serve a client-side routed app (React, Vue, Svelte, …) alongside your API.
 
-Register the SPA after your API routes.
+Register the handler after your API routes.
 
 ```go
 func main() {
@@ -381,14 +381,14 @@ func main() {
     o.Get("/api/v1/users", listUsers)
 
     // From disk 
-    o.SPA("/", "./web")
+    o.Web("/", "./web")
 
     o.Start()
 }
 ```
 
 For single-binary deployments, embed the built front-end and serve it with
-`SPAFS`:
+`WebFS`:
 
 ```go
 //go:embed all:web/dist
@@ -399,7 +399,7 @@ func main() {
 
     o.Get("/api/v1/users", listUsers)
 
-    o.SPAFS("/", dist, okapi.SPAConfig{
+    o.WebFS("/", dist, okapi.WebConfig{
         Root:   "web/dist", // sub-directory inside the embed.FS
         MaxAge: time.Hour,  // Cache-Control for assets; index stays no-cache
     })
@@ -408,8 +408,11 @@ func main() {
 }
 ```
 
+> `SPA` / `SPAFS` / `SPAConfig` remain as deprecated aliases of
+> `Web` / `WebFS` / `WebConfig`.
+
 See the [SPA guide](https://okapi.jkaninda.dev/features/spa.html) and the
-[`examples/spa`](examples/spa) example for the full configuration.
+[`examples/web`](examples/web) example for the full configuration.
 
 ---
 

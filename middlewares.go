@@ -102,7 +102,15 @@ type (
 
 		// Algo specifies the expected signing algorithm (e.g., "RS256", "HS256").
 		// Optional.
+		//
+		// Deprecated: Use Algorithms instead, which supports multiple signing algorithms.
 		Algo string
+
+		// Algorithms specifies the list of accepted signing algorithms
+		// (e.g., []string{"RS256", "HS256", "ES256"}).
+		// When set, only tokens signed with one of these algorithms are accepted.
+		// Optional.
+		Algorithms []string
 
 		// TokenLookup defines how and where to extract the token from the request.
 		// Supported formats include:
@@ -304,7 +312,9 @@ func (jwtAuth *JWTAuth) Middleware(c *Context) error {
 
 	}
 	validMethods := jwtAlgo
-	if jwtAuth.Algo != "" {
+	if len(jwtAuth.Algorithms) > 0 {
+		validMethods = jwtAuth.Algorithms
+	} else if jwtAuth.Algo != "" {
 		validMethods = []string{jwtAuth.Algo}
 	}
 	token, err := jwt.Parse(tokenStr, keyFunc,

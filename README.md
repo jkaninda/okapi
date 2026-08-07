@@ -304,7 +304,7 @@ inherit the group's prefix and middleware.
 Path parameters work as they do under `http.ServeMux` — `r.PathValue("id")` inside a
 standard handler returns what the route captured. See the
 [standard library compatibility guide](https://okapi.jkaninda.dev/features/std-lib-compatibility.html)
-for the full details.
+for the full details, and [`examples/std`](examples/std) for a runnable server.
 
 ---
 

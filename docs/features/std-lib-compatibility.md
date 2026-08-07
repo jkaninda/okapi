@@ -315,3 +315,15 @@ o.Get("/raw", func(c *okapi.Context) error {
 adds `StatusCode()`, `BytesWritten()`, `Close()`, `Hijack()`, `Flush()`, and `Push()`.
 Use `c.ResponseWriter()` when you need the plain `http.ResponseWriter` — for example
 to pass it to a library that expects exactly that type.
+
+## Runnable Example
+
+A complete server combining everything on this page — standard middleware, both
+handler registrations, a catch-all file server, group-scoped standard handlers and
+a native handler alongside them — lives at
+[`examples/std`](https://github.com/jkaninda/okapi/tree/main/examples/std):
+
+```sh
+go run ./examples/std
+curl localhost:8080/users/42
+```

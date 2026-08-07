@@ -589,7 +589,7 @@ func DocPathParamWithDefault(name, typ, desc string, defvalue any) RouteOption {
 		r.pathParams = append(r.pathParams, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        name,
-				In:          "path",
+				In:          paramPath,
 				Required:    true,
 				Schema:      schema,
 				Description: desc,
@@ -953,7 +953,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
 			"BearerAuth": &openapi3.SecuritySchemeRef{
 				Value: &openapi3.SecurityScheme{
-					Type:         "http",
+					Type:         securitySchemeTypeHTTP,
 					Scheme:       "bearer",
 					BearerFormat: "JWT",
 				},
@@ -964,7 +964,7 @@ func (o *Okapi) buildOpenAPISpec() {
 		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
 			"BasicAuth": &openapi3.SecuritySchemeRef{
 				Value: &openapi3.SecurityScheme{
-					Type:   "http",
+					Type:   securitySchemeTypeHTTP,
 					Scheme: "basic",
 				},
 			},
@@ -1949,7 +1949,7 @@ func buildPathParam(name, typ string) *openapi3.ParameterRef {
 	return &openapi3.ParameterRef{
 		Value: &openapi3.Parameter{
 			Name:        name,
-			In:          "path",
+			In:          paramPath,
 			Required:    true,
 			Schema:      getSchemaForType(typ),
 			Description: generateParamDescription(name, typ),

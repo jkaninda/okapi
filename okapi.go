@@ -1411,7 +1411,7 @@ func initConfig(options ...OptionFunc) *Okapi {
 		errorHandler:       DefaultErrorHandler,
 		openAPI: &OpenAPI{
 			Title:            okapiName,
-			Version:          "1.0.0",
+			Version:          defaultAPIVersion,
 			Servers:          Servers{{}},
 			SecuritySchemes:  SecuritySchemes{},
 			ComponentSchemas: make(map[string]*SchemaInfo),
@@ -1554,8 +1554,18 @@ func (o *Okapi) wrapHandleFunc(h HandlerFunc) http.Handler {
 		}
 	})
 }
+
+// wrapHTTPHandler adapts a standard http.Handler to Okapi's HandlerFunc. It is
+// the single conversion point for HandleStd, HandleHTTP and their Group
+// equivalents.
 func (o *Okapi) wrapHTTPHandler(h http.Handler) HandlerFunc {
 	return func(ctx *Context) error {
+		//
+		for i, n := 0, njia.NumParams(ctx.request); i < n; i++ {
+			if name, value, ok := njia.ParamAt(ctx.request, i); ok {
+				ctx.request.SetPathValue(name, value)
+			}
+		}
 		h.ServeHTTP(ctx.response, ctx.request)
 		return nil
 	}

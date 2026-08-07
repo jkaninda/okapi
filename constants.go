@@ -35,8 +35,15 @@ const (
 	constTRUE              = "true"
 	constIndex             = "index.html"
 
-	openApiVersion                     = "3.0.3"
-	openApiVersion31                   = "3.1.0"
+	// defaultAPIVersion is the version reported in the generated OpenAPI
+	// document when the application does not set one.
+	defaultAPIVersion = "1.0.0"
+
+	openApiVersion   = "3.0.3"
+	openApiVersion31 = "3.1.0"
+	// securitySchemeTypeHTTP is the OpenAPI security scheme type shared by the
+	// bearer and basic schemes.
+	securitySchemeTypeHTTP             = "http"
 	openApiDocPrefix                   = "/docs"
 	openApiDocPath                     = "/openapi.json"
 	openApiYamlPath                    = "/openapi.yaml"
@@ -64,6 +71,13 @@ const (
 	methodPost    = http.MethodPost
 	methodPut     = http.MethodPut
 	methodPatch   = http.MethodPatch
+)
+
+// Elliptic curve names as they appear in a JWK "crv" parameter.
+const (
+	curveP256 = "P-256"
+	curveP384 = "P-384"
+	curveP521 = "P-521"
 )
 const (
 	// Tag names
@@ -166,6 +180,7 @@ const (
 	paramHeader = "header"
 	paramQuery  = "query"
 	paramCookie = "cookie"
+	paramPath   = "path"
 
 	// Default HTTP status
 	defaultStatus    = 200

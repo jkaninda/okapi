@@ -2,6 +2,21 @@
 
 ## v0.10.0
 
+### Fixes
+
+- **`r.PathValue` now works inside standard handlers.** Okapi's router captures path
+  parameters into the request context, so `r.PathValue` — which reads what
+  `http.ServeMux` registered — previously returned an empty string, and a handler moved
+  over from `net/http` silently saw no parameters. `wrapHTTPHandler` now copies the
+  captured parameters onto the request, for `HandleStd` and `HandleHTTP` on both the
+  application and groups. `njia.Param` continues to work and remains the allocation-free
+  accessor. The bridge costs one map allocation per request and is paid only by routes
+  that use a standard handler and declare parameters; parameterless routes skip it and
+  native handlers are unaffected.
+- **`Group.HandleStd` now shares the single handler-conversion path.** It previously
+  built its own adapter inline, which meant it would have missed the fix above and
+  behaved differently from `Okapi.HandleStd`.
+
 ### Breaking Changes
 
 - **The router now uses `github.com/jkaninda/njia/muxcompat` instead of the archived `github.com/gorilla/mux`.**

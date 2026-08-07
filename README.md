@@ -41,7 +41,7 @@ Key goals:
 - **Runtime Documentation Control** – Enable/disable OpenAPI docs at runtime without redeployment
 - **Authentication Ready** – Native JWT, Basic Auth, and extensible middleware support.
 - **SPA Serving** – Serve single-page apps (React, Vue, …) with index fallback, from disk or an embedded filesystem.
-- **Standard Library Compatible** – Fully compatible with Go’s `net/http`.
+- **[Standard Library Compatible](#standard-library-compatibility)** – Fully compatible with Go’s `net/http`.
 - **Dynamic Route Management** – Enable/disable routes at runtime without code changes
 - **Production Ready** –  TLS support, CORS, graceful shutdown, middleware system, and more.
 
@@ -256,6 +256,55 @@ v2.Get("/books/{id}", getBookByID).Use(cacheMiddleware)
 admin := api.Group("/admin", adminMiddleware)
 admin.Get("/dashboard", getDashboard)
 ```
+
+---
+
+## Standard Library Compatibility
+
+Okapi speaks `net/http`. Existing handlers and middleware drop in unchanged, so you
+can adopt Okapi incrementally instead of rewriting what already works.
+
+```go
+o := okapi.Default()
+
+// Standard middleware: func(http.Handler) http.Handler
+// Works with chi, rs/cors, and most of the community ecosystem.
+o.UseMiddleware(func(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("X-Powered-By", "Okapi")
+        next.ServeHTTP(w, r)
+    })
+})
+
+// Standard handler func — still gets middleware, routing and CORS
+o.HandleStd(http.MethodGet, "/greet", func(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    _ = json.NewEncoder(w).Encode(map[string]string{"message": "Hello from net/http"})
+})
+
+// Any http.Handler — here the stdlib file server, mounted on a catch-all
+o.HandleHTTP(http.MethodGet, "/assets/{any...}",
+    http.StripPrefix("/assets/", http.FileServer(http.Dir("./public"))))
+
+// Okapi handlers can always reach the raw request and response
+o.Get("/whoami", func(c *okapi.Context) error {
+    return c.OK(okapi.M{"ua": c.Request().Header.Get("User-Agent")})
+})
+```
+
+Standard handlers run through the same middleware chain as native ones, and are
+registered as routes like any other. The trade-off: they receive
+`(http.ResponseWriter, *http.Request)` rather than `*okapi.Context`, so binding,
+validation and the error-returning signature are not available inside them —
+handle errors yourself, or use a native handler when you want those.
+
+Groups expose the same methods, so `api.HandleStd(...)` and `api.HandleHTTP(...)`
+inherit the group's prefix and middleware.
+
+Path parameters work as they do under `http.ServeMux` — `r.PathValue("id")` inside a
+standard handler returns what the route captured. See the
+[standard library compatibility guide](https://okapi.jkaninda.dev/features/std-lib-compatibility.html)
+for the full details.
 
 ---
 

@@ -244,11 +244,10 @@ func (g *Group) Group(path string, middlewares ...Middleware) *Group {
 
 // HandleStd registers a standard http.HandlerFunc and wraps it with the group's middleware chain.
 func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http.Request), opts ...RouteOption) {
-	// Convert standard handler to HandlerFunc
-	converted := func(c *Context) error {
-		h(c.response, c.request)
-		return nil
-	}
+	// Convert standard handler to HandlerFunc. Delegating to wrapHTTPHandler
+	// keeps every standard-handler registration on one path, so path parameters
+	// reach r.PathValue here exactly as they do for Okapi.HandleStd.
+	converted := g.okapi.wrapHTTPHandler(http.HandlerFunc(h))
 	// Prepend group middleware
 	if len(g.middlewares) > 0 {
 		groupMW := make([]Middleware, len(g.middlewares))

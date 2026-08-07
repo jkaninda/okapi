@@ -121,11 +121,11 @@ func parseECDSAPublicKey(crv, xB64, yB64 string) (*ecdsa.PublicKey, error) {
 
 	var curve elliptic.Curve
 	switch crv {
-	case "P-256":
+	case curveP256:
 		curve = elliptic.P256()
-	case "P-384":
+	case curveP384:
 		curve = elliptic.P384()
-	case "P-521":
+	case curveP521:
 		curve = elliptic.P521()
 	default:
 		return nil, fmt.Errorf("unsupported EC curve: %s", crv)

@@ -22,6 +22,10 @@ linters:
     - unparam
     - unused
   settings:
+    goconst:
+      # Test data is clearer written out at each use than hidden behind a name,
+      # and table-driven cases repeat literals by nature.
+      ignore-tests: true
     revive:
       rules:
         - name: comment-spacings
@@ -35,7 +39,9 @@ linters:
     paths:
       - third_party$
       - builtin$
-      - examples$
+      # Anchored so it matches files under examples/, not a dir literally named
+      # "examples" at the end of a path.
+      - ^examples/
 formatters:
   enable:
     - gofmt
@@ -44,4 +50,6 @@ formatters:
     paths:
       - third_party$
       - builtin$
-      - examples$
+      # Anchored so it matches files under examples/, not a dir literally named
+      # "examples" at the end of a path.
+      - ^examples/

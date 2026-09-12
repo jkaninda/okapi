@@ -131,6 +131,9 @@ func TestHasBodyField(t *testing.T) {
 		{map[string]any{"not_body": "value"}, false},
 		{struct{ Body string }{Body: "value"}, true},
 		{struct{ NotBody string }{NotBody: "value"}, false},
+		{struct {
+			Content string `json:"body"`
+		}{Content: "value"}, false},
 		{"just a string", false},
 	}
 

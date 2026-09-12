@@ -166,8 +166,8 @@ func capitalize(s string) string {
 	return string(s[0]-32) + s[1:]
 }
 
-// hasBodyField reports whether the struct has a field explicitly marked as body
-// (either with name "Body" or a tag containing or `json:"body"`).
+// hasBodyField reports whether the struct has a field named "Body". The json tag
+// is not considered, so a payload field tagged `json:"body"` is bound as data.
 func hasBodyField(v any) bool {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Ptr {
@@ -179,8 +179,7 @@ func hasBodyField(v any) bool {
 
 	rt := rv.Type()
 	for i := 0; i < rt.NumField(); i++ {
-		field := rt.Field(i)
-		if field.Tag.Get(tagJSON) == bodyValue || field.Name == bodyField {
+		if rt.Field(i).Name == bodyField {
 			return true
 		}
 	}

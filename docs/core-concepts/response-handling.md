@@ -172,7 +172,7 @@ o.Get("/books/:id", func(c *okapi.Context) error {
 
 **Supported struct tags:**
 - `status:"true"` - Sets the HTTP status code for the response
-- `json:"body"` - Sets the response body 
+- A field named `Body` - Sets the response body (the field name matters, not its `json` tag)
 - `header:"Header-Name"` - Sets a response header
 - `cookie:"cookie_name"` - Sets a cookie value
 

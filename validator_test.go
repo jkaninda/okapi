@@ -640,6 +640,106 @@ func TestCheckEnumNonStringField(t *testing.T) {
 		t.Errorf("checkEnum() error should mention string fields only, got: %v", err)
 	}
 }
+
+const errEnumNotAllowed = "not one of the allowed values"
+
+func TestPointerFieldValidation(t *testing.T) {
+	type UpdateOrder struct {
+		ID       *string `json:"id" required:"true"`
+		Status   *string `json:"status" enum:"pending,shipped"`
+		Note     *string `json:"note" maxLength:"5"`
+		Email    *string `json:"email" format:"email"`
+		Quantity *int    `json:"quantity" min:"1"`
+		Channel  *string `json:"channel"`
+		Address  string  `json:"address" requiredIf:"Channel mail"`
+	}
+
+	tests := []struct {
+		name        string
+		body        string
+		errContains string
+	}{
+		{"nil pointers skip constraints", `{"id":"1"}`, ""},
+		{"valid pointer values", `{"id":"1","status":"shipped","note":"hi","email":"a@b.co","quantity":2}`, ""},
+		{"invalid enum", `{"id":"1","status":"lost"}`, errEnumNotAllowed},
+		{"maxLength exceeded", `{"id":"1","note":"too long"}`, "at most 5 characters"},
+		{"invalid format", `{"id":"1","email":"nope"}`, "invalid email format"},
+		{"numeric min", `{"id":"1","quantity":0}`, "must be >= 1"},
+		{"required nil pointer", `{"status":"pending"}`, "field ID is required"},
+		{"requiredIf with pointer sibling", `{"id":"1","channel":"mail"}`, "field Address is required"},
+		{"requiredIf pointer sibling not matching", `{"id":"1","channel":"sms"}`, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+
+			var req UpdateOrder
+			err := c.Bind(&req)
+			if tt.errContains == "" {
+				if err != nil {
+					t.Fatalf("Context.Bind() unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+				t.Errorf("Context.Bind() error = %v, should contain %q", err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestPointerFieldValidationInBody(t *testing.T) {
+	type UpdateOrder struct {
+		ID   string `param:"id"`
+		Body struct {
+			Status *string `json:"status" enum:"pending,shipped"`
+		}
+	}
+
+	c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(`{"status":"shipped"}`))
+	c.request.Header.Set("Content-Type", "application/json")
+	var ok UpdateOrder
+	if err := c.Bind(&ok); err != nil {
+		t.Fatalf("Context.Bind() unexpected error: %v", err)
+	}
+	if ok.Body.Status == nil || *ok.Body.Status != "shipped" {
+		t.Fatalf("Body.Status = %v, want shipped", ok.Body.Status)
+	}
+
+	c, _ = NewTestContext(http.MethodPost, "/test", strings.NewReader(`{"status":"lost"}`))
+	c.request.Header.Set("Content-Type", "application/json")
+	var bad UpdateOrder
+	if err := c.Bind(&bad); err == nil || !strings.Contains(err.Error(), errEnumNotAllowed) {
+		t.Errorf("Context.Bind() error = %v, want enum error", err)
+	}
+}
+
+// A field tagged `json:"body"` is payload data; only a field named Body wraps the request body.
+func TestJSONBodyTagIsNotBodyWrapper(t *testing.T) {
+	type Message struct {
+		Subject string  `json:"subject" required:"true"`
+		Content *string `json:"body" enum:"welcome,farewell"`
+	}
+
+	c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(`{"subject":"greeting","body":"welcome"}`))
+	c.request.Header.Set("Content-Type", "application/json")
+	var msg Message
+	if err := c.Bind(&msg); err != nil {
+		t.Fatalf("Context.Bind() unexpected error: %v", err)
+	}
+	if msg.Subject != "greeting" || msg.Content == nil || *msg.Content != "welcome" {
+		t.Fatalf("Context.Bind() = %+v, want subject=greeting body=welcome", msg)
+	}
+
+	c, _ = NewTestContext(http.MethodPost, "/test", strings.NewReader(`{"subject":"greeting","body":"nope"}`))
+	c.request.Header.Set("Content-Type", "application/json")
+	var bad Message
+	if err := c.Bind(&bad); err == nil || !strings.Contains(err.Error(), errEnumNotAllowed) {
+		t.Errorf("Context.Bind() error = %v, want enum error", err)
+	}
+}
 func TestCheckMultipleOf(t *testing.T) {
 	tests := []struct {
 		name     string

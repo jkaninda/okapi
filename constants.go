@@ -183,7 +183,6 @@ const (
 	formatLatitude  = "latitude"
 	formatLongitude = "longitude"
 	// Special values
-	bodyValue = "body"
 	bodyField = "Body"
 
 	// Parameter locations

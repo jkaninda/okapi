@@ -837,7 +837,7 @@ func Tags(tags ...string) RouteOption {
 // This schema is used for both OpenAPI documentation and request validation.
 //
 // Field mapping rules:
-//   - Request body: A field named `Body`, or a field tagged with `json:"body"`, is treated as the request body.
+//   - Request body: A field named `Body` is treated as the request body. The json tag is not considered.
 //   - Path parameters: Fields tagged with `path:"name"` or `param:"name"` are treated as path parameters.
 //   - Query parameters: Fields tagged with `query:"name"` are treated as query parameters.
 //   - Headers: Fields tagged with `header:"name"` are treated as HTTP headers.
@@ -2343,7 +2343,7 @@ func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 	}
 
 	// Body field
-	if sf.Tag.Get(tagJSON) == bodyValue || sf.Name == bodyField {
+	if sf.Name == bodyField {
 		r.processBodyField(sf, isRequest)
 		return true
 	}

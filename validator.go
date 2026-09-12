@@ -112,7 +112,7 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 	}
 
 	// Body binding (special case)
-	if sf.Tag.Get(tagJSON) == bodyValue || sf.Name == bodyField {
+	if sf.Name == bodyField {
 		bodyPtr := reflect.New(sf.Type)
 		if err := c.Bind(bodyPtr.Interface()); err != nil {
 			return fmt.Errorf("failed to bind body: %w", err)
@@ -163,6 +163,34 @@ var fieldConstraintCheckers = []func(reflect.Value, reflect.StructField) error{
 	checkFormatConstraints,
 	checkCollectionConstraints,
 	checkSubstringConstraints,
+}
+
+// checkFieldConstraints runs fieldConstraintCheckers against a field. Pointer
+// fields are validated through the value they point to; a nil pointer has no
+// value to constrain, so only the required rules checked by callers apply.
+func checkFieldConstraints(field reflect.Value, sf reflect.StructField) error {
+	field, ok := derefValue(field)
+	if !ok {
+		return nil
+	}
+	for _, check := range fieldConstraintCheckers {
+		if err := check(field, sf); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// derefValue unwraps pointers down to the underlying value.
+// ok is false when a nil pointer is reached.
+func derefValue(v reflect.Value) (reflect.Value, bool) {
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return v, false
+		}
+		v = v.Elem()
+	}
+	return v, true
 }
 
 // checkNumericConstraints validates min, max, exclusiveMin, exclusiveMax, and multipleOf.
@@ -329,7 +357,7 @@ func checkConditionalRequired(structVal, field reflect.Value, sf reflect.StructF
 	if tag := sf.Tag.Get(tagRequiredIf); tag != "" {
 		name, want, ok := strings.Cut(strings.TrimSpace(tag), " ")
 		if ok {
-			if sibling := structVal.FieldByName(name); sibling.IsValid() {
+			if sibling, ok := derefValue(structVal.FieldByName(name)); ok && sibling.IsValid() {
 				if fmt.Sprintf("%v", sibling.Interface()) == strings.TrimSpace(want) {
 					required = true
 				}
@@ -369,10 +397,8 @@ func (c *Context) validateField(structVal, field reflect.Value, sf reflect.Struc
 	if checkConditionalRequired(structVal, field, sf) {
 		return fmt.Errorf("field %s is required", sf.Name)
 	}
-	for _, check := range fieldConstraintCheckers {
-		if err := check(field, sf); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
-		}
+	if err := checkFieldConstraints(field, sf); err != nil {
+		return fmt.Errorf("field %s: %w", sf.Name, err)
 	}
 	return nil
 }
@@ -391,10 +417,8 @@ func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructFiel
 		if checkConditionalRequired(v, field, sf) {
 			return fmt.Errorf("field %s.%s is required", parentField.Name, sf.Name)
 		}
-		for _, check := range fieldConstraintCheckers {
-			if err := check(field, sf); err != nil {
-				return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
-			}
+		if err := checkFieldConstraints(field, sf); err != nil {
+			return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
 		}
 	}
 

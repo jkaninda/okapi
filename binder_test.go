@@ -907,3 +907,47 @@ func TestBindFromFields_TagPrecedence(t *testing.T) {
 		}
 	}
 }
+
+// TestBindMultipart_TagPrecedence guards the multipart binder's source order,
+// which tried headers first and so disagreed with the other binders.
+func TestBindMultipart_TagPrecedence(t *testing.T) {
+	type input struct {
+		ID   string `param:"id" query:"id" form:"id" header:"X-Id"`
+		Ref  string `query:"ref" form:"ref" header:"X-Ref"`
+		Name string `form:"name" header:"X-Name"`
+	}
+
+	var got input
+	var bindErr error
+	app := New()
+	app.Post("/uploads/:id", func(c *Context) error {
+		got = input{}
+		bindErr = c.Bind(&got)
+		return nil
+	})
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for _, field := range []string{"id", "ref", "name"} {
+		if err := w.WriteField(field, "f"); err != nil {
+			t.Fatalf("WriteField: %v", err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/uploads/p?id=q&ref=q", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("X-Id", "h")
+	req.Header.Set("X-Ref", "h")
+	req.Header.Set("X-Name", "h")
+	app.ServeHTTP(httptest.NewRecorder(), req)
+
+	if bindErr != nil {
+		t.Fatalf("Bind() unexpected error: %v", bindErr)
+	}
+	if got.ID != "p" || got.Ref != "q" || got.Name != "f" {
+		t.Errorf("got %+v, want ID=p (param) Ref=q (query) Name=f (form)", got)
+	}
+}

@@ -31,6 +31,7 @@ import (
 
 type RouteDefinition struct {
 	// Method is the HTTP method for the route (e.g., GET, POST, PUT, DELETE, etc.)
+	// ANY, or "*", registers a route that matches every method, as Okapi.Any does.
 	Method string
 	// Path is the URL path for the route, relative to the base path of the Okapi instance or group
 	Path string
@@ -114,8 +115,9 @@ type RouteDefinition struct {
 // For each route definition, this function determines whether to register the route
 // on the root Okapi instance or within a specific route group (if provided).
 //
-// It supports all standard HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
-// and applies any associated RouteOptions, such as documentation annotations or middleware settings.
+// It supports all standard HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS),
+// plus ANY (or "*") for a route matching every method, and applies any associated
+// RouteOptions, such as documentation annotations or middleware settings.
 //
 // If the Group field in the RouteDefinition is nil, the route is registered on the root Okapi instance.
 // Otherwise, it is registered within the specified group. If the group's Okapi reference is unset,
@@ -192,6 +194,8 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 				o.Head(r.Path, r.Handler, r.Options...)
 			case methodOptions:
 				o.Options(r.Path, r.Handler, r.Options...)
+			case methodAny, methodAnyName:
+				o.Any(r.Path, r.Handler, r.Options...)
 			default:
 				panic(fmt.Sprintf("okapi: unsupported HTTP method %q for path=%q", r.Method, r.Path))
 			}
@@ -215,6 +219,8 @@ func RegisterRoutes(o *Okapi, routes []RouteDefinition) {
 			group.Head(r.Path, r.Handler, r.Options...)
 		case methodOptions:
 			group.Options(r.Path, r.Handler, r.Options...)
+		case methodAny, methodAnyName:
+			group.Any(r.Path, r.Handler, r.Options...)
 		default:
 			panic(fmt.Sprintf("okapi: unsupported HTTP method %q for path=%q", r.Method, r.Path))
 		}

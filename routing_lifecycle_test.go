@@ -413,3 +413,47 @@ func TestRouteDefinitionDisabled(t *testing.T) {
 		t.Error("enabled route /on is missing from the OpenAPI document")
 	}
 }
+
+// TestAnyRouteWithCors guards plain OPTIONS requests on an Any route, which the
+// CORS preflight handler answered with 204 instead of dispatching to the route.
+func TestAnyRouteWithCors(t *testing.T) {
+	const origin = "https://any.example"
+	o := New(WithCors(Cors{AllowedOrigins: []string{origin}}))
+	o.Any("/proxy", func(c *Context) error {
+		return c.JSON(http.StatusOK, M{"method": c.Request().Method})
+	})
+
+	rec := serveTestRequest(o, http.MethodOptions, "/proxy")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), http.MethodOptions) {
+		t.Errorf("plain OPTIONS /proxy = %d %q, want the Any handler", rec.Code, rec.Body.String())
+	}
+
+	rec = serveTestRequest(o, http.MethodOptions, "/proxy",
+		"Origin", origin,
+		"Access-Control-Request-Method", http.MethodPut)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("preflight OPTIONS /proxy = %d, want 204", rec.Code)
+	}
+	if allow := rec.Header().Get("Access-Control-Allow-Methods"); strings.Contains(allow, "*") || !strings.Contains(allow, http.MethodPut) {
+		t.Errorf("Access-Control-Allow-Methods = %q, want method names including PUT", allow)
+	}
+}
+
+// TestRegisterRoutesAnyMethod covers ANY and "*" in RouteDefinition.Method, which
+// RegisterRoutes rejected as an unsupported method.
+func TestRegisterRoutesAnyMethod(t *testing.T) {
+	o := New()
+	api := o.Group("/api")
+	RegisterRoutes(o, []RouteDefinition{
+		{Method: "any", Path: "/a", Handler: okHandler},
+		{Method: "*", Path: "/b", Handler: okHandler, Group: api},
+	})
+
+	for _, path := range []string{"/a", "/api/b"} {
+		for _, method := range []string{http.MethodGet, http.MethodDelete} {
+			if rec := serveTestRequest(o, method, path); rec.Code != http.StatusOK {
+				t.Errorf("%s %s = %d, want 200", method, path, rec.Code)
+			}
+		}
+	}
+}

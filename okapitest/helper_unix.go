@@ -1,7 +1,9 @@
+//go:build !windows
+
 /*
  *  MIT License
  *
- * Copyright (c) 2024 Jonas Kaninda
+ * Copyright (c) 2025 Jonas Kaninda
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -24,9 +26,16 @@
 
 package okapitest
 
-import "encoding/base64"
+import (
+	"syscall"
+	"time"
+)
 
-func basicAuth(username, password string) string {
-	auth := username + ":" + password
-	return base64.StdEncoding.EncodeToString([]byte(auth))
+// GracefulExitAfter sends the current process SIGTERM after duration, so a
+// server that shuts down gracefully on signals, such as okapicli.RunServer,
+// stops as if it had been terminated.
+func GracefulExitAfter(duration time.Duration) {
+	time.AfterFunc(duration, func() {
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	})
 }

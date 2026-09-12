@@ -124,7 +124,6 @@ type jwtAuthError struct {
 	message string
 	logMsg  string
 	err     error
-	hook    bool
 }
 
 func (e *jwtAuthError) Error() string { return e.message }
@@ -133,7 +132,7 @@ func (e *jwtAuthError) Unwrap() error { return e.err }
 
 func (jwtAuth *JWTAuth) authenticate(c *Context) (*jwt.Token, *jwtAuthError) {
 	fail := func(status int, message, logMsg string, err error) *jwtAuthError {
-		return &jwtAuthError{status: status, message: message, logMsg: logMsg, err: err, hook: true}
+		return &jwtAuthError{status: status, message: message, logMsg: logMsg, err: err}
 	}
 
 	tokenStr, err := jwtAuth.extractToken(c)
@@ -143,9 +142,7 @@ func (jwtAuth *JWTAuth) authenticate(c *Context) (*jwt.Token, *jwtAuthError) {
 
 	keyFunc, err := jwtAuth.resolveKeyFunc()
 	if err != nil {
-		authErr := fail(http.StatusUnauthorized, "Invalid token", "Failed to resolve key function", err)
-		authErr.hook = false
-		return nil, authErr
+		return nil, fail(http.StatusUnauthorized, "Invalid token", "No JWT signing key is configured", err)
 	}
 
 	token, err := jwt.Parse(tokenStr, keyFunc, jwtAuth.parserOptions(jwtAuth.validMethods())...)
@@ -394,8 +391,17 @@ func (jwtAuth *JWTAuth) formatContextValue(claimValue interface{}) string {
 	}
 }
 
-// GenerateJwtToken generates a JWT with custom claims and expiry
+// GenerateJwtToken generates an HS256-signed JWT with custom claims and expiry.
+//
+// It returns an error when secret is empty: a token signed with an empty key
+// can be forged by anyone, and JWTAuth rejects an empty secret.
 func GenerateJwtToken(secret []byte, claims jwt.MapClaims, ttl time.Duration) (string, error) {
+	if len(secret) == 0 {
+		return "", errors.New("okapi: GenerateJwtToken requires a non-empty secret")
+	}
+	if claims == nil {
+		claims = jwt.MapClaims{}
+	}
 	claims["exp"] = time.Now().Add(ttl).Unix()
 	claims["iat"] = time.Now().Unix()
 

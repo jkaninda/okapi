@@ -1489,6 +1489,13 @@ func (o *Okapi) registerOptionsHandler(path string) {
 					h(w, r)
 					return
 				}
+				// An Any route on the path answers every method, OPTIONS included.
+				for _, route := range o.routes {
+					if route.Path == path && route.Method == njia.MethodAny {
+						o.routeHandler(route)(w, r)
+						return
+					}
+				}
 			}
 			addVary(w.Header(), "Origin")
 
@@ -1501,10 +1508,18 @@ func (o *Okapi) registerOptionsHandler(path string) {
 
 			if len(cors.AllowMethods) == 0 {
 				for _, route := range o.routes {
-					if route.Path == path {
-						cors.AllowMethods = append(cors.AllowMethods, route.Method)
+					if route.Path != path {
+						continue
 					}
+					if route.Method == njia.MethodAny {
+						// "*" is not a method name; list what an Any route serves.
+						cors.AllowMethods = append(cors.AllowMethods, http.MethodGet, http.MethodHead,
+							http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions)
+						continue
+					}
+					cors.AllowMethods = append(cors.AllowMethods, route.Method)
 				}
+				cors.AllowMethods = goutils.RemoveDuplicates(cors.AllowMethods)
 			}
 			cors.writeHeaders(w.Header(), r, allowed, true)
 

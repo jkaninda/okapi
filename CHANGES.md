@@ -117,6 +117,8 @@
 - **`RouteDefinition.Disabled`** registers a route disabled, as `Route.Disable()` does: it
   answers `404 Not Found` and is left out of the OpenAPI document. It is read once, at
   registration, so it suits configuration and feature flags read at startup.
+- **`Group.Any`** registers a group route matching every method, and `RouteDefinition.Method`
+  accepts `ANY` (or `"*"`), which `RegisterRoutes` previously rejected as unsupported.
 
 ### Fixes
 
@@ -164,6 +166,31 @@
   status and error body.
 - **OpenAPI documents `Any` routes** under get, post, put, patch and delete, and leaves out
   routes whose group is disabled.
+- **Plain OPTIONS requests reach an `Any` route when CORS is enabled.** The preflight
+  handler answered every OPTIONS request on the path with 204; only requests carrying
+  `Access-Control-Request-Method` are treated as preflights now. A preflight for an `Any`
+  route lists real method names in `Access-Control-Allow-Methods` instead of `*`.
+- **The multipart binder uses the same source order as the other binders**: param, path,
+  query, form, header. It tried headers first.
+- **`JWTAuth.OnUnauthorized` is called when no signing key is configured**, as it is for
+  any other rejected token.
+- **`GenerateJwtToken` returns an error for an empty secret** instead of signing a token
+  anyone could forge, and accepts nil claims.
+- **`okapitest` builds on Windows.** `GracefulExitAfter`, which needs a process to signal
+  itself, panics there with an explanation instead of failing to compile.
+- **OpenAPI `example` values have the field's JSON type.** Examples were always strings,
+  so `example:"1"` on an int produced `"example": "1"` and the 3.0 document failed
+  validation. Numbers and booleans are now emitted typed, and slice, map, struct and `any`
+  fields take the tag as JSON when it is valid JSON. A value that does not parse for its
+  type stays a string.
+- **OpenAPI schemas follow `encoding/json`'s embedding rules.** Fields promoted from
+  unexported embedded structs were missing, an embedded struct with a json name was
+  flattened instead of nested, `json:"-"` on an embedded struct was ignored, and a
+  shadowed name could be listed twice in `required`.
+- **The 3.1 OpenAPI document keeps `const` on every build.** Deriving the 3.0 document
+  stripped the markers from schemas shared with the routes, so after the rebuild in
+  `StartServer` the served 3.1 document never contained `const`. A schema shared by a
+  route and a webhook also no longer leaks 3.1 syntax into the 3.0 document.
 
 ### Breaking Changes
 
@@ -232,7 +259,18 @@
   default `Signals` into the caller's `RunOptions`.
 - **OpenAPI:** a route whose method the specification cannot represent (TRACE, custom
   verbs) is omitted instead of producing an empty path item, and recursive types are
-  emitted as `$ref`s to their component.
+  emitted as `$ref`s to their component. Schemas follow `encoding/json`'s embedding
+  rules: an embedded struct with a json name is a nested property rather than flattened,
+  `json:"-"` omits an embedded struct, `hidden:"true"` on an embedded field hides its
+  promoted fields, and duplicate JSON names resolve as `encoding/json` resolves them.
+  `example` values are emitted with the field's JSON type, which generated clients and
+  snapshot tests of the document will notice.
+- **Multipart requests bind with the shared source precedence** (param, path, query, form,
+  header). A header no longer beats a form, query or path value for the same field.
+- **`GenerateJwtToken` returns an error for an empty secret.** Callers that relied on it
+  signing with an empty key must pass a real secret.
+- **`JWTAuth.OnUnauthorized` now also runs when no signing key is configured**, where
+  the middleware previously answered 401 directly.
 
 ## v0.10.0
 

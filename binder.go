@@ -198,9 +198,32 @@ func (c *Context) bindMultipartField(field reflect.StructField, valField reflect
 	var wasSet bool
 	var err error
 
-	// Handle headers
-	if headerTag := field.Tag.Get(tagHeader); headerTag != "" {
-		wasSet, err = c.bindHeaderFieldWithStatus(headerTag, valField, field)
+	// Sources are tried in the same order as the other binders: param, path,
+	// query, form, header. The first one that sets the field wins.
+
+	// Handle path parameters
+	if paramTag := field.Tag.Get(tagParam); paramTag != "" {
+		wasSet, err = c.bindParamFieldWithStatus(paramTag, valField, field)
+		if err != nil {
+			return err
+		}
+		if wasSet {
+			return nil
+		}
+	}
+	if paramTag := field.Tag.Get(tagPath); paramTag != "" {
+		wasSet, err = c.bindParamFieldWithStatus(paramTag, valField, field)
+		if err != nil {
+			return err
+		}
+		if wasSet {
+			return nil
+		}
+	}
+
+	// Handle query parameters (including arrays)
+	if queryTag := field.Tag.Get(tagQuery); queryTag != "" {
+		wasSet, err = c.bindQueryFieldWithStatus(queryTag, valField, field)
 		if err != nil {
 			return err
 		}
@@ -231,29 +254,9 @@ func (c *Context) bindMultipartField(field reflect.StructField, valField reflect
 		}
 	}
 
-	// Handle query parameters (including arrays)
-	if queryTag := field.Tag.Get(tagQuery); queryTag != "" {
-		wasSet, err = c.bindQueryFieldWithStatus(queryTag, valField, field)
-		if err != nil {
-			return err
-		}
-		if wasSet {
-			return nil
-		}
-	}
-
-	// Handle path parameters
-	if paramTag := field.Tag.Get(tagParam); paramTag != "" {
-		wasSet, err = c.bindParamFieldWithStatus(paramTag, valField, field)
-		if err != nil {
-			return err
-		}
-		if wasSet {
-			return nil
-		}
-	}
-	if paramTag := field.Tag.Get(tagPath); paramTag != "" {
-		wasSet, err = c.bindParamFieldWithStatus(paramTag, valField, field)
+	// Handle headers
+	if headerTag := field.Tag.Get(tagHeader); headerTag != "" {
+		wasSet, err = c.bindHeaderFieldWithStatus(headerTag, valField, field)
 		if err != nil {
 			return err
 		}

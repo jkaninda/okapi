@@ -73,8 +73,7 @@ type mutualB struct {
 }
 
 // RecursiveBase is only ever reachable through recursiveEmbedder, so its
-// component has to be created from the recursive reference alone. It is
-// exported because schema generation skips embedded structs of unexported type.
+// component has to be created from the recursive reference alone.
 type RecursiveBase struct {
 	Parent *RecursiveBase `json:"parent"`
 }

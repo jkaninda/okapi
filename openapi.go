@@ -26,8 +26,10 @@ package okapi
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -1020,12 +1022,11 @@ func (o *Okapi) buildOpenAPISpec() {
 
 	spec.Tags = o.collectRootTags()
 
-	// Derive the OpenAPI 3.1 document from the 3.0 base before the base is
-	// cleaned of internal markers (the derivation deep-copies the base).
+	// The base shares its schemas with the routes, so both documents are
+	// derived from copies of it: changing the base in place would change what
+	// the next build starts from.
+	o.openapiSpec = o.deriveSpec30(spec)
 	o.openapiSpec31 = o.deriveSpec31(spec)
-	// Remove internal markers so the 3.0 document stays clean and valid.
-	stripConstMarkers(spec)
-	o.openapiSpec = spec
 }
 
 // buildOperation builds an OpenAPI operation from a route's documentation
@@ -1082,23 +1083,43 @@ func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[st
 	return op
 }
 
+// cloneSpec returns a deep copy of spec made through a JSON round-trip.
+func cloneSpec(spec *openapi3.T) (*openapi3.T, error) {
+	data, err := spec.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	clone := &openapi3.T{}
+	if err := clone.UnmarshalJSON(data); err != nil {
+		return nil, err
+	}
+	return clone, nil
+}
+
+// deriveSpec30 produces the OpenAPI 3.0 document from a deep copy of the base
+// spec, cleaned of internal markers so it stays valid.
+func (o *Okapi) deriveSpec30(base *openapi3.T) *openapi3.T {
+	spec, err := cloneSpec(base)
+	if err != nil {
+		o.logger.Error("openapi: failed to derive 3.0 spec", "error", err)
+		return base
+	}
+	stripConstMarkers(spec)
+	return spec
+}
+
 // deriveSpec31 produces an OpenAPI 3.1 document from the 3.0 base spec.
 //
-// The base is deep-copied via a JSON round-trip so the 3.0 document served at
-// /openapi.json is never mutated. kin-openapi marshals whatever fields are set
-// regardless of document version, so all 3.1-only adjustments (type-array
-// nullability, jsonSchemaDialect, SPDX license identifier, examples, const,
-// webhooks) are applied here and only here.
+// The base is deep-copied via a JSON round-trip so neither the base nor the
+// route schemas it shares are ever mutated. kin-openapi marshals whatever
+// fields are set regardless of document version, so all 3.1-only adjustments
+// (type-array nullability, jsonSchemaDialect, SPDX license identifier,
+// examples, const, webhooks) are applied here and only here.
 func (o *Okapi) deriveSpec31(base *openapi3.T) *openapi3.T {
-	clone := &openapi3.T{}
-	data, err := base.MarshalJSON()
+	clone, err := cloneSpec(base)
 	if err != nil {
-		o.logger.Error("openapi: failed to marshal base spec for 3.1 derivation", "error", err)
-		return clone
-	}
-	if err := clone.UnmarshalJSON(data); err != nil {
 		o.logger.Error("openapi: failed to derive 3.1 spec", "error", err)
-		return clone
+		return &openapi3.T{}
 	}
 
 	clone.OpenAPI = openApiVersion31
@@ -1117,6 +1138,14 @@ func (o *Okapi) deriveSpec31(base *openapi3.T) *openapi3.T {
 	// Webhooks (3.1-only). Built before the schema transform so webhook schemas
 	// are converted to 3.1 idioms as well.
 	o.buildWebhooks(clone)
+	if len(clone.Webhooks) > 0 {
+		// Webhook operations hold the webhook routes' own schemas, which may be
+		// shared with routes: convert copies of them.
+		if clone, err = cloneSpec(clone); err != nil {
+			o.logger.Error("openapi: failed to derive 3.1 spec", "error", err)
+			return &openapi3.T{}
+		}
+	}
 
 	// Convert every schema in the document to OpenAPI 3.1 / JSON Schema 2020-12.
 	transformSpecTo31(clone)
@@ -1267,7 +1296,8 @@ func transformSchemaTo31(s *openapi3.Schema) {
 }
 
 // stripConstMarkers removes the internal const marker extension from every
-// schema in spec so the 3.0 document never exposes it.
+// schema in spec so the 3.0 document never exposes it. spec must be a copy
+// (see deriveSpec30): the markers of the route schemas feed every 3.1 build.
 func stripConstMarkers(spec *openapi3.T) {
 	walkAllSchemas(spec, func(s *openapi3.Schema) {
 		if s.Extensions != nil {
@@ -1705,10 +1735,29 @@ func typeToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.
 }
 
 func structToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.Schema) *openapi3.SchemaRef {
+	schemaRef, _ := structSchemaWithFields(t, inProgress)
+	return schemaRef
+}
+
+// schemaField is a JSON member of a struct type, as encoding/json determines it.
+type schemaField struct {
+	name     string
+	index    []int // field index sequence, through embedded structs
+	tagged   bool  // named by a json tag
+	hidden   bool
+	required bool
+	schema   *openapi3.Schema // nil when hidden
+}
+
+// structSchemaWithFields builds the object schema of struct type t. It also
+// returns every member of t, including those hidden by another member of the
+// same name, so that a struct embedding t can apply the encoding/json dominance
+// rules across embedding depths (see dominantFields).
+func structSchemaWithFields(t reflect.Type, inProgress map[reflect.Type]*openapi3.Schema) (*openapi3.SchemaRef, []schemaField) {
 	if t == reflect.TypeOf(time.Time{}) {
 		schema := openapi3.NewStringSchema()
 		schema.Format = constDateTime
-		return openapi3.NewSchemaRef("", schema)
+		return openapi3.NewSchemaRef("", schema), nil
 	}
 
 	// Dereference pointers
@@ -1717,7 +1766,7 @@ func structToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi
 	}
 
 	if target, ok := inProgress[t]; ok {
-		return newRecursiveRef(t, target)
+		return newRecursiveRef(t, target), nil
 	}
 
 	schema := openapi3.NewObjectSchema()
@@ -1727,95 +1776,20 @@ func structToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi
 		inProgress[t] = schema
 		defer delete(inProgress, t)
 	}
-	required := make([]string, 0)
 
+	fields := make([]schemaField, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
+		fields = append(fields, structFieldMembers(t.Field(i), i, inProgress)...)
+	}
 
-		// Skip unexported fields
-		if !field.IsExported() {
+	required := make([]string, 0)
+	for _, f := range dominantFields(fields) {
+		if f.hidden {
 			continue
 		}
-
-		// Handle embedded (anonymous) fields
-		if field.Anonymous {
-			embeddedType := field.Type
-
-			// Deref pointer embedded
-			for embeddedType.Kind() == reflect.Pointer {
-				embeddedType = embeddedType.Elem()
-			}
-
-			if embeddedType.Kind() == reflect.Struct {
-				embeddedRef := structToSchemaWithInfo(embeddedType, inProgress)
-				if embedded := embeddedRef.Value; embedded != nil && embedded.Properties != nil {
-					// Copy properties
-					for propName, propSchema := range embedded.Properties {
-						// Prevent overwriting parent fields
-						if _, exists := schema.Properties[propName]; !exists {
-							schema.WithProperty(propName, propSchema.Value)
-						}
-					}
-					// Merge required
-					if len(embedded.Required) > 0 {
-						required = append(required, embedded.Required...)
-					}
-				}
-			}
-			continue
-		}
-
-		// Normal named field
-		jsonName := getJSONFieldName(field)
-		if jsonName == "-" {
-			continue
-		}
-		if hidden := field.Tag.Get(tagHidden); hidden == constTRUE {
-			continue
-		}
-
-		isPointer := field.Type.Kind() == reflect.Ptr
-		fieldType := field.Type
-		for fieldType.Kind() == reflect.Ptr {
-			fieldType = fieldType.Elem()
-		}
-
-		// Create schema for the field type
-		fieldSchema := typeToSchemaWithInfo(fieldType, inProgress)
-		if fieldSchema.Ref != "" {
-			// A reference cannot carry sibling keywords in OpenAPI 3.0, so the
-			// field's own keywords (nullable, description, ...) go on a wrapper.
-			fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{AllOf: openapi3.SchemaRefs{fieldSchema}})
-		}
-
-		// Pointer fields are nullable. Recorded here as the version-agnostic
-		// `nullable` flag (valid in 3.0); converted to a `["...","null"]` type
-		// array when the 3.1 document is derived.
-		if isPointer && fieldSchema.Value != nil {
-			fieldSchema.Value.Nullable = true
-		}
-
-		// Apply validation tags from the field
-		applyValidationTags(fieldSchema.Value, field.Tag)
-
-		// Description
-		if desc := field.Tag.Get(tagDescription); desc != "" {
-			fieldSchema.Value.Description = desc
-		}
-		if desc := field.Tag.Get(tagDoc); desc != "" {
-			fieldSchema.Value.Description = desc
-		}
-
-		// Deprecated
-		if deprecated := field.Tag.Get(tagDeprecated); deprecated == constTRUE {
-			fieldSchema.Value.Deprecated = true
-		}
-
-		schema.WithProperty(jsonName, fieldSchema.Value)
-
-		// Required, check both the required tag and standard logic
-		if isRequiredFieldWithTag(field) {
-			required = append(required, jsonName)
+		schema.WithProperty(f.name, f.schema)
+		if f.required {
+			required = append(required, f.name)
 		}
 	}
 
@@ -1823,7 +1797,142 @@ func structToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi
 		schema.Required = required
 	}
 
-	return openapi3.NewSchemaRef("", schema)
+	return openapi3.NewSchemaRef("", schema), fields
+}
+
+// structFieldMembers returns the JSON members contributed by field, the i-th
+// field of its struct. As in encoding/json, an embedded struct (or pointer to
+// struct) without a JSON name promotes its members, whether its type is
+// exported or not, while one with a JSON name is a single nested member.
+func structFieldMembers(field reflect.StructField, i int, inProgress map[reflect.Type]*openapi3.Schema) []schemaField {
+	isPointer := field.Type.Kind() == reflect.Pointer
+	fieldType := field.Type
+	for fieldType.Kind() == reflect.Pointer {
+		fieldType = fieldType.Elem()
+	}
+
+	if field.Anonymous {
+		// Embedded fields of unexported non-struct types are ignored
+		if !field.IsExported() && fieldType.Kind() != reflect.Struct {
+			return nil
+		}
+	} else if !field.IsExported() {
+		// Skip unexported fields
+		return nil
+	}
+
+	jsonName := getJSONFieldName(field)
+	if jsonName == "-" {
+		return nil
+	}
+	tagName, _, _ := strings.Cut(field.Tag.Get(tagJSON), ",")
+	hidden := field.Tag.Get(tagHidden) == constTRUE
+
+	// Promote the members of an embedded struct
+	if field.Anonymous && fieldType.Kind() == reflect.Struct && tagName == "" {
+		_, embedded := structSchemaWithFields(fieldType, inProgress)
+		members := make([]schemaField, 0, len(embedded))
+		for _, member := range embedded {
+			member.index = append([]int{i}, member.index...)
+			member.hidden = member.hidden || hidden
+			members = append(members, member)
+		}
+		return members
+	}
+
+	member := schemaField{
+		name:   jsonName,
+		index:  []int{i},
+		tagged: tagName != "",
+		hidden: hidden,
+		// Required, check both the required tag and standard logic
+		required: isRequiredFieldWithTag(field),
+	}
+	if hidden {
+		// Not documented, but still hides promoted members of the same name
+		return []schemaField{member}
+	}
+
+	// Create schema for the field type
+	fieldSchema := typeToSchemaWithInfo(fieldType, inProgress)
+	if fieldSchema.Ref != "" {
+		// A reference cannot carry sibling keywords in OpenAPI 3.0, so the
+		// field's own keywords (nullable, description, ...) go on a wrapper.
+		fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{AllOf: openapi3.SchemaRefs{fieldSchema}})
+	}
+
+	// Pointer fields are nullable. Recorded here as the version-agnostic
+	// `nullable` flag (valid in 3.0); converted to a `["...","null"]` type
+	// array when the 3.1 document is derived.
+	if isPointer && fieldSchema.Value != nil {
+		fieldSchema.Value.Nullable = true
+	}
+
+	// Apply validation tags from the field
+	applyValidationTags(fieldSchema.Value, field.Tag, fieldType)
+
+	// Description
+	if desc := field.Tag.Get(tagDescription); desc != "" {
+		fieldSchema.Value.Description = desc
+	}
+	if desc := field.Tag.Get(tagDoc); desc != "" {
+		fieldSchema.Value.Description = desc
+	}
+
+	// Deprecated
+	if deprecated := field.Tag.Get(tagDeprecated); deprecated == constTRUE {
+		fieldSchema.Value.Deprecated = true
+	}
+
+	member.schema = fieldSchema.Value
+	return []schemaField{member}
+}
+
+// dominantFields returns, in field order, the members encoding/json serializes:
+// among members sharing a name, the least deeply embedded one wins, and a
+// tagged one wins over untagged ones at the same depth. A name no member wins
+// is dropped.
+func dominantFields(fields []schemaField) []schemaField {
+	winners := make(map[string]int, len(fields))
+	ambiguous := make(map[string]bool)
+	for i, f := range fields {
+		best, ok := winners[f.name]
+		if !ok {
+			winners[f.name] = i
+			continue
+		}
+		switch d := dominance(f, fields[best]); {
+		case d > 0:
+			winners[f.name] = i
+			delete(ambiguous, f.name)
+		case d == 0:
+			ambiguous[f.name] = true
+		}
+	}
+
+	dominant := make([]schemaField, 0, len(winners))
+	for i, f := range fields {
+		if winners[f.name] == i && !ambiguous[f.name] {
+			dominant = append(dominant, f)
+		}
+	}
+	return dominant
+}
+
+// dominance compares two members of the same name: positive when a dominates
+// b, negative when b dominates a, and zero when neither does.
+func dominance(a, b schemaField) int {
+	if len(a.index) != len(b.index) {
+		return len(b.index) - len(a.index)
+	}
+	switch {
+	case a.tagged == b.tagged:
+		return 0
+	case a.tagged:
+		return 1
+	default:
+		return -1
+	}
 }
 
 // getJSONFieldName extracts the JSON field name from struct tags
@@ -1866,8 +1975,9 @@ func isRequiredFieldWithTag(field reflect.StructField) bool {
 	return false
 }
 
-// applyValidationTags applies struct tag validations to a schema
-func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
+// applyValidationTags applies struct tag validations to the schema of a field
+// of type t (pointers dereferenced)
+func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag, t reflect.Type) {
 	// Description
 	if desc := tag.Get(tagDescription); desc != "" {
 		schema.Description = desc
@@ -1888,9 +1998,9 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 			schema.Enum[i] = strings.TrimSpace(v)
 		}
 	}
-	// Example
+	// Example, as a JSON value of the field's type
 	if example := tag.Get(tagExample); example != "" {
-		schema.Example = example
+		schema.Example = parseTagValue(example, t)
 	}
 	// Const (OpenAPI 3.1). Stored as a marker extension on the version-agnostic
 	// schema; promoted to a real `const` for 3.1 and stripped for 3.0.
@@ -1910,6 +2020,42 @@ func applyValidationTags(schema *openapi3.Schema, tag reflect.StructTag) {
 	if tag.Get(tagNullable) == constTRUE {
 		schema.Nullable = true
 	}
+}
+
+// parseTagValue reads a struct tag value as a JSON value of a field of type t
+// (pointers dereferenced): an integer, number or boolean for such fields, and
+// any JSON value for arrays, slices, maps, structs and interfaces. A value that
+// cannot be read that way, or belongs to a string field, is returned as is.
+func parseTagValue(value string, t reflect.Type) any {
+	switch t.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if v, err := strconv.ParseInt(value, 10, t.Bits()); err == nil {
+			return v
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if v, err := strconv.ParseUint(value, 10, t.Bits()); err == nil {
+			return v
+		}
+	case reflect.Float32, reflect.Float64:
+		// JSON has no NaN or infinity
+		if v, err := strconv.ParseFloat(value, 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) {
+			return v
+		}
+	case reflect.Bool:
+		if v, err := strconv.ParseBool(value); err == nil {
+			return v
+		}
+	case reflect.Slice, reflect.Array, reflect.Map, reflect.Struct, reflect.Interface:
+		// time.Time is documented as a date-time string
+		if t == reflect.TypeOf(time.Time{}) {
+			return value
+		}
+		var v any
+		if err := json.Unmarshal([]byte(value), &v); err == nil && v != nil {
+			return v
+		}
+	}
+	return value
 }
 
 // applyStringSchemaTags applies minLength, maxLength, pattern, and format.

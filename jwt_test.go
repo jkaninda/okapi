@@ -939,3 +939,33 @@ func TestValidateTokenMatchesMiddleware(t *testing.T) {
 		}
 	})
 }
+
+// TestGenerateJwtToken_RejectsEmptySecret guards against signing with an empty
+// key, which produces a token anyone can forge.
+func TestGenerateJwtToken_RejectsEmptySecret(t *testing.T) {
+	for _, secret := range [][]byte{nil, {}} {
+		if signed, err := GenerateJwtToken(secret, jwt.MapClaims{}, time.Hour); err == nil {
+			t.Errorf("GenerateJwtToken(%q) = %q, nil; want an error", secret, signed)
+		}
+	}
+	if _, err := GenerateJwtToken(jwtTestSecret, nil, time.Hour); err != nil {
+		t.Errorf("GenerateJwtToken with nil claims: %v", err)
+	}
+}
+
+// TestJWTMiddleware_NoKeyCallsOnUnauthorized guards the misconfiguration path,
+// which answered 401 without calling the application's OnUnauthorized hook.
+func TestJWTMiddleware_NoKeyCallsOnUnauthorized(t *testing.T) {
+	auth := &JWTAuth{
+		OnUnauthorized: func(c *Context) error {
+			return c.Error(http.StatusTeapot, "hook")
+		},
+	}
+	signed, err := GenerateJwtToken(jwtTestSecret, jwt.MapClaims{}, time.Hour)
+	if err != nil {
+		t.Fatalf("GenerateJwtToken: %v", err)
+	}
+	if got := serveJWT(auth, signed); got != http.StatusTeapot {
+		t.Errorf("status = %d, want the OnUnauthorized hook's 418", got)
+	}
+}

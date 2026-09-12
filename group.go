@@ -250,6 +250,11 @@ func (g *Group) Head(path string, h HandlerFunc, opts ...RouteOption) *Route {
 	return g.handle(methodHead, path, h, opts...)
 }
 
+// Any registers a route within the group that matches any HTTP method.
+func (g *Group) Any(path string, h HandlerFunc, opts ...RouteOption) *Route {
+	return g.handle(methodAny, path, h, opts...)
+}
+
 // Group creates a nested subgroup with an additional path segment and optional middlewares.
 // The subgroup inherits its parent's middlewares and disabled state, including
 // changes made to the parent after the subgroup was created.

@@ -327,7 +327,7 @@ func (jwtAuth *JWTAuth) Middleware(c *Context) error {
 	if authErr != nil {
 
 		c.Logger().Warn(authErr.logMsg, "ip", c.RealIP(), "error", authErr.err)
-		if authErr.hook && jwtAuth.OnUnauthorized != nil {
+		if jwtAuth.OnUnauthorized != nil {
 			return jwtAuth.OnUnauthorized(c)
 		}
 		if authErr.status == http.StatusForbidden {

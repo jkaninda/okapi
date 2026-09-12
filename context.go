@@ -30,6 +30,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
@@ -59,6 +60,9 @@ type (
 		// and rebuffered the request body, so the binders' default cap should
 		// stand aside for the configured one.
 		bodyLimited bool
+		// cappedBody is the capped reader capBody installed over the request
+		// body, kept so the cap is applied only once per body.
+		cappedBody io.ReadCloser
 		// handlers is the chain of middleware + final handler for the current request
 		handlers []HandlerFunc
 		// index tracks the current position in the handler chain
@@ -75,17 +79,18 @@ type (
 
 // Mime types
 const (
-	constJSON        = "application/json"
-	constJSONProblem = "application/problem+json"
-	constXML         = "application/xml"
-	constXMLProblem  = "application/problem+xml"
-	constHTML        = "text/html"
-	constFormData    = "multipart/form-data"
-	constPLAINTEXT   = "text/plain"
-	constYAML        = "application/yaml"
-	constYamlX       = "application/x-yaml"
-	constYamlText    = "text/yaml"
-	constPROTOBUF    = "application/protobuf"
+	constJSON           = "application/json"
+	constJSONProblem    = "application/problem+json"
+	constXML            = "application/xml"
+	constXMLProblem     = "application/problem+xml"
+	constHTML           = "text/html"
+	constFormData       = "multipart/form-data"
+	constFormURLEncoded = "application/x-www-form-urlencoded"
+	constPLAINTEXT      = "text/plain"
+	constYAML           = "application/yaml"
+	constYamlX          = "application/x-yaml"
+	constYamlText       = "text/yaml"
+	constPROTOBUF       = "application/protobuf"
 )
 
 // ************** Accessors *************
@@ -363,20 +368,20 @@ func (c *Context) ContentType() string {
 
 // Form retrieves a form value after parsing the form data.
 func (c *Context) Form(key string) string {
-	_ = c.request.ParseForm() // Parse form if not already done
+	_ = c.parseForm()
 	return c.request.FormValue(key)
 }
 
 // FormValue retrieves a form value, including multipart form data.
 func (c *Context) FormValue(key string) string {
-	_ = c.request.ParseMultipartForm(c.okapi.maxMultipartMemory) // Parse multipart form
+	_ = c.parseMultipartForm() // Parse multipart form within the body cap
 	return c.request.FormValue(key)
 }
 
 // FormFile retrieves a file from multipart form data.
 // Returns the file and any error encountered.
 func (c *Context) FormFile(key string) (*multipart.FileHeader, error) {
-	_ = c.request.ParseMultipartForm(c.okapi.maxMultipartMemory)
+	_ = c.parseMultipartForm() // A parse error resurfaces from request.FormFile below
 	f, fh, err := c.request.FormFile(key)
 	if err != nil {
 		return nil, err
@@ -577,11 +582,18 @@ func (c *Context) SSEStream(ctx context.Context, messageChan <-chan Message) err
 	if flusher, ok := c.response.(http.Flusher); ok {
 		flusher.Flush()
 	}
+
+	shutdown := c.okapi.shuttingDown()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case msg := <-messageChan:
+		case <-shutdown:
+			return nil
+		case msg, ok := <-messageChan:
+			if !ok {
+				return nil
+			}
 			if _, err := msg.Send(c.response); err != nil {
 				return err
 			}
@@ -659,10 +671,15 @@ func (c *Context) SSEStreamWithOptions(ctx context.Context, messageChan <-chan M
 		pingChan = ticker.C
 	}
 
+	// See SSEStream: the stream ends when a graceful shutdown begins.
+	shutdown := c.okapi.shuttingDown()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+
+		case <-shutdown:
+			return nil
 
 		case <-pingChan:
 			// Send comment line to keep connection alive
@@ -865,7 +882,7 @@ func (c *Context) Return(output any) error {
 //
 //	type BookResponse struct {
 //	  Status  int                           // HTTP status code
-//	  version string `header:"version"`     // Response header
+//	  Version string `header:"version"`     // Response header
 //	  Session string `cookie:"SessionID"`   // Response cookie
 //	  Body    struct {
 //	    ID    int    `json:"id"`
@@ -876,7 +893,7 @@ func (c *Context) Return(output any) error {
 //
 //	okapi.Get("/books/:id", func(c okapi.Context) error {
 //	  return c.Respond(BookResponse{
-//	    version: "v1",
+//	    Version: "v1",
 //	    Session: "abc123",
 //	    Status:  200,
 //	    Body: struct {
@@ -911,6 +928,10 @@ func (c *Context) Respond(output any) error {
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		// Unexported fields cannot be read through reflection and are not part of the response
+		if !field.IsExported() {
+			continue
+		}
 		val := v.Field(i).Interface()
 
 		// Header tag

@@ -180,6 +180,48 @@ func TestRealIPTrustedProxies(t *testing.T) {
 			t.Error("expected an error for a malformed entry")
 		}
 	})
+
+	t.Run("client-supplied entries left of the proxy are ignored", func(t *testing.T) {
+		// A proxy appends the address it received the request from to whatever
+		// the client already sent, so the leftmost entry is attacker-controlled.
+		got := realIP(newReq("10.0.0.1:5555", "6.6.6.6, "+ip, ""), trusted)
+		if got != ip {
+			t.Errorf("realIP = %q, want the address appended by the proxy", got)
+		}
+	})
+
+	t.Run("chained trusted proxies are skipped", func(t *testing.T) {
+		got := realIP(newReq("10.0.0.2:5555", "6.6.6.6, "+ip+", 10.0.0.5", ""), trusted)
+		if got != ip {
+			t.Errorf("realIP = %q, want the first untrusted hop from the right", got)
+		}
+	})
+
+	t.Run("repeated X-Forwarded-For header lines are combined", func(t *testing.T) {
+		r := newReq("10.0.0.1:5555", "", "")
+		r.Header.Add("X-Forwarded-For", "6.6.6.6")
+		r.Header.Add("X-Forwarded-For", ip)
+		if got := realIP(r, trusted); got != ip {
+			t.Errorf("realIP = %q, want the last header line's address", got)
+		}
+	})
+
+	t.Run("a malformed hop falls back to the connection address", func(t *testing.T) {
+		got := realIP(newReq("10.0.0.1:5555", "198.51.100.7, not-an-ip", ""), trusted)
+		if got != "10.0.0.1" {
+			t.Errorf("realIP = %q, want the connection address", got)
+		}
+	})
+
+	t.Run("an invalid configuration trusts no proxy", func(t *testing.T) {
+		app := New(WithTrustedProxies("10.0.0.0/8", "not-an-ip"))
+		if app.trustedProxies == nil {
+			t.Fatal("trustedProxies is nil, which trusts the headers from every peer")
+		}
+		if got := realIP(newReq("10.0.0.1:5555", "1.2.3.4", ""), app.trustedProxies); got != "10.0.0.1" {
+			t.Errorf("realIP = %q, want the connection address", got)
+		}
+	})
 }
 
 // TestDefaultServerTimeouts guards the zero-valued http.Server, on which every

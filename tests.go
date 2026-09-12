@@ -198,8 +198,8 @@ func (o *Okapi) waitForServerOrError(timeout time.Duration, errCh <-chan error) 
 		default:
 		}
 
-		if o.server != nil && o.server.Addr != "" {
-			conn, err := net.DialTimeout("tcp", o.server.Addr, 50*time.Millisecond)
+		if addr := o.serverAddr(); addr != "" {
+			conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
 			if err == nil {
 				_ = conn.Close()
 				select {
@@ -209,7 +209,7 @@ func (o *Okapi) waitForServerOrError(timeout time.Duration, errCh <-chan error) 
 					}
 				default:
 				}
-				return o.server.Addr, nil
+				return addr, nil
 			}
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -226,14 +226,14 @@ func (o *Okapi) waitForServerOrError(timeout time.Duration, errCh <-chan error) 
 func (o *Okapi) WaitForServer(timeout time.Duration) string {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if o.server != nil && o.server.Addr != "" {
-			conn, err := net.DialTimeout("tcp", o.server.Addr, 50*time.Millisecond)
+		if addr := o.serverAddr(); addr != "" {
+			conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
 			if err == nil {
 				err = conn.Close()
 				if err != nil {
 					return ""
 				}
-				return o.server.Addr
+				return addr
 			}
 		}
 		time.Sleep(10 * time.Millisecond)

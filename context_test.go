@@ -25,9 +25,15 @@
 package okapi
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -465,4 +471,139 @@ func TestContext_PathParam(t *testing.T) {
 		ExpectStatusOK().
 		ExpectBodyContains(`"id":"42"`).
 		ExpectBodyContains(`"path":"/books/42"`)
+}
+
+// countingReader records how many bytes have been read through it.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// TestContext_FormAccessorsRespectBodyCap covers FormValue, FormFile and Form,
+// which parsed the request body directly and so read an upload of any size.
+func TestContext_FormAccessorsRespectBodyCap(t *testing.T) {
+	t.Parallel()
+
+	const limit = 1024
+	app := New(WithMaxRequestBody(limit))
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", "big.bin")
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := fw.Write(bytes.Repeat([]byte("A"), 1<<20)); err != nil {
+		t.Fatalf("write form file: %v", err)
+	}
+	if err := mw.WriteField("name", nameJane); err != nil {
+		t.Fatalf("write field: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+	multipartBody := buf.Bytes()
+	urlencodedBody := []byte("name=" + strings.Repeat("A", 1<<20))
+	const urlencoded = "application/x-www-form-urlencoded"
+
+	tests := []struct {
+		name        string
+		contentType string
+		body        []byte
+		access      func(*Context) error
+	}{
+		{"FormValue multipart", mw.FormDataContentType(), multipartBody, func(c *Context) error { c.FormValue("name"); return nil }},
+		{"FormFile multipart", mw.FormDataContentType(), multipartBody, func(c *Context) error { _, err := c.FormFile("file"); return err }},
+		{"FormValue url-encoded", urlencoded, urlencodedBody, func(c *Context) error { c.FormValue("name"); return nil }},
+		{"Form url-encoded", urlencoded, urlencodedBody, func(c *Context) error { c.Form("name"); return nil }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := &countingReader{r: bytes.NewReader(tt.body)}
+			c, _ := NewTestContext(http.MethodPost, "/test", body)
+			c.okapi = app
+			c.request.Header.Set("Content-Type", tt.contentType)
+
+			err := tt.access(c)
+			if body.n > limit+1 {
+				t.Errorf("read %d bytes of the body, want at most %d", body.n, limit+1)
+			}
+			var tooLarge *http.MaxBytesError
+			if strings.HasPrefix(tt.name, "FormFile") && !errors.As(err, &tooLarge) {
+				t.Errorf("FormFile() error = %v, want *http.MaxBytesError", err)
+			}
+		})
+	}
+}
+
+// TestContext_RespondSkipsUnexportedFields covers response structs with
+// unexported fields, which Respond read through reflection and panicked on.
+func TestContext_RespondSkipsUnexportedFields(t *testing.T) {
+	t.Parallel()
+
+	type bookResponse struct {
+		Status  int
+		Version string `header:"version"`
+		secret  string `header:"X-Secret"`
+		Body    struct {
+			Name string `json:"name"`
+		}
+	}
+
+	c, rec := NewTestContext(http.MethodGet, "/books/1", nil)
+	out := bookResponse{Status: http.StatusCreated, Version: "v1", secret: "hidden"}
+	out.Body.Name = "Okapi Guide"
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("Respond() panicked: %v", r)
+			}
+		}()
+		if err := c.Respond(out); err != nil {
+			t.Fatalf("Respond() unexpected error: %v", err)
+		}
+	}()
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if got := rec.Header().Get("version"); got != "v1" {
+		t.Errorf("version header = %q, want %q", got, "v1")
+	}
+	if got := rec.Header().Get("X-Secret"); got != "" {
+		t.Errorf("X-Secret header = %q, want it unset", got)
+	}
+	if !strings.Contains(rec.Body.String(), "Okapi Guide") {
+		t.Errorf("body = %q, want it to contain the Body field", rec.Body.String())
+	}
+}
+
+// TestContext_SSEStreamReturnsWhenChannelCloses covers SSEStream after the
+// producer closes its channel: it kept receiving zero-value messages and wrote
+// empty events in a tight loop until the request context ended.
+func TestContext_SSEStreamReturnsWhenChannelCloses(t *testing.T) {
+	t.Parallel()
+
+	c, rec := NewTestContext(http.MethodGet, "/events", nil)
+	messages := make(chan Message, 1)
+	messages <- Message{ID: "1", Data: "hello"}
+	close(messages)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	if err := c.SSEStream(ctx, messages); err != nil {
+		t.Fatalf("SSEStream() error = %v, want nil once the channel is closed", err)
+	}
+	if got := strings.Count(rec.Body.String(), "data:"); got != 1 {
+		t.Errorf("wrote %d data fields, want 1", got)
+	}
 }

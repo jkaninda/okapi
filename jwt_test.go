@@ -28,6 +28,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -782,4 +783,159 @@ func TestClaimsExpressionConcurrentUse(t *testing.T) {
 			t.Errorf("request %d: status = %d, want %d", i, code, http.StatusOK)
 		}
 	}
+}
+
+// signHS256 signs claims with HS256 under key, which may be empty.
+func signHS256(t *testing.T, key []byte, claims jwt.MapClaims, kid string) string {
+	t.Helper()
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	if kid != "" {
+		tok.Header["kid"] = kid
+	}
+	signed, err := tok.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign HS256 token: %v", err)
+	}
+	return signed
+}
+
+// TestEmptySigningSecretIsNotAKey guards against treating a zero-length
+// secret, such as []byte(os.Getenv("UNSET")), as configured: anyone can
+// compute an HMAC under an empty key, so every forged token verified.
+func TestEmptySigningSecretIsNotAKey(t *testing.T) {
+	t.Parallel()
+
+	claims := func() jwt.MapClaims {
+		return jwt.MapClaims{"sub": "mallory", "exp": time.Now().Add(time.Hour).Unix()}
+	}
+	forged := signHS256(t, []byte{}, claims(), "")
+
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		auth  *JWTAuth
+		token string
+		want  int
+	}{
+		{"empty SigningSecret rejects a forged token",
+			&JWTAuth{SigningSecret: []byte{}}, forged, http.StatusUnauthorized},
+		{"empty SigningSecret and SecretKey reject a forged token",
+			&JWTAuth{SigningSecret: []byte{}, SecretKey: []byte{}}, forged, http.StatusUnauthorized},
+		{"empty SigningSecret falls back to SecretKey",
+			&JWTAuth{SigningSecret: []byte{}, SecretKey: jwtTestSecret}, forged, http.StatusUnauthorized},
+		{"SecretKey still verifies behind an empty SigningSecret",
+			&JWTAuth{SigningSecret: []byte{}, SecretKey: jwtTestSecret}, signHMACToken(t, claims()), http.StatusOK},
+		{"empty SigningSecret does not shadow RsaKey",
+			&JWTAuth{SigningSecret: []byte{}, RsaKey: &rsaKey.PublicKey}, forged, http.StatusUnauthorized},
+		{"RsaKey still verifies behind an empty SigningSecret",
+			&JWTAuth{SigningSecret: []byte{}, RsaKey: &rsaKey.PublicKey}, signRSAToken(t, rsaKey, claims(), ""), http.StatusOK},
+		{"nothing configured rejects a forged token",
+			&JWTAuth{}, forged, http.StatusUnauthorized},
+		{"nothing configured rejects a real token",
+			&JWTAuth{}, signHMACToken(t, claims()), http.StatusUnauthorized},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := serveJWT(tt.auth, tt.token); got != tt.want {
+				t.Errorf("status = %d, want %d", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("empty secrets resolve to no key", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: []byte{}, SecretKey: []byte{}}
+		if _, err := auth.resolveKeyFunc(); err == nil {
+			t.Error("expected an error when only empty secrets are configured")
+		}
+	})
+}
+
+// TestValidateTokenMatchesMiddleware guards against ValidateToken drifting
+// from the middleware. It verified only HMAC signatures, under SigningSecret —
+// nil, and so an empty key, when the configuration used RsaKey or a JWKS — and
+// ignored Audience, Issuer, the algorithm allow-list and ClaimsExpression.
+func TestValidateTokenMatchesMiddleware(t *testing.T) {
+	t.Parallel()
+
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	jwks := &Jwks{Keys: []Jwk{rsaJWK(t, "k1", &rsaKey.PublicKey)}}
+
+	exp := time.Now().Add(time.Hour).Unix()
+	claims := func(extra jwt.MapClaims) jwt.MapClaims {
+		c := jwt.MapClaims{"sub": "alice", "exp": exp}
+		for k, v := range extra {
+			c[k] = v
+		}
+		return c
+	}
+	deny := func(*Context, jwt.Claims) error { return errors.New("denied") }
+
+	tests := []struct {
+		name   string
+		auth   *JWTAuth
+		token  string
+		wantOK bool
+	}{
+		{"empty-key HMAC token against RsaKey",
+			&JWTAuth{RsaKey: &rsaKey.PublicKey}, signHS256(t, []byte{}, claims(nil), ""), false},
+		{"empty-key HMAC token against JwksFile",
+			&JWTAuth{JwksFile: jwks}, signHS256(t, []byte{}, claims(nil), "k1"), false},
+		{"Audience enforced",
+			&JWTAuth{SigningSecret: jwtTestSecret, Audience: "api"}, signHMACToken(t, claims(jwt.MapClaims{"aud": "other"})), false},
+		{"Issuer enforced",
+			&JWTAuth{SigningSecret: jwtTestSecret, Issuer: "iss"}, signHMACToken(t, claims(jwt.MapClaims{"iss": "other"})), false},
+		{"algorithm allow-list enforced",
+			&JWTAuth{SigningSecret: jwtTestSecret, Algorithms: []string{"HS512"}}, signHMACToken(t, claims(nil)), false},
+		{"ClaimsExpression enforced",
+			&JWTAuth{SigningSecret: jwtTestSecret, ClaimsExpression: "Equals(`role`, `admin`)"},
+			signHMACToken(t, claims(jwt.MapClaims{"role": "user"})), false},
+		{"ValidateClaims enforced",
+			&JWTAuth{SigningSecret: jwtTestSecret, ValidateClaims: deny}, signHMACToken(t, claims(nil)), false},
+		{"RSA token against RsaKey",
+			&JWTAuth{RsaKey: &rsaKey.PublicKey}, signRSAToken(t, rsaKey, claims(nil), ""), true},
+		{"RSA token against JwksFile",
+			&JWTAuth{JwksFile: jwks}, signRSAToken(t, rsaKey, claims(nil), "k1"), true},
+		{"every check satisfied",
+			&JWTAuth{SigningSecret: jwtTestSecret, Audience: "api", Issuer: "iss", ClaimsExpression: "Equals(`role`, `admin`)"},
+			signHMACToken(t, claims(jwt.MapClaims{"aud": "api", "iss": "iss", "role": "admin"})), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, _ := NewTestContext(http.MethodGet, "/", nil)
+			ctx.Request().Header.Set("Authorization", "Bearer "+tt.token)
+			if _, err := tt.auth.ValidateToken(ctx); (err == nil) != tt.wantOK {
+				t.Errorf("ValidateToken error = %v, want ok=%v", err, tt.wantOK)
+			}
+			if got := serveJWT(tt.auth, tt.token); (got == http.StatusOK) != tt.wantOK {
+				t.Errorf("middleware status = %d, want ok=%v", got, tt.wantOK)
+			}
+		})
+	}
+
+	t.Run("cause is reachable through the returned error", func(t *testing.T) {
+		t.Parallel()
+
+		auth := &JWTAuth{SigningSecret: jwtTestSecret}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "exp": time.Now().Add(-time.Hour).Unix()})
+		ctx, _ := NewTestContext(http.MethodGet, "/", nil)
+		ctx.Request().Header.Set("Authorization", "Bearer "+tok)
+
+		_, err := auth.ValidateToken(ctx)
+		if !errors.Is(err, jwt.ErrTokenExpired) {
+			t.Errorf("errors.Is(%v, jwt.ErrTokenExpired) = false, want true", err)
+		}
+	})
 }

@@ -105,6 +105,115 @@ func TestRetry_GivesUpAfterMaxAttempts(t *testing.T) {
 	}
 }
 
+func TestRetry_GivesUpReturnsLastResponseBody(t *testing.T) {
+	var hits int32
+	srv := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"error":"down"}`)
+	})
+	c := client.New(srv.URL, client.WithRetry(client.RetryPolicy{
+		MaxAttempts: 2,
+		BaseDelay:   1 * time.Millisecond,
+	}))
+	resp, err := c.Get("/").Do()
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+	if got := resp.String(); got != `{"error":"down"}` {
+		t.Errorf("body = %q, want the last response body", got)
+	}
+	if got := atomic.LoadInt32(&hits); got != 2 {
+		t.Errorf("hits = %d, want 2", got)
+	}
+}
+
+func TestRetry_NonIdempotentNotRetried(t *testing.T) {
+	cases := []struct {
+		name   string
+		method string
+		policy client.RetryPolicy
+		status int
+		hijack bool
+	}{
+		{name: "POST 500", method: http.MethodPost, status: http.StatusInternalServerError},
+		{name: "PATCH 503", method: http.MethodPatch, status: http.StatusServiceUnavailable},
+		{name: "POST transport error", method: http.MethodPost, hijack: true},
+		{
+			name:   "POST custom ShouldRetry",
+			method: http.MethodPost,
+			status: http.StatusBadRequest,
+			policy: client.RetryPolicy{
+				ShouldRetry: func(resp *http.Response, err error) bool { return true },
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var hits int32
+			srv := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&hits, 1)
+				if tc.hijack {
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if err == nil {
+						_ = conn.Close()
+					}
+					return
+				}
+				w.WriteHeader(tc.status)
+			})
+			policy := tc.policy
+			policy.MaxAttempts = 3
+			policy.BaseDelay = 1 * time.Millisecond
+			c := client.New(srv.URL, client.WithRetry(policy))
+			_, _ = c.Request(tc.method, "/charge").Do()
+			if got := atomic.LoadInt32(&hits); got != 1 {
+				t.Errorf("hits = %d, want 1 (non-idempotent request not retried)", got)
+			}
+		})
+	}
+}
+
+func TestRetry_NonIdempotentOptIn(t *testing.T) {
+	cases := []struct {
+		name   string
+		method string
+		key    string
+		policy client.RetryPolicy
+	}{
+		{name: "PUT is idempotent", method: http.MethodPut},
+		{name: "DELETE is idempotent", method: http.MethodDelete},
+		{name: "POST with Idempotency-Key", method: http.MethodPost, key: "order-42"},
+		{name: "POST with RetryNonIdempotent", method: http.MethodPost, policy: client.RetryPolicy{RetryNonIdempotent: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var hits int32
+			srv := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&hits, 1)
+				w.WriteHeader(http.StatusInternalServerError)
+			})
+			policy := tc.policy
+			policy.MaxAttempts = 3
+			policy.BaseDelay = 1 * time.Millisecond
+			c := client.New(srv.URL, client.WithRetry(policy))
+			rb := c.Request(tc.method, "/charge")
+			if tc.key != "" {
+				rb.Header("Idempotency-Key", tc.key)
+			}
+			if _, err := rb.Do(); err != nil {
+				t.Fatalf("Do: %v", err)
+			}
+			if got := atomic.LoadInt32(&hits); got != 3 {
+				t.Errorf("hits = %d, want 3", got)
+			}
+		})
+	}
+}
+
 func TestRetry_CustomShouldRetry(t *testing.T) {
 	var hits int32
 	srv := newServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -179,8 +288,9 @@ func TestRetry_BodyRewound(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 	c := client.New(srv.URL, client.WithRetry(client.RetryPolicy{
-		MaxAttempts: 2,
-		BaseDelay:   1 * time.Millisecond,
+		MaxAttempts:        2,
+		BaseDelay:          1 * time.Millisecond,
+		RetryNonIdempotent: true,
 	}))
 	if _, err := c.Post("/").JSONBody(map[string]string{"k": "v"}).Send(); err != nil {
 		t.Fatalf("Send: %v", err)

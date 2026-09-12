@@ -3,6 +3,7 @@ package okapi
 import (
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -47,6 +48,52 @@ func TestSSEFieldInjection(t *testing.T) {
 	}
 	if len(data) == 1 && data[0] != "data: real" {
 		t.Errorf("data field = %q, want %q", data[0], "data: real")
+	}
+}
+
+// TestSSEDataLineEndings covers data containing CR or CRLF. The event stream
+// treats a lone CR as a line end just like LF, so splitting data on LF alone
+// let a CR in the payload start new fields and even a second event.
+func TestSSEDataLineEndings(t *testing.T) {
+	const payload = "hello\rid: evil\revent: admin\r\rdata: injected\r\nend"
+
+	tests := []struct {
+		name string
+		msg  Message
+	}{
+		{"string data", Message{Data: payload}},
+		{"byte data", Message{Data: []byte(payload)}},
+		{"reader data", Message{Data: strings.NewReader(payload)}},
+		{"serializer data", Message{Data: payload, Serializer: TextSerializer{}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			msg := tt.msg
+			msg.ID = "1"
+			if _, err := msg.Send(rec); err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+
+			// Split the stream the way a client does: CRLF, CR and LF all end a line.
+			body := rec.Body.String()
+			lines := strings.Split(strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(body), "\n")
+			want := []string{
+				"id: 1",
+				"data: hello",
+				"data: id: evil",
+				"data: event: admin",
+				"data: ",
+				"data: data: injected",
+				"data: end",
+				"",
+				"",
+			}
+			if !reflect.DeepEqual(lines, want) {
+				t.Errorf("stream lines = %q, want %q", lines, want)
+			}
+		})
 	}
 }
 

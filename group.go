@@ -37,8 +37,11 @@ type Group struct {
 	basicAuth   bool
 	deprecated  bool
 	middlewares []Middleware
-	okapi       *Okapi
-	security    []map[string][]string
+	// parent is the group this one was created from. Middlewares and the
+	// disabled state are resolved through it when a request is dispatched.
+	parent   *Group
+	okapi    *Okapi
+	security []map[string][]string
 }
 
 // GroupTag describes an OpenAPI tag with a human-readable description.
@@ -74,7 +77,8 @@ func NewGroup(basePath string, okapi *Okapi, middlewares ...Middleware) *Group {
 	return newGroup(basePath, false, okapi, middlewares...)
 }
 
-// Disable marks the Group as disabled, causing all routes within it to return 404 Not Found.
+// Disable marks the Group as disabled, causing all routes within it and its
+// subgroups to return 404 Not Found, including routes registered before the call.
 // Returns the Group to allow method chaining.
 func (g *Group) Disable() *Group {
 	g.disabled = true
@@ -82,6 +86,7 @@ func (g *Group) Disable() *Group {
 }
 
 // Enable marks the Group as enabled, allowing all routes within it to handle requests normally.
+// Routes stay disabled if a parent group or the route itself is disabled.
 // Returns the Group to allow method chaining.
 func (g *Group) Enable() *Group {
 	g.disabled = false
@@ -145,8 +150,8 @@ func (g *Group) Okapi() *Okapi {
 
 // Use adds one or more middlewares to the group's middleware chain.
 // These middlewares will be executed in the order they are added,
-// before the route handler for all routes within this group.
-// Middlewares are inherited by any subgroups created from this group.
+// before the route handler for all routes within this group and its subgroups,
+// including routes registered before Use was called.
 func (g *Group) Use(m ...Middleware) {
 	if len(m) == 0 {
 		return
@@ -154,19 +159,34 @@ func (g *Group) Use(m ...Middleware) {
 	g.middlewares = append(g.middlewares, m...)
 }
 
-// add is an internal method that handles route registration with the combined
-// middlewares from both the group and parent Okapi instance.
+// chainMiddlewares returns the middlewares that apply to the group's routes:
+// those of its ancestors, outermost group first, followed by its own.
+func (g *Group) chainMiddlewares() []Middleware {
+	if g.parent == nil {
+		return g.middlewares
+	}
+	inherited := g.parent.chainMiddlewares()
+	mws := make([]Middleware, 0, len(inherited)+len(g.middlewares))
+	mws = append(mws, inherited...)
+	return append(mws, g.middlewares...)
+}
+
+// isDisabled reports whether the group or any of its ancestors is disabled.
+func (g *Group) isDisabled() bool {
+	for grp := g; grp != nil; grp = grp.parent {
+		if grp.disabled {
+			return true
+		}
+	}
+	return false
+}
+
+// add is an internal method that registers a route under the group's prefix.
 func (g *Group) add(method, path string, h HandlerFunc, opts ...RouteOption) *Route {
 	if g.okapi == nil {
 		panic("okapi instance is nil, cannot register route")
 	}
 	fullPath := joinPaths(g.Prefix, path)
-	// Prepend group middleware before any route-level middleware
-	if len(g.middlewares) > 0 {
-		groupMW := make([]Middleware, len(g.middlewares))
-		copy(groupMW, g.middlewares)
-		opts = append([]RouteOption{UseMiddleware(groupMW...)}, opts...)
-	}
 	// Register the route with the joined base path and route path
 	route := g.okapi.addRoute(method, fullPath, g.Tags, h, opts...)
 	// Use group prefix as fallback
@@ -174,7 +194,8 @@ func (g *Group) add(method, path string, h HandlerFunc, opts ...RouteOption) *Ro
 		route.tags = []string{g.Prefix}
 	}
 	route.tagInfos = append(route.tagInfos, g.tagInfos...)
-	return route.setDisabled(g.disabled)
+	route.group = g
+	return route
 }
 
 // handle is a helper method that delegates to add with the given HTTP method.
@@ -230,50 +251,22 @@ func (g *Group) Head(path string, h HandlerFunc, opts ...RouteOption) *Route {
 }
 
 // Group creates a nested subgroup with an additional path segment and optional middlewares.
-// The new group inherits all middlewares from its parent group.
+// The subgroup inherits its parent's middlewares and disabled state, including
+// changes made to the parent after the subgroup was created.
 func (g *Group) Group(path string, middlewares ...Middleware) *Group {
-	return newGroup(
-		// Combine paths
-		joinPaths(g.Prefix, path),
-		g.disabled,
-		// Share the same Okapi instance
-		g.okapi,
-		// Combine middlewares
-		append(g.middlewares, middlewares...)...)
+	sub := newGroup(joinPaths(g.Prefix, path), false, g.okapi, middlewares...)
+	sub.parent = g
+	return sub
 }
 
 // HandleStd registers a standard http.HandlerFunc and wraps it with the group's middleware chain.
 func (g *Group) HandleStd(method, path string, h func(http.ResponseWriter, *http.Request), opts ...RouteOption) {
-	// Convert standard handler to HandlerFunc. Delegating to wrapHTTPHandler
-	// keeps every standard-handler registration on one path, so path parameters
-	// reach r.PathValue here exactly as they do for Okapi.HandleStd.
-	converted := g.okapi.wrapHTTPHandler(http.HandlerFunc(h))
-	// Prepend group middleware
-	if len(g.middlewares) > 0 {
-		groupMW := make([]Middleware, len(g.middlewares))
-		copy(groupMW, g.middlewares)
-		opts = append([]RouteOption{UseMiddleware(groupMW...)}, opts...)
-	}
-	tags := g.Tags
-	if len(tags) == 0 {
-		tags = []string{g.Prefix}
-	}
-	// Register route
-	route := g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...)
-	route.tagInfos = append(route.tagInfos, g.tagInfos...)
-	route.setDisabled(g.disabled)
+	g.HandleHTTP(method, path, http.HandlerFunc(h), opts...)
 }
 
 // HandleHTTP registers a standard http.Handler and wraps it with the group's middleware chain.
 func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOption) {
-	// Convert standard handler to HandlerFunc
 	converted := g.okapi.wrapHTTPHandler(h)
-	// Prepend group middleware
-	if len(g.middlewares) > 0 {
-		groupMW := make([]Middleware, len(g.middlewares))
-		copy(groupMW, g.middlewares)
-		opts = append([]RouteOption{UseMiddleware(groupMW...)}, opts...)
-	}
 	tags := g.Tags
 	if len(tags) == 0 {
 		tags = []string{g.Prefix}
@@ -281,7 +274,7 @@ func (g *Group) HandleHTTP(method, path string, h http.Handler, opts ...RouteOpt
 	// Register route
 	route := g.okapi.addRoute(method, joinPaths(g.Prefix, path), tags, converted, opts...)
 	route.tagInfos = append(route.tagInfos, g.tagInfos...)
-	route.setDisabled(g.disabled)
+	route.group = g
 }
 
 // UseMiddleware registers a standard HTTP middleware function and integrates
@@ -293,10 +286,9 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 	g.Use(func(c *Context) error {
 		// Convert the rest of the chain into an http.Handler
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Continue the Okapi middleware chain
 			c.request = r
 			if err := c.Next(); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				g.okapi.handleChainError(c, err)
 			}
 		})
 
@@ -308,9 +300,12 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 }
 
 // Register registers a slice of RouteDefinition with the group.
-// It ensures that each route is associated with the group and its Okapi instance.
-// If a route's Group field is nil, it assigns the current group to it.
-// If the route's Group's Okapi reference is nil, it assigns the group's Okapi instance to it.
+//
+// A definition whose Group field is nil is attached to this group; one that
+// names a Group is registered on that group. Registration goes through
+// RegisterRoutes, so the group's middlewares, authentication, deprecation and
+// security settings apply, as do the definition's documentation fields
+// (OperationId, Summary, Description, Tags, Request, Response, Security).
 // This method is useful for bulk registering routes defined in a controller or similar structure.
 //
 // Example:
@@ -340,21 +335,13 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 //
 // api.Register(routes...)
 func (g *Group) Register(routes ...RouteDefinition) {
-	for _, r := range routes {
-		if r.Group == nil {
-			r.Group = g
-		} else if r.Group.okapi == nil {
-			r.Group.okapi = g.okapi
+	// Copy so the caller's definitions are not modified.
+	defs := make([]RouteDefinition, len(routes))
+	copy(defs, routes)
+	for i := range defs {
+		if defs[i].Group == nil {
+			defs[i].Group = g
 		}
-		for _, mid := range r.Middlewares {
-			r.Options = append(r.Options, UseMiddleware(mid))
-		}
-		route := g.okapi.addRoute(r.Method, joinPaths(g.Prefix, r.Path), r.Group.Tags, r.Handler, r.Options...)
-		// Use group prefix as fallback
-		if len(route.tags) == 0 {
-			route.tags = []string{g.Prefix}
-		}
-		route.tagInfos = append(route.tagInfos, r.Group.tagInfos...)
-		route.setDisabled(g.disabled)
 	}
+	RegisterRoutes(g.okapi, defs)
 }

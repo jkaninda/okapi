@@ -137,6 +137,10 @@ func (m *Message) flush(w http.ResponseWriter) {
 	}
 }
 
+// sseLineEnds converts the line endings the event stream recognizes (CRLF, CR
+// and LF) to LF.
+var sseLineEnds = strings.NewReplacer("\r\n", "\n", "\r", "\n")
+
 // sanitizeSSEField strips the line terminators that separate fields in the
 // event stream.
 func sanitizeSSEField(value string) string {
@@ -203,7 +207,9 @@ func (m *Message) writeData(w http.ResponseWriter, data any) error {
 			output = string(jsonBytes)
 		}
 	}
-	lines := strings.Split(output, "\n")
+	// A lone CR ends a line in the event stream just like LF, so normalize
+	// every line ending before splitting, or a CR would start a new field
+	lines := strings.Split(sseLineEnds.Replace(output), "\n")
 	for _, line := range lines {
 		if _, err = fmt.Fprintf(w, "data: %s\n", line); err != nil {
 			return err

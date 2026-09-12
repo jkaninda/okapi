@@ -28,15 +28,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jkaninda/okapi/okapitest"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -689,5 +692,218 @@ func TestBindQuery_DecodesValues(t *testing.T) {
 	}
 	if len(got.Name) != 1 || got.Name[0] != nameJane {
 		t.Errorf("Name = %v, want [Jane]", got.Name)
+	}
+}
+
+// TestBind_BodyDecodeErrors covers decode errors in the flat binder, which were
+// discarded: a malformed or truncated body bound whatever had decoded so far,
+// and the handler ran as if the request were valid.
+func TestBind_BodyDecodeErrors(t *testing.T) {
+	t.Parallel()
+
+	type item struct {
+		Name  string `json:"name" xml:"name" yaml:"name" required:"true"`
+		Price int    `json:"price" xml:"price" yaml:"price"`
+	}
+
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		wantMsg     string
+	}{
+		{"JSON type mismatch", constJSON, `{"name":"x","price":"abc"}`, "invalid JSON body"},
+		{"JSON truncated", constJSON, `{"name":`, "invalid JSON body"},
+		{"XML unclosed", constXML, `<item><name>x</name>`, "invalid XML body"},
+		{"YAML malformed", constYAML, "name: [x", "invalid YAML body"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			ctx.Request().Header.Set("Content-Type", tt.contentType)
+
+			var got item
+			if err := ctx.Bind(&got); err == nil || !strings.Contains(err.Error(), tt.wantMsg) {
+				t.Errorf("Bind() error = %v, want one containing %q", err, tt.wantMsg)
+			}
+		})
+	}
+
+	t.Run("JSON type mismatch keeps the decoder error", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(`{"name":"x","price":"abc"}`))
+		ctx.Request().Header.Set("Content-Type", constJSON)
+
+		var got item
+		var typeErr *json.UnmarshalTypeError
+		if err := ctx.Bind(&got); !errors.As(err, &typeErr) {
+			t.Errorf("Bind() error = %v, want *json.UnmarshalTypeError", err)
+		}
+	})
+
+	t.Run("protobuf", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, _ := NewTestContext(http.MethodPost, "/test", bytes.NewReader([]byte{0xff}))
+		ctx.Request().Header.Set("Content-Type", "application/protobuf")
+
+		var got wrapperspb.StringValue
+		if err := ctx.Bind(&got); err == nil || !strings.Contains(err.Error(), "invalid protobuf body") {
+			t.Errorf("Bind() error = %v, want one containing %q", err, "invalid protobuf body")
+		}
+	})
+}
+
+// TestBind_EmptyBodyIsNotAnError guards the other side of decode errors: a
+// request without a body still binds its query, header and path values.
+func TestBind_EmptyBodyIsNotAnError(t *testing.T) {
+	t.Parallel()
+
+	for _, contentType := range []string{constJSON, constXML, constYAML} {
+		for name, body := range map[string]io.Reader{"no body": nil, "empty body": strings.NewReader("")} {
+			t.Run(contentType+" "+name, func(t *testing.T) {
+				t.Parallel()
+
+				ctx, _ := NewTestContext(http.MethodPost, "/test?name=Jane", body)
+				ctx.Request().Header.Set("Content-Type", contentType)
+
+				var got User
+				if err := ctx.Bind(&got); err != nil {
+					t.Fatalf("Bind() unexpected error: %v", err)
+				}
+				if got.Name != nameJane {
+					t.Errorf("Name = %q, want %q", got.Name, nameJane)
+				}
+			})
+		}
+	}
+}
+
+// TestBind_BodyOverCapIsRejected covers a body larger than WithMaxRequestBody:
+// the cap stopped the decoder, but the error was discarded and an empty struct
+// was bound.
+func TestBind_BodyOverCapIsRejected(t *testing.T) {
+	t.Parallel()
+
+	type note struct {
+		Text string `json:"text"`
+	}
+
+	body := `{"text":"` + strings.Repeat("A", 100) + `"}`
+	ctx, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(body))
+	ctx.okapi = New(WithMaxRequestBody(16))
+	ctx.Request().Header.Set("Content-Type", constJSON)
+
+	var got note
+	var tooLarge *http.MaxBytesError
+	if err := ctx.Bind(&got); !errors.As(err, &tooLarge) {
+		t.Errorf("Bind() error = %v, want *http.MaxBytesError", err)
+	}
+}
+
+// TestBind_FormParsingRespectsBodyCap covers the multipart and form parsers,
+// which read the request body directly and so bypassed the cap the decoders
+// apply.
+func TestBind_FormParsingRespectsBodyCap(t *testing.T) {
+	t.Parallel()
+
+	app := New(WithMaxRequestBody(16))
+	large := strings.Repeat("A", 2<<20)
+
+	multipartCtx := func() *Context {
+		body, contentType := buildMultipart(t, map[string]string{"name": large})
+		ctx, _ := NewTestContext(http.MethodPost, "/test", body)
+		ctx.okapi = app
+		ctx.Request().Header.Set("Content-Type", contentType)
+		return ctx
+	}
+	formCtx := func(body string) *Context {
+		ctx, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(body))
+		ctx.okapi = app
+		ctx.Request().Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return ctx
+	}
+
+	overCap := []struct {
+		name string
+		bind func() error
+	}{
+		{"Bind multipart", func() error { var u User; return multipartCtx().Bind(&u) }},
+		{"BindMultipart", func() error { var u User; return multipartCtx().BindMultipart(&u) }},
+		{"Bind url-encoded", func() error { var u User; return formCtx("name=" + large).Bind(&u) }},
+		{"BindForm", func() error { var f formTarget; return formCtx("name=" + large).BindForm(&f) }},
+		{"BindQuery", func() error { var f formTarget; return formCtx("name=" + large).BindQuery(&f) }},
+	}
+	for _, tc := range overCap {
+		t.Run(tc.name, func(t *testing.T) {
+			var tooLarge *http.MaxBytesError
+			if err := tc.bind(); !errors.As(err, &tooLarge) {
+				t.Errorf("error = %v, want *http.MaxBytesError", err)
+			}
+		})
+	}
+
+	t.Run("body within cap binds", func(t *testing.T) {
+		var got User
+		if err := formCtx("name=Jane").Bind(&got); err != nil {
+			t.Fatalf("Bind() unexpected error: %v", err)
+		}
+		if got.Name != nameJane {
+			t.Errorf("Name = %q, want %q", got.Name, nameJane)
+		}
+	})
+
+	t.Run("BodyLimit middleware takes precedence", func(t *testing.T) {
+		ctx := formCtx("name=" + strings.Repeat("A", 64))
+		ctx.bodyLimited = true
+
+		var got User
+		if err := ctx.Bind(&got); err != nil {
+			t.Fatalf("Bind() unexpected error: %v", err)
+		}
+		if len(got.Name) != 64 {
+			t.Errorf("len(Name) = %d, want 64", len(got.Name))
+		}
+	})
+}
+
+// TestBindFromFields_TagPrecedence covers a flat struct field tagged for several
+// sources: they were tried in map iteration order, so which value bound varied
+// from one identical request to the next.
+func TestBindFromFields_TagPrecedence(t *testing.T) {
+	t.Parallel()
+
+	type flat struct {
+		ID   string `param:"id" query:"id"`
+		Ref  string `query:"ref" header:"X-Ref"`
+		Name string `form:"name" header:"X-Name"`
+	}
+
+	app := New()
+	var got flat
+	var bindErr error
+	app.Post("/items/:id", func(c *Context) error {
+		got = flat{}
+		bindErr = c.Bind(&got)
+		return c.NoContent()
+	})
+
+	for i := 0; i < 200; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/items/p?id=q&ref=q", strings.NewReader("name=f"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Ref", "h")
+		req.Header.Set("X-Name", "h")
+		app.ServeHTTP(httptest.NewRecorder(), req)
+
+		if bindErr != nil {
+			t.Fatalf("request %d: Bind() unexpected error: %v", i, bindErr)
+		}
+		if got.ID != "p" || got.Ref != "q" || got.Name != "f" {
+			t.Fatalf("request %d: got %+v, want ID=p (param) Ref=q (query) Name=f (form)", i, got)
+		}
 	}
 }

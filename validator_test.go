@@ -1889,3 +1889,103 @@ func TestConditionalRequiredValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestBindStructSourcePrecedence covers a Body-style struct whose fields are
+// tagged for several sources: each source was assigned unconditionally, so an
+// absent path parameter blanked a value supplied in the query string.
+func TestBindStructSourcePrecedence(t *testing.T) {
+	type input struct {
+		ID    int    `param:"id" query:"id"`
+		Token string `query:"token" header:"X-Token" cookie:"token"`
+		Body  struct {
+			Name string `json:"name"`
+		}
+	}
+
+	app := New()
+	var got input
+	var bindErr error
+	handler := func(c *Context) error {
+		got = input{}
+		bindErr = c.Bind(&got)
+		return c.NoContent()
+	}
+	const books = "/books"
+	app.Post(books, handler)
+	app.Post(books+"/:id", handler)
+
+	tests := []struct {
+		name      string
+		target    string
+		header    string
+		cookie    string
+		wantID    int
+		wantToken string
+	}{
+		{"query used when path param absent", books + "?id=5", "", "", 5, ""},
+		{"path param wins over query", books + "/7?id=5", "", "", 7, ""},
+		{"query wins over header and cookie", books + "?token=q", "h", "c", 0, "q"},
+		{"header wins over cookie", books, "h", "c", 0, "h"},
+		{"cookie used when nothing else is set", books, "", "c", 0, "c"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tt.target, strings.NewReader(`{"name":"x"}`))
+			req.Header.Set("Content-Type", "application/json")
+			if tt.header != "" {
+				req.Header.Set("X-Token", tt.header)
+			}
+			if tt.cookie != "" {
+				req.AddCookie(&http.Cookie{Name: "token", Value: tt.cookie})
+			}
+			app.ServeHTTP(httptest.NewRecorder(), req)
+
+			if bindErr != nil {
+				t.Fatalf("Bind() unexpected error: %v", bindErr)
+			}
+			if got.ID != tt.wantID || got.Token != tt.wantToken {
+				t.Errorf("got ID=%d Token=%q, want ID=%d Token=%q", got.ID, got.Token, tt.wantID, tt.wantToken)
+			}
+		})
+	}
+}
+
+// TestUniqueItemsNonComparableElements covers uniqueItems on a slice whose
+// elements cannot be map keys, such as the objects a []any decodes into; the
+// check used every element as a key and panicked.
+func TestUniqueItemsNonComparableElements(t *testing.T) {
+	type Req struct {
+		Tags []any `json:"tags" uniqueItems:"true"`
+	}
+
+	tests := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{"distinct objects", `{"tags":[{"a":1},{"b":2}]}`, false},
+		{"duplicate objects", `{"tags":[{"a":1},{"a":1}]}`, true},
+		{"duplicate arrays", `{"tags":[[1,2],[1,2]]}`, true},
+		{"distinct mixed elements", `{"tags":["a",1,{"a":1},[1],null]}`, false},
+		{"duplicate scalars among objects", `{"tags":["a",{"a":1},"a"]}`, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("Bind() panicked: %v", r)
+				}
+			}()
+
+			c, _ := NewTestContext(http.MethodPost, "/test", strings.NewReader(tt.body))
+			c.request.Header.Set("Content-Type", "application/json")
+			var req Req
+			err := c.Bind(&req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Bind() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

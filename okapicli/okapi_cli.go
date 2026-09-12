@@ -1,7 +1,7 @@
 /*
  *  MIT License
  *
- * Copyright (c) 2026 Jonas Kaninda
+ * Copyright (c) 2024 Jonas Kaninda
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -82,9 +82,10 @@ type Command struct {
 // RunOptions configures the Run behavior
 type RunOptions struct {
 	// ShutdownTimeout is the maximum time to wait for graceful shutdown
+	// (defaults to 30s when zero or negative)
 	ShutdownTimeout time.Duration
 
-	// Signals are the OS signals to listen for (defaults to SIGINT, SIGTERM)
+	// Signals are the OS signals to listen for (defaults to SIGINT, SIGTERM when empty)
 	Signals []os.Signal
 
 	// OnStart is called right before the server starts
@@ -419,13 +420,20 @@ func defaultRunOptions() *RunOptions {
 func (c *CLI) RunServer(opts ...*RunOptions) error {
 	options := defaultRunOptions()
 	if len(opts) > 0 && opts[0] != nil {
-		options = opts[0]
+		custom := *opts[0]
+		if custom.ShutdownTimeout <= 0 {
+			custom.ShutdownTimeout = options.ShutdownTimeout
+		}
+		if len(custom.Signals) == 0 {
+			custom.Signals = options.Signals
+		}
+		options = &custom
 	}
 
-	// Set default signals if none provided
-	if len(options.Signals) == 0 {
-		options.Signals = []os.Signal{SIGINT, SIGTERM}
-	}
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, options.Signals...)
+	defer signal.Stop(quit)
+
 	// Call OnStart callback if provided
 	if options.OnStart != nil {
 		options.OnStart()
@@ -448,10 +456,6 @@ func (c *CLI) RunServer(opts ...*RunOptions) error {
 			options.OnStarted()
 		}()
 	}
-
-	// Channel to listen for interrupt signals
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, options.Signals...)
 
 	// Block until receiving a signal or an error
 	select {

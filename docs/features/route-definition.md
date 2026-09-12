@@ -96,6 +96,7 @@ Each `RouteDefinition` can directly enrich your OpenAPI documentation:
 | `Response`    | Default success response schema.                                 |
 | `Security`    | Security requirements (e.g. Bearer, API Key, OAuth2).            |
 | `Options`     | Advanced documentation and behavior using `RouteOption` helpers. |
+| `Disabled`    | Registers the route disabled: `404 Not Found`, hidden from docs. |
 
 > 💡 You can mix `Summary`, `Description`, `Request`, and `Response` with `RouteOption` helpers depending on your preference.
 

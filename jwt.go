@@ -27,6 +27,7 @@ package okapi
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -98,32 +99,96 @@ func (jwtAuth *JWTAuth) extractTokenFrom(c *Context, lookup string) (string, err
 	}
 }
 
-// ValidateToken checks the JWT token and returns the claims if valid
+// ValidateToken checks the JWT token and returns the claims if valid.
+//
+// It applies exactly the checks Middleware does — key resolution, the
+// algorithm allow-list, expiry, Audience, Issuer, ClaimsExpression,
+// ValidateClaims and ValidateRole — but writes no response and does not call
+// OnUnauthorized. The returned error's message is safe to show a client; the
+// underlying cause is reachable with errors.Is and errors.As.
 func (jwtAuth *JWTAuth) ValidateToken(c *Context) (jwt.MapClaims, error) {
-	tokenStr, err := jwtAuth.extractToken(c)
-	if err != nil {
-		return nil, err
-	}
-
-	var parseOpts []jwt.ParserOption
-	if !jwtAuth.AllowMissingExpiry {
-		parseOpts = append(parseOpts, jwt.WithExpirationRequired())
-	}
-	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return signingSecret(jwtAuth.SigningSecret, jwtAuth.SecretKey), nil
-	}, parseOpts...)
-
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid or expired token")
+	token, authErr := jwtAuth.authenticate(c)
+	if authErr != nil {
+		return nil, authErr
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		return claims, nil
 	}
 	return nil, errors.New("invalid claims type")
+}
+
+// jwtAuthError is a failed JWT authentication or authorization check.
+type jwtAuthError struct {
+	status  int
+	message string
+	logMsg  string
+	err     error
+	hook    bool
+}
+
+func (e *jwtAuthError) Error() string { return e.message }
+
+func (e *jwtAuthError) Unwrap() error { return e.err }
+
+func (jwtAuth *JWTAuth) authenticate(c *Context) (*jwt.Token, *jwtAuthError) {
+	fail := func(status int, message, logMsg string, err error) *jwtAuthError {
+		return &jwtAuthError{status: status, message: message, logMsg: logMsg, err: err, hook: true}
+	}
+
+	tokenStr, err := jwtAuth.extractToken(c)
+	if err != nil || tokenStr == "" {
+		return nil, fail(http.StatusUnauthorized, "Missing or invalid token", "Failed to extract token", err)
+	}
+
+	keyFunc, err := jwtAuth.resolveKeyFunc()
+	if err != nil {
+		authErr := fail(http.StatusUnauthorized, "Invalid token", "Failed to resolve key function", err)
+		authErr.hook = false
+		return nil, authErr
+	}
+
+	token, err := jwt.Parse(tokenStr, keyFunc, jwtAuth.parserOptions(jwtAuth.validMethods())...)
+	if err != nil || !token.Valid {
+		return nil, fail(http.StatusUnauthorized, "Invalid or expired token", "Failed to validate token", err)
+	}
+
+	// If claims expression is configured, validate the claims
+	if jwtAuth.ClaimsExpression != "" {
+		valid, err := jwtAuth.validateJWTClaims(token)
+		if err != nil {
+			return nil, fail(http.StatusUnauthorized, "failed to validate authentication permissions",
+				"Failed to validate JWT claims expression", err)
+		}
+		if !valid {
+			return nil, fail(http.StatusForbidden, "Insufficient permissions",
+				"JWT claims did not meet required expression", nil)
+		}
+	}
+	// If custom claims validation function is provided, use it
+	if jwtAuth.ValidateClaims != nil {
+		if err = jwtAuth.ValidateClaims(c, token.Claims); err != nil {
+			return nil, fail(http.StatusForbidden, "Insufficient permissions", "Failed to validate JWT claims", err)
+		}
+	}
+	// If ValidateRole is configured, validate the role claim
+	if jwtAuth.ValidateRole != nil {
+		if err = jwtAuth.ValidateRole(token.Claims); err != nil {
+			return nil, fail(http.StatusForbidden, "Insufficient permissions", "Failed to validate JWT role", err)
+		}
+	}
+	return token, nil
+}
+
+// validMethods returns the signing algorithms accepted for this configuration.
+func (jwtAuth *JWTAuth) validMethods() []string {
+	if len(jwtAuth.Algorithms) > 0 {
+		return jwtAuth.Algorithms
+	}
+	if jwtAuth.Algo != "" {
+		return []string{jwtAuth.Algo}
+	}
+	return jwtAlgo
 }
 
 // parserOptions builds the jwt.Parser options for this configuration.
@@ -168,9 +233,6 @@ func (jwtAuth *JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 				return key, nil
 			}
 
-			// An unknown kid usually means the issuer rotated keys, so try
-			// once more with a fresh set. The refresh is rate-limited, so a
-			// stream of invented kids cannot drive outbound traffic.
 			if refreshed, ok := jwksRefresh(jwtAuth.JwksUrl); ok {
 				return refreshed.getKey(kid)
 			}
@@ -178,8 +240,7 @@ func (jwtAuth *JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 		}, nil
 	}
 
-	secret := signingSecret(jwtAuth.SigningSecret, jwtAuth.SecretKey)
-	if secret != nil {
+	if secret := signingSecret(jwtAuth.SigningSecret, jwtAuth.SecretKey); len(secret) != 0 {
 		return func(token *jwt.Token) (interface{}, error) {
 			return secret, nil
 		}, nil
@@ -202,12 +263,16 @@ func (jwtAuth *JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 	return nil, fmt.Errorf("no JWT secret, RSA key, or JWKS URL configured")
 }
 
+// signingSecret returns the configured HMAC key, preferring SigningSecret over
+// the legacy SecretKey, or nil when neither is set.
 func signingSecret(signingSecret, old []byte) []byte {
-	if signingSecret != nil {
+	if len(signingSecret) != 0 {
 		return signingSecret
 	}
-	return old
-
+	if len(old) != 0 {
+		return old
+	}
+	return nil
 }
 
 var (
@@ -216,12 +281,6 @@ var (
 )
 
 // compileClaimsExpression parses expr, reusing the result across calls.
-//
-// The cache lives here rather than on JWTAuth because a single *JWTAuth is
-// shared by every concurrent request: caching the compiled form on the struct
-// meant an unsynchronised check-then-write from many goroutines at once, in
-// the middle of an authorization decision. A parsed Expression is immutable,
-// so one compiled form can be shared by every caller using that expression.
 func compileClaimsExpression(expr string) (Expression, error) {
 	claimsExprMu.Lock()
 	defer claimsExprMu.Unlock()

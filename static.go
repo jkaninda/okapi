@@ -46,15 +46,19 @@ func (n noDirListing) Open(name string) (http.File, error) {
 
 	stat, err := f.Stat()
 	if err != nil {
+		_ = f.Close()
 		return nil, err
 	}
 
 	// If it's a directory and has no index.html, block it
 	if stat.IsDir() {
-		_, err := n.fs.Open(path.Join(name, "index.html"))
+		index, err := n.fs.Open(path.Join(name, "index.html"))
 		if err != nil {
+			_ = f.Close()
 			return nil, fs.ErrNotExist
 		}
+		// Only its existence matters; close the probe handle
+		_ = index.Close()
 	}
 	return f, nil
 }

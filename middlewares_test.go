@@ -25,9 +25,14 @@
 package okapi
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -205,6 +210,113 @@ func TestJWTAuth_ContextKeyStoresClaims(t *testing.T) {
 		ExpectBodyContains(`"sub":"alice"`)
 }
 
+// serveJWTLogged runs req through the JWT middleware on an app whose logger
+// writes to a buffer, and returns the response and everything logged.
+func serveJWTLogged(auth *JWTAuth, req *http.Request) (*httptest.ResponseRecorder, string) {
+	var logs bytes.Buffer
+	app := New(WithLogger(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))))
+	app.Use(auth.Middleware)
+	app.Get("/probe", func(c *Context) error { return c.String(http.StatusOK, "OK") })
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	return rec, logs.String()
+}
+
+// TestJWTMiddleware_DoesNotLeakInternalErrors guards against auth failures
+// writing the underlying error into the response: clients were told exactly
+// why a token was rejected, down to claim names and a JWKS network error
+// naming an internal host. The cause belongs in the server log only, and the
+// token itself belongs in neither.
+func TestJWTMiddleware_DoesNotLeakInternalErrors(t *testing.T) {
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	exp := time.Now().Add(time.Hour).Unix()
+	valid := func() jwt.MapClaims { return jwt.MapClaims{"sub": "alice", "exp": exp} }
+
+	tests := []struct {
+		name       string
+		auth       *JWTAuth
+		token      string
+		wantStatus int
+		wantBody   string   // the top-level message is still sent
+		causes     []string // must be logged, and never sent
+	}{
+		{
+			name:       "expired token",
+			auth:       &JWTAuth{SigningSecret: jwtTestSecret},
+			token:      signHMACToken(t, jwt.MapClaims{"sub": "alice", "exp": time.Now().Add(-time.Hour).Unix()}),
+			wantStatus: http.StatusUnauthorized,
+			wantBody:   "Invalid or expired token",
+			causes:     []string{"token is expired"},
+		},
+		{
+			name:       "claims expression references a missing claim",
+			auth:       &JWTAuth{SigningSecret: jwtTestSecret, ClaimsExpression: "Equals(`internal_clearance`, `top`)"},
+			token:      signHMACToken(t, valid()),
+			wantStatus: http.StatusUnauthorized,
+			wantBody:   "failed to validate authentication permissions",
+			causes:     []string{"internal_clearance", "not found"},
+		},
+		{
+			name:       "JWKS endpoint unreachable",
+			auth:       &JWTAuth{JwksUrl: "http://127.0.0.1:1/internal-idp/jwks.json"},
+			token:      signRSAToken(t, rsaKey, valid(), "k1"),
+			wantStatus: http.StatusUnauthorized,
+			wantBody:   "Invalid or expired token",
+			causes:     []string{"127.0.0.1:1", "internal-idp"},
+		},
+		{
+			name: "ValidateRole rejects",
+			auth: &JWTAuth{
+				SigningSecret: jwtTestSecret,
+				ValidateRole:  func(jwt.Claims) error { return errors.New("rule payroll-admins-only") },
+			},
+			token:      signHMACToken(t, valid()),
+			wantStatus: http.StatusForbidden,
+			wantBody:   "Insufficient permissions",
+			causes:     []string{"payroll-admins-only"},
+		},
+		{
+			name:       "no key configured",
+			auth:       &JWTAuth{},
+			token:      signHMACToken(t, valid()),
+			wantStatus: http.StatusUnauthorized,
+			wantBody:   "Invalid token",
+			causes:     []string{"no JWT secret"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+			req.Header.Set("Authorization", "Bearer "+tt.token)
+			rec, logs := serveJWTLogged(tt.auth, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			body := rec.Body.String()
+			if !strings.Contains(body, tt.wantBody) {
+				t.Errorf("body = %s, want it to contain %q", body, tt.wantBody)
+			}
+			for _, cause := range tt.causes {
+				if strings.Contains(body, cause) {
+					t.Errorf("response leaks %q: %s", cause, body)
+				}
+				if !strings.Contains(logs, cause) {
+					t.Errorf("log does not record the cause %q:\n%s", cause, logs)
+				}
+			}
+			if strings.Contains(logs, tt.token) {
+				t.Error("the token was written to the log")
+			}
+		})
+	}
+}
+
 func TestJWTResolveKeyFunc_NilJwksFile(t *testing.T) {
 	t.Parallel()
 
@@ -327,6 +439,29 @@ func TestBasicAuthMiddleware_DeprecatedDelegate(t *testing.T) {
 		SetBasicAuth("u", "p").
 		ExpectStatusOK().
 		ExpectBodyContains("u")
+}
+
+// TestBasicAuth_EmptyCredentialsNeverAuthenticate guards against an unset
+// Username or Password admitting requests: ConstantTimeCompare reports "" and
+// "" as equal, so empty Basic credentials matched an empty configuration.
+func TestBasicAuth_EmptyCredentialsNeverAuthenticate(t *testing.T) {
+	configs := []BasicAuth{{}, {Username: "u"}, {Password: "p"}}
+	attempts := [][2]string{{"", ""}, {"u", ""}, {"", "p"}, {"u", "p"}}
+
+	for _, auth := range configs {
+		ts := NewTestServer(t)
+		ts.Use(auth.Middleware)
+		ts.Get("/p", func(c *Context) error { return c.OK("ok") })
+
+		for _, creds := range attempts {
+			name := fmt.Sprintf("configured %q:%q, sent %q:%q", auth.Username, auth.Password, creds[0], creds[1])
+			t.Run(name, func(t *testing.T) {
+				okapitest.GET(t, ts.BaseURL+"/p").
+					SetBasicAuth(creds[0], creds[1]).
+					ExpectStatusUnauthorized()
+			})
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------

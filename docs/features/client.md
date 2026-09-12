@@ -201,7 +201,31 @@ Defaults when fields are zero:
 - `MaxAttempts <= 1` → no retries
 - `RetryOnStatus` nil → retries on `408`, `429`, `500`, `502`, `503`, `504`
 - `MaxDelay` zero → backoff doubles indefinitely
-- Transport errors (network failures) always retry while attempts remain
+- `ShouldRetry` nil → transport errors (network failures) also retry while attempts remain
+- `RetryNonIdempotent` false → only idempotent requests are retried (see below)
+
+When the last attempt still fails with a retryable status, that response is returned as is, so its status and body are available to the caller.
+
+### Idempotency
+
+Retrying a request that is not idempotent can repeat its side effects (a POST that charges a card runs twice). By default only these requests are retried, on retryable statuses and transport errors alike:
+
+- `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT` and `DELETE` requests
+- Requests of any method that carry an `Idempotency-Key` header
+
+Other requests (`POST`, `PATCH`, ...) are sent once and the first response or error is returned. Set `RetryNonIdempotent: true` to retry every method:
+
+```go
+c.Post("/charge").
+    Header("Idempotency-Key", orderID). // retried: the server can deduplicate
+    JSONBody(charge).
+    Do()
+
+client.RetryPolicy{
+    MaxAttempts:        3,
+    RetryNonIdempotent: true, // retry POST/PATCH too
+}
+```
 
 Custom retry predicate:
 
@@ -215,7 +239,9 @@ client.RetryPolicy{
 }
 ```
 
-Request bodies are buffered once and rewound between attempts, so retries work for POST/PUT/PATCH out of the box. Backoff is interrupted when the request context is cancelled.
+`ShouldRetry` replaces both `RetryOnStatus` and the default retry on transport errors. It is only consulted for requests that pass the idempotency check above: it cannot make a `POST` retry unless `RetryNonIdempotent` is set or the request carries an `Idempotency-Key` header.
+
+Request bodies are buffered once and rewound between attempts, so retried requests resend the same body. Backoff is interrupted when the request context is cancelled.
 
 ## Errors
 

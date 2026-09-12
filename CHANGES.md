@@ -56,6 +56,52 @@
   with no revocation path. `jwt.WithExpirationRequired()` is now passed by default, for
   both the middleware and `ValidateToken`. Issuers that deliberately mint non-expiring
   tokens can set the new `JWTAuth.AllowMissingExpiry`.
+- **Authentication bypasses are closed.** An empty but non-nil `SigningSecret`, such as
+  `[]byte(os.Getenv("JWT_SECRET"))` with the variable unset, configured HMAC with an empty
+  key, so anyone could forge tokens; a zero-length secret now counts as unset.
+  `JWTAuth.ValidateToken` accepted HMAC tokens signed with an empty key whenever the
+  configuration used `RsaKey`, `JwksUrl` or `JwksFile`, and skipped `Audience`, `Issuer`,
+  the algorithm allow-list and `ClaimsExpression`; it now runs exactly the middleware's
+  checks. `BasicAuth` with an empty `Username` or `Password` admitted any request sending
+  empty credentials; it now rejects every request and logs the misconfiguration.
+- **Claims expressions no longer ignore what they cannot parse.** `ParseExpression`
+  stopped at the first complete call, so ``Equals(`email_verified`, `true`) and
+  OneOf(`role`, `admin`)`` checked only the first half and granted access. Trailing input
+  is now a parse error, parse errors deny the request, and backtick values may contain `)`.
+- **Group middleware applies to every route in the group.** `Group.Register` called the
+  router directly and skipped the group's middlewares, including authentication, as well
+  as the definition's documentation fields. `Group.Use` did not cover routes registered
+  before it, and two groups built from the same middleware slice could run each other's
+  middlewares. Group middlewares and `Group.Disable` are now resolved when a request is
+  dispatched, through every parent group.
+- **`RealIP` with trusted proxies no longer returns a client-controlled address.** It
+  returned the leftmost `X-Forwarded-For` entry, which the client writes and proxies
+  append to. It now walks the header from the right and returns the first address that
+  is not a trusted proxy. A `WithTrustedProxies` list containing an invalid entry trusted
+  every peer; it now trusts none and logs an error.
+- **`WithTLS` takes effect.** Its configuration was stored and never read, so the server
+  ran plain HTTP.
+- **Errors returned by handlers are no longer sent to clients.** They were written as a
+  `text/plain` 500 containing `err.Error()`, bypassing the configured `ErrorHandler`. They
+  are now logged and answered through the `ErrorHandler` with a generic message. The JWT
+  middleware likewise stopped putting token-parsing, claims-expression and JWKS network
+  errors into the response `details`, and no longer logs the token.
+- **Form and multipart bodies honour the request-body cap.** They were parsed from the raw
+  body, so `WithMaxRequestBody` and the 8 MB default did not apply and large uploads
+  spilled to disk without limit.
+- **SSE data treats a lone `\r` as a line end**, as browsers do, so relayed text can no
+  longer inject `id:`/`event:` fields or split an event.
+- **Crashes and resource leaks on reachable inputs are fixed.** A recursive type in a
+  documented request or response overflowed the stack at route registration. A
+  `uniqueItems` slice of JSON objects, a `Respond` struct with an unexported field, `Any`,
+  and an explicit OPTIONS route with CORS enabled all panicked. `SSEStream` spun writing
+  empty events once its channel closed. `noDirListing` leaked file descriptors, and
+  `StaticFS` served directory listings.
+- **JWKS refreshes no longer storm a failing identity provider.** Once a cached set
+  expired, every request refetched, serialised behind a 5s timeout. Refreshes are now
+  rate-limited whether or not keys are cached, run one at a time without blocking requests
+  that have a usable set, and an expired set is served for up to 15 minutes while the
+  endpoint fails.
 
 ### Features
 
@@ -68,6 +114,9 @@
   the two new defaults described above.
 - **`Substring(field, val...)`** is a new claims-expression function, carrying the
   substring behaviour `Contains` used to have for a single value.
+- **`RouteDefinition.Disabled`** registers a route disabled, as `Route.Disable()` does: it
+  answers `404 Not Found` and is left out of the OpenAPI document. It is read once, at
+  registration, so it suits configuration and feature flags read at startup.
 
 ### Fixes
 
@@ -91,6 +140,30 @@
   unchecked. Both options are now only applied when the field is set — which is what
   their "Optional" documentation always claimed, and what the documented HS256 starter
   example needs in order to work at all.
+- **Graceful shutdown drains in-flight requests.** The base context was cancelled before
+  `http.Server.Shutdown`, so every handler using `c.Request().Context()` (a database
+  query, an outbound call) failed on every deploy. Requests are now drained first and
+  their contexts cancelled once draining finishes or the shutdown context expires;
+  `SSEStream` and `SSEStreamWithOptions` return when shutdown begins.
+- **`WithServer` keeps the server's timeouts.** `With` overwrote them with Okapi's own,
+  mostly zero, values. Okapi's defaults now only fill fields that are zero.
+- **`Start` and `Stop` no longer race** when called from different goroutines, as
+  `okapicli.RunServer` does. `RunServer` also releases its signal handler when it returns,
+  so SIGINT and SIGTERM terminate a process whose server failed to start.
+- **Binding reports what went wrong.** Decode errors from JSON, XML, YAML and protobuf
+  bodies were discarded: malformed JSON surfaced as `field X is required`, and a mistyped
+  field bound as its zero value. They are now returned, wrapping the decoder's error, or
+  `*http.MaxBytesError` for a body over the cap.
+- **Binding sources have a fixed precedence.** Flat structs read their tag sources from a
+  map, so which of a query and a header value won changed from request to request, and in
+  `Body`-style structs an absent path parameter blanked a query value. Both now take the
+  first non-empty value in the order param, path, query, form (flat structs), header,
+  cookie.
+- **`client`: exhausted retries return the last response intact.** Its body had already
+  been drained and closed, so callers got `read on closed response body` instead of the
+  status and error body.
+- **OpenAPI documents `Any` routes** under get, post, put, patch and delete, and leaves out
+  routes whose group is disabled.
 
 ### Breaking Changes
 
@@ -115,6 +188,51 @@
   `BodyLimit` raises the ceiling.
 - **`http.Server` now ships with a 10s `ReadHeaderTimeout` and a 120s `IdleTimeout`.**
   Set them to zero explicitly to restore unlimited behaviour.
+- **The request body is detected only by a top-level field named `Body`.** A field tagged
+  `json:"body"` under another name is now bound as ordinary payload data. Rename such
+  fields to `Body`. Validation tags now also apply through pointer fields (`*string`,
+  `*int`, …); a nil pointer skips value checks but still fails `required`.
+- **Malformed, mistyped or over-cap request bodies now fail `Bind`** instead of binding
+  partially and returning nil. An empty body is still accepted.
+- **Multipart and url-encoded bodies are limited by `WithMaxRequestBody` (8 MB by default)
+  or `BodyLimit`.** Applications accepting larger uploads must raise the cap. After a bind
+  or form call, `c.Request().Body` is the capped reader.
+- **Binding precedence changed for fields with several source tags:** the first non-empty
+  value of param, path, query, form, header, cookie wins. In `Body`-style structs a
+  cookie no longer beats the query, and a path tag no longer wins when the segment is
+  empty.
+- **Errors returned by handlers no longer reach the client.** The response is the
+  `ErrorHandler`'s 500 with the message `Internal Server Error` and no details, and the
+  error is logged. Respond with the `Abort*` helpers to choose the status and message.
+- **Group middlewares and `Group.Disable` now apply to routes registered earlier and to
+  subgroups created earlier.** `Group.Register` applies the group's middlewares, and a
+  definition that names a `Group` is registered on that group, as `RegisterRoutes` does.
+- **`JWTAuth.ValidateToken` enforces the middleware's full configuration** (`Audience`,
+  `Issuer`, algorithms, `ClaimsExpression`, `ValidateClaims`, `ValidateRole`), accepts
+  RSA- and JWKS-signed tokens, and returns the middleware's error messages.
+- **An empty `SigningSecret`, or `BasicAuth` with an empty username or password, rejects
+  every request.** A claims expression with unparsed trailing input denies every request.
+- **JWT error responses repeat the message in `details`** (or the problem-detail `detail`)
+  instead of the internal error.
+- **`WithTrustedProxies` with an invalid entry trusts no proxy**, so `RealIP` returns the
+  connection address until the list is corrected. With a valid list, `RealIP` returns the
+  rightmost untrusted `X-Forwarded-For` address rather than the leftmost.
+- **Shutdown drains before it cancels.** Handlers see `c.Request().Context()` cancelled
+  only when the shutdown context expires, and `Stop()` without a deadline waits for
+  in-flight requests to finish. `SSEStream` and `SSEStreamWithOptions` return nil when
+  shutdown begins.
+- **`WithTLS` makes the server serve HTTPS.** Applications that set it without usable
+  certificates now fail to start instead of silently serving plain HTTP.
+- **A server passed through `WithServer` keeps its non-zero timeouts**, and its zero
+  `ReadHeaderTimeout` and `IdleTimeout` receive the 10s and 120s defaults.
+- **`client` retry policies no longer retry non-idempotent requests** (POST, PATCH, …)
+  unless the request carries an `Idempotency-Key` header or `RetryNonIdempotent` is set;
+  a custom `ShouldRetry` no longer overrides this.
+- **`okapicli.RunServer` treats a zero `ShutdownTimeout` as 30s** and no longer writes
+  default `Signals` into the caller's `RunOptions`.
+- **OpenAPI:** a route whose method the specification cannot represent (TRACE, custom
+  verbs) is omitted instead of producing an empty path item, and recursive types are
+  emitted as `$ref`s to their component.
 
 ## v0.10.0
 

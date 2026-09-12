@@ -73,19 +73,24 @@ func (c *Context) bindStruct(input any) error {
 	return nil
 }
 
-// extractAndSetField extracts a field's value from request sources (headers, query, cookies, params, body)
-// and assigns it to the struct field.
+// extractAndSetField extracts a field's value from request sources (params, query, headers, cookies, body)
+// and assigns it to the struct field. For a field tagged with several sources, the first non-empty value
+// wins, in the order param, path, query, header, cookie.
 func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField) error {
 	var raw string
 	var rawSlice []string
+	found := func() bool { return raw != "" || len(rawSlice) > 0 }
 
-	// Header
-	if key := sf.Tag.Get(tagHeader); key != "" {
-		raw = c.Header(key)
+	// Path / Param
+	if key := sf.Tag.Get(tagParam); key != "" {
+		raw = c.Param(key)
+	}
+	if key := sf.Tag.Get(tagPath); key != "" && !found() {
+		raw = c.Param(key)
 	}
 
 	// Query - supports slices and comma-separated values
-	if key := sf.Tag.Get(tagQuery); key != "" {
+	if key := sf.Tag.Get(tagQuery); key != "" && !found() {
 		if field.Kind() == reflect.Slice {
 			rawSlice = c.QueryArray(key)
 			if len(rawSlice) == 1 && strings.Contains(rawSlice[0], ",") {
@@ -96,19 +101,16 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 		}
 	}
 
+	// Header
+	if key := sf.Tag.Get(tagHeader); key != "" && !found() {
+		raw = c.Header(key)
+	}
+
 	// Cookie
-	if key := sf.Tag.Get(tagCookie); key != "" {
+	if key := sf.Tag.Get(tagCookie); key != "" && !found() {
 		if cookie, err := c.Cookie(key); err == nil {
 			raw = cookie
 		}
-	}
-
-	// Path / Param
-	if key := sf.Tag.Get(tagPath); key != "" {
-		raw = c.Param(key)
-	}
-	if key := sf.Tag.Get(tagParam); key != "" {
-		raw = c.Param(key)
 	}
 
 	// Body binding (special case)
@@ -1306,13 +1308,27 @@ func checkMultipleOf(field reflect.Value, tag string) error {
 }
 func checkUniqueItems(field reflect.Value) error {
 	if field.Kind() == reflect.Slice {
+		// Comparable elements are tracked in a set. The rest, such as the maps
+		// and slices a []any decodes into, would panic as map keys, so they are
+		// compared with reflect.DeepEqual instead.
 		seen := make(map[interface{}]bool)
+		var others []interface{}
 		for i := 0; i < field.Len(); i++ {
-			item := field.Index(i).Interface()
-			if seen[item] {
-				return fmt.Errorf("slice contains duplicate item: %v", item)
+			elem := field.Index(i)
+			item := elem.Interface()
+			if elem.Comparable() {
+				if seen[item] {
+					return fmt.Errorf("slice contains duplicate item: %v", item)
+				}
+				seen[item] = true
+				continue
 			}
-			seen[item] = true
+			for _, prev := range others {
+				if reflect.DeepEqual(prev, item) {
+					return fmt.Errorf("slice contains duplicate item: %v", item)
+				}
+			}
+			others = append(others, item)
 		}
 	}
 	return nil

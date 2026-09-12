@@ -39,6 +39,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	goutils "github.com/jkaninda/go-utils"
+	"github.com/jkaninda/njia"
 )
 
 const (
@@ -982,7 +983,7 @@ func (o *Okapi) buildOpenAPISpec() {
 	// Process all registered routes
 	for _, r := range o.routes {
 		// If route is disabled ignore it
-		if r.disabled || r.hidden {
+		if r.isDisabled() || r.hidden {
 			continue
 		}
 		// Auto-extract path parameters if none are defined
@@ -997,29 +998,25 @@ func (o *Okapi) buildOpenAPISpec() {
 		item := spec.Paths.Value(r.Path)
 		if item == nil {
 			item = &openapi3.PathItem{}
+		}
+
+		var added bool
+		if r.Method == njia.MethodAny {
+			added = setAnyMethodOperations(item, func() *openapi3.Operation {
+				return o.buildOperation(spec, r, schemaRegistry)
+			})
+		} else {
+			// Assign operation to correct HTTP verb
+			added = setOperation(item, r.Method, o.buildOperation(spec, r, schemaRegistry))
+		}
+		// Never document a path without operations
+		if added {
 			spec.Paths.Set(r.Path, item)
 		}
-
-		op := o.buildOperation(spec, r, schemaRegistry)
-
-		// Assign operation to correct HTTP verb
-		switch r.Method {
-		case methodGet:
-			item.Get = op
-		case methodPost:
-			item.Post = op
-		case methodPut:
-			item.Put = op
-		case methodDelete:
-			item.Delete = op
-		case methodPatch:
-			item.Patch = op
-		case methodHead:
-			item.Head = op
-		case methodOptions:
-			item.Options = op
-		}
 	}
+
+	// Point references to recursive types at their components
+	o.resolveRecursiveRefs(spec, schemaRegistry)
 
 	spec.Tags = o.collectRootTags()
 
@@ -1151,26 +1148,68 @@ func (o *Okapi) buildWebhooks(spec *openapi3.T) {
 			item = &openapi3.PathItem{}
 			spec.Webhooks[r.Name] = item
 		}
+		if r.Method == njia.MethodAny {
+			setAnyMethodOperations(item, func() *openapi3.Operation {
+				return o.buildOperation(spec, r, registry)
+			})
+			continue
+		}
 		op := o.buildOperation(spec, r, registry)
-		switch r.Method {
-		case methodGet:
-			item.Get = op
-		case methodPost:
-			item.Post = op
-		case methodPut:
-			item.Put = op
-		case methodDelete:
-			item.Delete = op
-		case methodPatch:
-			item.Patch = op
-		case methodHead:
-			item.Head = op
-		case methodOptions:
-			item.Options = op
-		default:
+		if !setOperation(item, r.Method, op) {
 			item.Post = op
 		}
 	}
+	o.resolveRecursiveRefs(spec, registry)
+}
+
+// anyRouteMethods are the methods a route registered for any method
+// (njia.MethodAny) is documented under.
+var anyRouteMethods = []string{methodGet, methodPost, methodPut, methodPatch, methodDelete}
+
+// setOperation assigns op to the slot of item for method. It reports false,
+// leaving item unchanged, when the method has no slot.
+func setOperation(item *openapi3.PathItem, method string, op *openapi3.Operation) bool {
+	switch method {
+	case methodGet:
+		item.Get = op
+	case methodPost:
+		item.Post = op
+	case methodPut:
+		item.Put = op
+	case methodDelete:
+		item.Delete = op
+	case methodPatch:
+		item.Patch = op
+	case methodHead:
+		item.Head = op
+	case methodOptions:
+		item.Options = op
+	default:
+		return false
+	}
+	return true
+}
+
+// setAnyMethodOperations documents a route registered for any method under each
+// of anyRouteMethods, building one operation per method with build. A method
+// already documented by an explicitly registered route is left alone, as the
+// router prefers the explicit route too; an explicit route documented later
+// replaces the operation. The method is appended to operation IDs so they stay
+// unique. It reports whether an operation was added.
+func setAnyMethodOperations(item *openapi3.PathItem, build func() *openapi3.Operation) bool {
+	added := false
+	for _, method := range anyRouteMethods {
+		if item.GetOperation(method) != nil {
+			continue
+		}
+		op := build()
+		if op.OperationID != "" {
+			op.OperationID = fmt.Sprintf("%s-%s", op.OperationID, strings.ToLower(method))
+		}
+		setOperation(item, method, op)
+		added = true
+	}
+	return added
 }
 
 // transformSpecTo31 walks every schema reachable from spec and rewrites it to
@@ -1193,6 +1232,14 @@ func transformSchemaTo31(s *openapi3.Schema) {
 		if s.Type != nil && len(s.Type.Slice()) > 0 && !s.Type.Includes(openapi3.TypeNull) {
 			types := openapi3.Types(append(s.Type.Slice(), openapi3.TypeNull))
 			s.Type = &types
+		} else if (s.Type == nil || len(s.Type.Slice()) == 0) && len(s.AllOf) == 1 && len(s.AnyOf) == 0 {
+			// A nullable wrapped reference ({allOf: [$ref], nullable: true}) has
+			// no type to extend, so null becomes an alternative instead.
+			s.AnyOf = openapi3.SchemaRefs{
+				s.AllOf[0],
+				openapi3.NewSchemaRef("", &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeNull}}),
+			}
+			s.AllOf = nil
 		}
 		s.Nullable = false
 	}
@@ -1233,6 +1280,18 @@ func stripConstMarkers(spec *openapi3.T) {
 // document: component schemas, and the parameter/request/response schemas of
 // every path and webhook operation.
 func walkAllSchemas(spec *openapi3.T, fn func(*openapi3.Schema)) {
+	applied := make(map[*openapi3.Schema]bool)
+	walkAllSchemaRefs(spec, func(ref *openapi3.SchemaRef) {
+		if s := ref.Value; s != nil && !applied[s] {
+			applied[s] = true
+			fn(s)
+		}
+	})
+}
+
+// walkAllSchemaRefs applies fn to every schema reference reachable from the
+// document (see walkAllSchemas), descending into each schema once.
+func walkAllSchemaRefs(spec *openapi3.T, fn func(*openapi3.SchemaRef)) {
 	seen := make(map[*openapi3.Schema]bool)
 	if spec.Components != nil {
 		for _, ref := range spec.Components.Schemas {
@@ -1249,8 +1308,8 @@ func walkAllSchemas(spec *openapi3.T, fn func(*openapi3.Schema)) {
 	}
 }
 
-// walkPathItemSchemas applies fn to the schemas of every operation on item.
-func walkPathItemSchemas(item *openapi3.PathItem, seen map[*openapi3.Schema]bool, fn func(*openapi3.Schema)) {
+// walkPathItemSchemas applies fn to the schema references of every operation on item.
+func walkPathItemSchemas(item *openapi3.PathItem, seen map[*openapi3.Schema]bool, fn func(*openapi3.SchemaRef)) {
 	if item == nil {
 		return
 	}
@@ -1285,17 +1344,18 @@ func walkPathItemSchemas(item *openapi3.PathItem, seen map[*openapi3.Schema]bool
 	}
 }
 
-// walkSchemaRef applies fn to a schema and all of its descendants once.
-func walkSchemaRef(ref *openapi3.SchemaRef, seen map[*openapi3.Schema]bool, fn func(*openapi3.Schema)) {
-	if ref == nil || ref.Value == nil {
+// walkSchemaRef applies fn to ref and every reference beneath it, descending
+// into each schema once.
+func walkSchemaRef(ref *openapi3.SchemaRef, seen map[*openapi3.Schema]bool, fn func(*openapi3.SchemaRef)) {
+	if ref == nil {
 		return
 	}
+	fn(ref)
 	s := ref.Value
-	if seen[s] {
+	if s == nil || seen[s] {
 		return
 	}
 	seen[s] = true
-	fn(s)
 	for _, child := range s.Properties {
 		walkSchemaRef(child, seen, fn)
 	}
@@ -1319,7 +1379,7 @@ func walkSchemaRef(ref *openapi3.SchemaRef, seen map[*openapi3.Schema]bool, fn f
 func (o *Okapi) collectRootTags() openapi3.Tags {
 	seen := make(map[string]*openapi3.Tag)
 	for _, r := range o.routes {
-		if r.disabled || r.hidden {
+		if r.isDisabled() || r.hidden {
 			continue
 		}
 		for _, t := range r.tagInfos {
@@ -1410,6 +1470,41 @@ func (o *Okapi) getOrCreateSchemaComponent(schema *openapi3.SchemaRef,
 
 	// Return a reference to the component
 	return &openapi3.SchemaRef{Ref: fmt.Sprintf("#/components/schemas/%s", componentName)}
+}
+
+const extOkapiRecursiveRef = "x-okapi-recursive-ref"
+
+func newRecursiveRef(t reflect.Type, target *openapi3.Schema) *openapi3.SchemaRef {
+	return &openapi3.SchemaRef{
+		Ref:   fmt.Sprintf("#/components/schemas/%s", t.Name()),
+		Value: &openapi3.Schema{Extensions: map[string]any{extOkapiRecursiveRef: target}},
+	}
+}
+
+func recursiveRefTarget(ref *openapi3.SchemaRef) *openapi3.Schema {
+	if ref.Ref == "" || ref.Value == nil {
+		return nil
+	}
+	target, _ := ref.Value.Extensions[extOkapiRecursiveRef].(*openapi3.Schema)
+	return target
+}
+
+func (o *Okapi) resolveRecursiveRefs(spec *openapi3.T, registry map[string]*SchemaInfo) {
+	seen := make(map[*openapi3.Schema]bool)
+	var resolve func(ref *openapi3.SchemaRef)
+	resolve = func(ref *openapi3.SchemaRef) {
+		target := recursiveRefTarget(ref)
+		if target == nil {
+			return
+		}
+		componentRef := o.getOrCreateSchemaComponent(&openapi3.SchemaRef{Value: target}, registry, spec.Components.Schemas)
+		if componentRef.Ref != "" {
+			ref.Ref = componentRef.Ref
+		}
+
+		walkSchemaRef(&openapi3.SchemaRef{Value: target}, seen, resolve)
+	}
+	walkAllSchemaRefs(spec, resolve)
 }
 
 // schemasEqual compares two schemas for structural equality
@@ -1534,7 +1629,7 @@ func reflectToSchemaWithInfo(v any) *SchemaInfo {
 		t = t.Elem()
 	}
 
-	schema := typeToSchemaWithInfo(t)
+	schema := typeToSchemaWithInfo(t, make(map[reflect.Type]*openapi3.Schema))
 
 	return &SchemaInfo{
 		Schema:   schema,
@@ -1543,8 +1638,9 @@ func reflectToSchemaWithInfo(v any) *SchemaInfo {
 	}
 }
 
-// typeToSchemaWithInfo converts a reflect.Type to an OpenAPI SchemaRef with proper naming
-func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
+// typeToSchemaWithInfo converts a reflect.Type to an OpenAPI SchemaRef with proper naming.
+// inProgress is passed on to structToSchemaWithInfo.
+func typeToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.Schema) *openapi3.SchemaRef {
 	switch t.Kind() {
 	case reflect.String:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())
@@ -1581,14 +1677,14 @@ func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 		return openapi3.NewSchemaRef("", openapi3.NewBoolSchema())
 
 	case reflect.Slice, reflect.Array:
-		elemSchema := typeToSchemaWithInfo(t.Elem())
+		elemSchema := typeToSchemaWithInfo(t.Elem(), inProgress)
 		schema := openapi3.NewArraySchema()
 		schema.Items = elemSchema
 		return openapi3.NewSchemaRef("", schema)
 
 	case reflect.Map:
 		if t.Key().Kind() == reflect.String {
-			valueSchema := typeToSchemaWithInfo(t.Elem())
+			valueSchema := typeToSchemaWithInfo(t.Elem(), inProgress)
 			schema := openapi3.NewObjectSchema()
 			schema.AdditionalProperties = openapi3.AdditionalProperties{
 				Schema: valueSchema,
@@ -1598,7 +1694,7 @@ func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 		return openapi3.NewSchemaRef("", openapi3.NewObjectSchema())
 
 	case reflect.Struct:
-		return structToSchemaWithInfo(t)
+		return structToSchemaWithInfo(t, inProgress)
 
 	case reflect.Interface:
 		return openapi3.NewSchemaRef("", &openapi3.Schema{})
@@ -1608,9 +1704,7 @@ func typeToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 	}
 }
 
-// structToSchemaWithInfo converts a struct type to an OpenAPI schema with proper naming
-func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
-	// Handle time.Time
+func structToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.Schema) *openapi3.SchemaRef {
 	if t == reflect.TypeOf(time.Time{}) {
 		schema := openapi3.NewStringSchema()
 		schema.Format = constDateTime
@@ -1622,9 +1716,16 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 		t = t.Elem()
 	}
 
+	if target, ok := inProgress[t]; ok {
+		return newRecursiveRef(t, target)
+	}
+
 	schema := openapi3.NewObjectSchema()
 	if t.Name() != "" {
 		schema.Title = t.Name()
+		// Anonymous structs cannot refer to themselves, so only named ones are tracked
+		inProgress[t] = schema
+		defer delete(inProgress, t)
 	}
 	required := make([]string, 0)
 
@@ -1646,7 +1747,7 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 			}
 
 			if embeddedType.Kind() == reflect.Struct {
-				embeddedRef := structToSchemaWithInfo(embeddedType)
+				embeddedRef := structToSchemaWithInfo(embeddedType, inProgress)
 				if embedded := embeddedRef.Value; embedded != nil && embedded.Properties != nil {
 					// Copy properties
 					for propName, propSchema := range embedded.Properties {
@@ -1680,7 +1781,12 @@ func structToSchemaWithInfo(t reflect.Type) *openapi3.SchemaRef {
 		}
 
 		// Create schema for the field type
-		fieldSchema := typeToSchemaWithInfo(fieldType)
+		fieldSchema := typeToSchemaWithInfo(fieldType, inProgress)
+		if fieldSchema.Ref != "" {
+			// A reference cannot carry sibling keywords in OpenAPI 3.0, so the
+			// field's own keywords (nullable, description, ...) go on a wrapper.
+			fieldSchema = openapi3.NewSchemaRef("", &openapi3.Schema{AllOf: openapi3.SchemaRefs{fieldSchema}})
+		}
 
 		// Pointer fields are nullable. Recorded here as the version-agnostic
 		// `nullable` flag (valid in 3.0); converted to a `["...","null"]` type

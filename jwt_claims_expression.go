@@ -285,12 +285,22 @@ type ExpressionParser struct {
 }
 
 func ParseExpression(input string) (Expression, error) {
+	input = strings.TrimSpace(input)
 	parser := &ExpressionParser{
-		input:  strings.TrimSpace(input),
+		input:  input,
 		pos:    0,
-		length: len(strings.TrimSpace(input)),
+		length: len(input),
 	}
-	return parser.parseOrExpression()
+	expr, err := parser.parseOrExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	parser.skipWhitespace()
+	if parser.pos < parser.length {
+		return nil, fmt.Errorf("unexpected input at position %d: %s", parser.pos, parser.input[parser.pos:])
+	}
+	return expr, nil
 }
 
 func (p *ExpressionParser) parseOrExpression() (Expression, error) {
@@ -377,9 +387,11 @@ func (p *ExpressionParser) parseUnaryExpression() (Expression, error) {
 func (p *ExpressionParser) parseFunction() (Expression, error) {
 	p.skipWhitespace()
 
-	// Match function patterns - updated to support multiple parameters
+	// Match function patterns - updated to support multiple parameters.
+	// Each value is matched as a whole backtick-quoted string, so a value
+	// containing ")" is not cut short at that parenthesis.
 	singleParamPattern := regexp.MustCompile(`^(Equals|Prefix)\s*\(\s*` + "`" + `([^` + "`" + `]+)` + "`" + `\s*,\s*` + "`" + `([^` + "`" + `]*)` + "`" + `\s*\)`)
-	multiParamPattern := regexp.MustCompile(`^(Contains|Substring|OneOf)\s*\(\s*` + "`" + `([^` + "`" + `]+)` + "`" + `\s*,\s*(.+?)\s*\)`)
+	multiParamPattern := regexp.MustCompile(`^(Contains|Substring|OneOf)\s*\(\s*` + "`" + `([^` + "`" + `]+)` + "`" + `((?:\s*,\s*` + "`" + `[^` + "`" + `]*` + "`" + `)+)\s*\)`)
 
 	if p.pos >= p.length {
 		return nil, fmt.Errorf("unexpected end of input")

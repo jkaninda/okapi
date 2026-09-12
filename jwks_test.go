@@ -34,8 +34,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -364,6 +366,177 @@ func TestJWKSFailureIsNotRetriedPerRequest(t *testing.T) {
 
 	if got := atomic.LoadInt64(&hits); got > 1 {
 		t.Errorf("failing endpoint hit %d times for 10 validations, want 1", got)
+	}
+}
+
+// backdateJWKS ages the cached entry for url by age, as if its last fetch had
+// happened that long ago.
+func backdateJWKS(url string, age time.Duration) {
+	e := jwksEntryFor(url)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.fetchedAt = e.fetchedAt.Add(-age)
+	e.lastFetch = e.lastFetch.Add(-age)
+}
+
+// waitFor polls cond until it holds, failing the test after a few seconds.
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met within 5s")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestJWKSServesStaleSetWhileEndpointFails guards against a refetch storm once
+// the TTL expires during an identity provider outage: the cooldown applied only
+// while nothing was cached, so every request refetched — serialised, with a 5s
+// timeout each — and authentication failed although a usable set was cached.
+func TestJWKSServesStaleSetWhileEndpointFails(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	set := &Jwks{Keys: []Jwk{rsaJWK(t, "k1", &key.PublicKey)}}
+
+	var hits atomic.Int64
+	var failing atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if failing.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(set)
+	}))
+	t.Cleanup(srv.Close)
+
+	const ttl = time.Minute
+	auth := &JWTAuth{JwksUrl: srv.URL, JwksCacheTTL: ttl}
+	keyFunc, err := auth.resolveKeyFunc()
+	if err != nil {
+		t.Fatalf("resolveKeyFunc: %v", err)
+	}
+	tok := &jwt.Token{Header: map[string]any{"kid": "k1"}}
+	if _, err := keyFunc(tok); err != nil {
+		t.Fatalf("initial fetch: %v", err)
+	}
+
+	failing.Store(true)
+	// Past the TTL, well within the grace period, and no recent fetch.
+	backdateJWKS(srv.URL, 2*ttl)
+
+	validate := func(phase string) {
+		t.Helper()
+		for i := 0; i < 20; i++ {
+			if _, err := keyFunc(tok); err != nil {
+				t.Fatalf("%s, validation %d: cached key set not served during an outage: %v", phase, i, err)
+			}
+		}
+	}
+	validate("while refreshing")
+	waitFor(t, func() bool { return hits.Load() >= 2 })
+	validate("after the refresh failed")
+
+	if got := hits.Load(); got != 2 {
+		t.Errorf("JWKS endpoint hit %d times, want 2 (the initial fetch and one refresh)", got)
+	}
+}
+
+// TestJWKSStaleSetIsBounded covers the other side of the grace period: a set
+// is not served indefinitely while the endpoint keeps failing, so a key the
+// issuer withdrew eventually stops verifying tokens.
+func TestJWKSStaleSetIsBounded(t *testing.T) {
+	var failing atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if failing.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"keys":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	const ttl = time.Minute
+	if _, err := jwksFromCache(srv.URL, ttl); err != nil {
+		t.Fatalf("initial fetch: %v", err)
+	}
+
+	failing.Store(true)
+	backdateJWKS(srv.URL, 24*time.Hour)
+
+	if keys, err := jwksFromCache(srv.URL, ttl); err == nil {
+		t.Fatalf("served a key set a day past its TTL: %+v", keys)
+	}
+	// Still refused while cooling down after that failure.
+	if keys, err := jwksFromCache(srv.URL, ttl); err == nil {
+		t.Errorf("served a key set a day past its TTL during the cooldown: %+v", keys)
+	}
+}
+
+// TestJWKSRequestsDoNotQueueBehindSlowRefresh guards against every request
+// waiting on the per-URL lock while a single refresh sits on a slow endpoint,
+// although a usable key set is already cached.
+func TestJWKSRequestsDoNotQueueBehindSlowRefresh(t *testing.T) {
+	var hits atomic.Int64
+	var slow atomic.Bool
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if slow.Load() {
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"keys":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(unblock) // runs before srv.Close
+
+	const ttl = time.Minute
+	if _, err := jwksFromCache(srv.URL, ttl); err != nil {
+		t.Fatalf("initial fetch: %v", err)
+	}
+
+	slow.Store(true)
+	backdateJWKS(srv.URL, 2*ttl)
+
+	// The first request after expiry starts the refresh, which now hangs.
+	go func() { _, _ = jwksFromCache(srv.URL, ttl) }()
+	waitFor(t, func() bool { return hits.Load() >= 2 })
+
+	const n = 16
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			_, err := jwksFromCache(srv.URL, ttl)
+			errs <- err
+		}()
+	}
+
+	deadline := time.After(2 * time.Second)
+	for i := 0; i < n; i++ {
+		select {
+		case err := <-errs:
+			if err != nil {
+				t.Errorf("request failed during a slow refresh: %v", err)
+			}
+		case <-deadline:
+			t.Fatalf("%d of %d requests still waiting on a slow JWKS refresh", n-i, n)
+		}
+	}
+
+	unblock()
+	if got := hits.Load(); got != 2 {
+		t.Errorf("JWKS endpoint hit %d times, want 2 (the initial fetch and one refresh)", got)
 	}
 }
 

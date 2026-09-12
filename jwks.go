@@ -30,6 +30,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -46,9 +47,19 @@ const (
 
 	// jwksRefreshCooldown bounds out-of-band fetches: an unknown kid may
 	// trigger at most one refresh per cooldown, and a failing endpoint is
-	// retried no more often than that. Without it an attacker inventing kids
-	// drives one outbound request per inbound request.
+	// retried no more often than that, whether or not an older key set is
+	// still cached. Without it an attacker inventing kids drives one outbound
+	// request per inbound request, and an identity provider outage turns every
+	// request into a fetch attempt.
 	jwksRefreshCooldown = time.Minute
+
+	// jwksStaleGrace is how long past its TTL a key set keeps being served
+	// while refreshes fail. It lets authentication ride out a brief identity
+	// provider outage, but it is bounded: a key the issuer has withdrawn must
+	// eventually stop verifying tokens even if the endpoint never recovers.
+	// With the default TTL, no set is trusted more than 30 minutes after it
+	// was fetched.
+	jwksStaleGrace = 15 * time.Minute
 
 	// jwksFetchTimeout bounds a single fetch. The default http.Client has no
 	// timeout, so a slow endpoint would pin request goroutines indefinitely.
@@ -110,15 +121,15 @@ func fetchJWKS(jwksURL string) (*Jwks, error) {
 	return &keySet, nil
 }
 
-// jwksEntry is one cached key set. Its mutex serialises fetches for a single
-// URL, so a burst of requests collapses into one outbound call rather than a
-// thundering herd, while other endpoints stay unblocked.
+var errJWKSUnavailable = errors.New("jwks key set unavailable")
+
 type jwksEntry struct {
 	mu        sync.Mutex
 	keys      *Jwks
-	err       error
-	fetchedAt time.Time
-	lastFetch time.Time
+	err       error         // cause of the latest fetch failure, cleared on success
+	fetchedAt time.Time     // when keys was fetched
+	lastFetch time.Time     // when the latest fetch started, successful or not
+	inflight  chan struct{} // non-nil while a fetch runs; closed when it completes
 }
 
 var (
@@ -152,46 +163,84 @@ func jwksFromCache(url string, ttl time.Duration) (*Jwks, error) {
 	if e.keys != nil && time.Since(e.fetchedAt) < ttl {
 		return e.keys, nil
 	}
-	return e.fetch(url)
+
+	done := e.inflight
+	if done == nil && time.Since(e.lastFetch) >= min(ttl, jwksRefreshCooldown) {
+		done = e.startFetch(url)
+	}
+	if e.keys != nil && time.Since(e.fetchedAt) < ttl+jwksStaleGrace {
+		return e.keys, nil
+	}
+	if done == nil {
+		// Cooling down after a failed fetch, with no set recent enough to serve.
+		return nil, e.failure()
+	}
+
+	e.await(done)
+	if e.err != nil || e.keys == nil {
+		return nil, e.failure()
+	}
+	return e.keys, nil
 }
 
-// jwksRefresh refetches when a kid is absent from the cached set, which
-// usually means the issuer rotated keys. It is rate-limited, so an attacker
-// presenting invented kids cannot turn inbound requests into outbound ones.
 func jwksRefresh(url string) (*Jwks, bool) {
 	e := jwksEntryFor(url)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if time.Since(e.lastFetch) < jwksRefreshCooldown {
+	done := e.inflight
+	if done == nil {
+		if time.Since(e.lastFetch) < jwksRefreshCooldown {
+
+			return e.keys, e.err == nil && e.keys != nil
+		}
+		done = e.startFetch(url)
+	}
+
+	e.await(done)
+	if e.err != nil || e.keys == nil {
 		return nil, false
 	}
-	keys, err := e.fetch(url)
-	if err != nil {
-		return nil, false
-	}
-	return keys, true
+	return e.keys, true
 }
 
-// fetch performs the outbound request. The caller must hold e.mu.
-//
-// Failures are cached for the cooldown so a down endpoint is not retried on
-// every request, and are returned rather than served from a stale key set: a
-// key that has been rotated away should stop working.
-func (e *jwksEntry) fetch(url string) (*Jwks, error) {
-	if e.keys == nil && e.err != nil && time.Since(e.lastFetch) < jwksRefreshCooldown {
-		return nil, e.err
-	}
-
+// startFetch performs the outbound request in the background and returns a
+// channel that is closed when it completes.
+func (e *jwksEntry) startFetch(url string) chan struct{} {
+	done := make(chan struct{})
+	e.inflight = done
 	e.lastFetch = time.Now()
-	keys, err := fetchJWKS(url)
-	if err != nil {
-		e.err = err
-		return nil, err
-	}
 
-	e.keys, e.fetchedAt, e.err = keys, time.Now(), nil
-	return keys, nil
+	go func() {
+		keys, err := fetchJWKS(url)
+
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if err != nil {
+			e.err = err
+		} else {
+			e.keys, e.fetchedAt, e.err = keys, time.Now(), nil
+		}
+		e.inflight = nil
+		close(done)
+	}()
+	return done
+}
+
+// await waits for the fetch behind done to complete.
+func (e *jwksEntry) await(done chan struct{}) {
+	e.mu.Unlock()
+	<-done
+	e.mu.Lock()
+}
+
+// failure returns the cause of the latest fetch failure. The caller must hold
+// e.mu.
+func (e *jwksEntry) failure() error {
+	if e.err != nil {
+		return e.err
+	}
+	return errJWKSUnavailable
 }
 
 func (j *Jwks) getKey(kid string) (interface{}, error) {
@@ -199,9 +248,7 @@ func (j *Jwks) getKey(kid string) (interface{}, error) {
 		if key.Kid != kid {
 			continue
 		}
-		// A key published for encryption must not be used to verify
-		// signatures. Keys that declare nothing are accepted, as "use" is
-		// optional in RFC 7517.
+
 		if key.Use != "" && key.Use != "sig" {
 			return nil, fmt.Errorf("jwk %q is published for %q, not signature verification", kid, key.Use)
 		}

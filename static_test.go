@@ -2,7 +2,9 @@ package okapi
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -331,5 +333,78 @@ func TestServeFileFromConfinesToRoot(t *testing.T) {
 		if rec := serve(name); strings.Contains(rec.Body.String(), "TOP-SECRET") {
 			t.Errorf("name %q escaped the root: %q", name, rec.Body.String())
 		}
+	}
+}
+
+// trackingFS counts the files opened through it that are still open.
+type trackingFS struct {
+	fs      http.FileSystem
+	statErr bool
+	open    int
+}
+
+func (t *trackingFS) Open(name string) (http.File, error) {
+	f, err := t.fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	t.open++
+	return &trackedFile{File: f, owner: t}, nil
+}
+
+type trackedFile struct {
+	http.File
+	owner  *trackingFS
+	closed bool
+}
+
+func (f *trackedFile) Close() error {
+	if !f.closed {
+		f.closed = true
+		f.owner.open--
+	}
+	return f.File.Close()
+}
+
+func (f *trackedFile) Stat() (fs.FileInfo, error) {
+	if f.owner.statErr {
+		return nil, errors.New("stat failed")
+	}
+	return f.File.Stat()
+}
+
+// TestNoDirListingClosesHandles covers the handles noDirListing opens while
+// deciding whether a path may be served: the directory handle of a rejected
+// path and the index.html probe were never closed.
+func TestNoDirListingClosesHandles(t *testing.T) {
+	dir := writeSPAFixture(t)
+
+	tests := []struct {
+		name    string
+		path    string
+		statErr bool
+		wantErr bool
+	}{
+		{"directory without index", "/assets", false, true},
+		{"directory with index", "/", false, false},
+		{"regular file", "/index.html", false, false},
+		{"missing file", "/missing.txt", false, true},
+		{"stat error", "/index.html", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := &trackingFS{fs: http.Dir(dir), statErr: tt.statErr}
+			f, err := noDirListing{fs: tracker}.Open(tt.path)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Open(%q) error = %v, wantErr %v", tt.path, err, tt.wantErr)
+			}
+			if f != nil {
+				_ = f.Close()
+			}
+			if tracker.open != 0 {
+				t.Errorf("Open(%q) left %d file handle(s) open", tt.path, tracker.open)
+			}
+		})
 	}
 }

@@ -66,6 +66,8 @@ if err := cli.RunServer(&okapicli.RunOptions{
 }
 ````
 
+Fields left at their zero value keep their defaults: `ShutdownTimeout` is 30 seconds and `Signals` is `SIGINT`, `SIGTERM`. The signal handler is released when `RunServer` returns, including when the server fails to start.
+
 ### Example CLI Output
 
 ```bash

@@ -49,10 +49,21 @@ type RetryPolicy struct {
 	// Defaults to 408, 429, 500, 502, 503, 504 when nil and MaxAttempts > 1.
 	RetryOnStatus []int
 
-	// ShouldRetry, if non-nil, is consulted in addition to RetryOnStatus.
-	// It receives the response (may be nil) and any transport error and
-	// returns true to retry. It overrides RetryOnStatus when set.
+	// ShouldRetry, if non-nil, decides whether a retry-eligible request is
+	// retried. It receives the response (may be nil) and any transport error
+	// and returns true to retry. It replaces RetryOnStatus and the default
+	// retry on transport errors when set. It is only consulted for requests
+	// that pass the idempotency check (see RetryNonIdempotent); for other
+	// requests the first response or error is returned as is.
 	ShouldRetry func(resp *http.Response, err error) bool
+
+	// RetryNonIdempotent allows retrying requests that are not idempotent.
+	// By default only GET, HEAD, OPTIONS, TRACE, PUT and DELETE requests, and
+	// requests carrying an Idempotency-Key header, are retried, on both
+	// retryable statuses and transport errors, so a POST or PATCH is never
+	// sent twice. Set it to true to retry every method, which may repeat
+	// side effects on the server.
+	RetryNonIdempotent bool
 }
 
 // defaultRetryStatuses is used when RetryPolicy.RetryOnStatus is nil.
@@ -68,6 +79,19 @@ var defaultRetryStatuses = []int{
 // enabled reports whether the policy will retry at all.
 func (p RetryPolicy) enabled() bool {
 	return p.MaxAttempts > 1
+}
+
+// canRetry reports whether req may be sent more than once under the policy.
+func (p RetryPolicy) canRetry(req *http.Request) bool {
+	if p.RetryNonIdempotent {
+		return true
+	}
+	switch req.Method {
+	case "", http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace,
+		http.MethodPut, http.MethodDelete:
+		return true
+	}
+	return req.Header.Get("Idempotency-Key") != ""
 }
 
 func (p RetryPolicy) shouldRetry(resp *http.Response, err error) bool {
@@ -115,7 +139,7 @@ func (p RetryPolicy) delay(attempt int) time.Duration {
 func retryMiddleware(policy RetryPolicy) Middleware {
 	return func(next RoundTripFunc) RoundTripFunc {
 		return func(req *http.Request) (*http.Response, error) {
-			if !policy.enabled() {
+			if !policy.enabled() || !policy.canRetry(req) {
 				return next(req)
 			}
 
@@ -149,10 +173,11 @@ func retryMiddleware(policy RetryPolicy) Middleware {
 				}
 
 				resp, err = next(req)
-				if !policy.shouldRetry(resp, err) {
+				// The last response is returned unread, even when retryable.
+				if attempt == policy.MaxAttempts || !policy.shouldRetry(resp, err) {
 					return resp, err
 				}
-				// Drain and close the previous response body before the next attempt.
+				// Drain and close this response body before the next attempt.
 				if resp != nil {
 					_, _ = io.Copy(io.Discard, resp.Body)
 					_ = resp.Body.Close()

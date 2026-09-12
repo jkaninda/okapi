@@ -103,6 +103,10 @@ type RouteDefinition struct {
 	Options []RouteOption
 	// Middleware registers one or more middleware functions to the Route. // Optional
 	Middlewares []Middleware
+	// Disabled registers the route disabled: it answers 404 Not Found and is left out of
+	// the OpenAPI documentation, as Route.Disable does. It is read once, at registration,
+	// so it suits configuration and feature flags read at startup. // Optional
+	Disabled bool
 }
 
 // RegisterRoutes registers a slice of RouteDefinition with the given Okapi instance.
@@ -239,5 +243,8 @@ func (r *RouteDefinition) attachDocOptions() {
 	}
 	if len(r.Tags) > 0 {
 		r.Options = append(r.Options, Tags(r.Tags...))
+	}
+	if r.Disabled {
+		r.Options = append(r.Options, disabledRoute())
 	}
 }

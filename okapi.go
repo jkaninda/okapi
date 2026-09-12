@@ -224,14 +224,6 @@ func disabledRoute() RouteOption {
 	}
 }
 
-// setDisabled sets the disabled state of the Route.
-// When disabled is true, the route returns 404 Not Found.
-// Returns the Route to allow method chaining.
-func (r *Route) setDisabled(disabled bool) *Route {
-	r.disabled = disabled
-	return r
-}
-
 // Deprecated marks the Route as deprecated.
 // Returns the Route to allow method chaining.
 func (r *Route) Deprecated() *Route {

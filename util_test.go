@@ -33,6 +33,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const ip = "198.51.100.7"
+
 func TestNormalizeRoutePath(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -146,7 +148,7 @@ func TestRealIPTrustedProxies(t *testing.T) {
 
 	t.Run("headers honoured from a trusted proxy", func(t *testing.T) {
 		got := realIP(newReq("10.1.2.3:4567", "198.51.100.7, 10.1.2.3", ""), trusted)
-		if got != "198.51.100.7" {
+		if got != ip {
 			t.Errorf("realIP = %q, want the forwarded client", got)
 		}
 	})
@@ -155,7 +157,7 @@ func TestRealIPTrustedProxies(t *testing.T) {
 		if got := realIP(newReq("203.0.113.9:1234", "", "127.0.0.1"), trusted); got != "203.0.113.9" {
 			t.Errorf("untrusted peer: realIP = %q", got)
 		}
-		if got := realIP(newReq("10.1.2.3:4567", "", "198.51.100.7"), trusted); got != "198.51.100.7" {
+		if got := realIP(newReq("10.1.2.3:4567", "", ip), trusted); got != ip {
 			t.Errorf("trusted proxy: realIP = %q", got)
 		}
 	})
@@ -165,10 +167,10 @@ func TestRealIPTrustedProxies(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parseCIDRs: %v", err)
 		}
-		if got := realIP(newReq("192.0.2.7:80", "198.51.100.7", ""), only); got != "198.51.100.7" {
+		if got := realIP(newReq("192.0.2.7:80", ip, ""), only); got != ip {
 			t.Errorf("realIP = %q, want the forwarded client", got)
 		}
-		if got := realIP(newReq("192.0.2.8:80", "198.51.100.7", ""), only); got != "192.0.2.8" {
+		if got := realIP(newReq("192.0.2.8:80", ip, ""), only); got != "192.0.2.8" {
 			t.Errorf("realIP = %q, want the connection address", got)
 		}
 	})

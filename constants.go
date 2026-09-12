@@ -27,7 +27,17 @@ package okapi
 import "net/http"
 
 const (
-	defaultMaxMemory       = 32 << 20 // 32 MB
+	defaultMaxMemory = 32 << 20 // 32 MB
+
+	// defaultReadHeaderTimeout bounds how long a client may take to send
+	// request headers, which is what a Slowloris client stretches out.
+	defaultReadHeaderTimeout = 10 // seconds
+	// defaultIdleTimeout bounds how long an idle keep-alive connection is held.
+	defaultIdleTimeout = 120 // seconds
+
+	// defaultMaxRequestBody caps the body the binders will read when no
+	// BodyLimit middleware is installed. Raise it with WithMaxRequestBody.
+	defaultMaxRequestBody  = 8 << 20 // 8 MB
 	constContentTypeHeader = "Content-Type"
 	constAcceptHeader      = "Accept"
 	constLocationHeader    = "Location"

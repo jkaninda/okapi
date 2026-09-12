@@ -27,10 +27,13 @@ package okapi
 import (
 	"bytes"
 	"embed"
+	"html/template"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-	"text/template"
 )
 
 //go:embed examples/template/views/*.html
@@ -556,4 +559,60 @@ func TestOkapiWithRendererMethods(t *testing.T) {
 			t.Error("Expected renderer to be set")
 		}
 	})
+}
+
+// TestTemplateEscapesHTML guards the renderer's use of html/template. With
+// text/template the same payload is written through verbatim, which turns any
+// handler that renders user input via c.Render into reflected XSS.
+func TestTemplateEscapesHTML(t *testing.T) {
+	dir := t.TempDir()
+	page := filepath.Join(dir, "page.html")
+	if err := os.WriteFile(page, []byte(`<h1>Hello {{.Name}}</h1>`), 0o600); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	tmpl, err := NewTemplateFromFiles(filepath.Join(dir, "*.html"))
+	if err != nil {
+		t.Fatalf("NewTemplateFromFiles: %v", err)
+	}
+
+	app := New().WithRenderer(tmpl)
+	app.Get("/hello", func(c *Context) error {
+		return c.Render(http.StatusOK, "page.html", map[string]any{"Name": c.Query("name")})
+	})
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/hello?name=<script>alert(1)</script>", nil))
+
+	body := rec.Body.String()
+	if strings.Contains(body, "<script>") {
+		t.Errorf("rendered payload unescaped: %s", body)
+	}
+	if !strings.Contains(body, "&lt;script&gt;") {
+		t.Errorf("expected escaped payload, got: %s", body)
+	}
+}
+
+// TestTemplateHTMLTypeOptsOutOfEscaping documents the escape hatch for
+// templates that must emit markup verbatim.
+func TestTemplateHTMLTypeOptsOutOfEscaping(t *testing.T) {
+	dir := t.TempDir()
+	page := filepath.Join(dir, "page.html")
+	if err := os.WriteFile(page, []byte(`<div>{{.Body}}</div>`), 0o600); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	tmpl, err := NewTemplateFromFiles(filepath.Join(dir, "*.html"))
+	if err != nil {
+		t.Fatalf("NewTemplateFromFiles: %v", err)
+	}
+
+	var buf bytes.Buffer
+	data := map[string]any{"Body": template.HTML("<b>bold</b>")}
+	if err := tmpl.Render(&buf, "page.html", data, nil); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(buf.String(), "<b>bold</b>") {
+		t.Errorf("template.HTML value was escaped: %s", buf.String())
+	}
 }

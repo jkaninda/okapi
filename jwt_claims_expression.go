@@ -26,9 +26,11 @@ package okapi
 
 import (
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
 	"regexp"
+	"slices"
 	"strings"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // Expression types for claims validation
@@ -101,18 +103,22 @@ func (p *PrefixExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
 	}
 }
 
-// ContainsExpr checks if claim contains substring or array contains value
+// ContainsExpr tests membership: the claim equals one of Values, or — when the
+// claim is an array — has an element equal to one of them.
+//
+// Matching is by equality at every arity. A single value used to fall back to
+// a substring test, so Contains(`role`, `admin`) was satisfied by
+// role="not-admin-at-all", "badmin" or "administrator-readonly". Use
+// SubstringExpr when a substring test is what you actually want.
 type ContainsExpr struct {
 	ClaimKey string
 	Values   []string
-	IsArray  bool
 }
 
 func Contains(claimKey string, values ...string) *ContainsExpr {
 	return &ContainsExpr{
 		ClaimKey: claimKey,
 		Values:   values,
-		IsArray:  len(values) > 1, // If multiple values, treat as array membership check
 	}
 }
 
@@ -121,51 +127,53 @@ func (c *ContainsExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	return matchClaim(value, func(s string) bool { return slices.Contains(c.Values, s) }), nil
+}
 
+type SubstringExpr struct {
+	ClaimKey string
+	Values   []string
+}
+
+func Substring(claimKey string, values ...string) *SubstringExpr {
+	return &SubstringExpr{
+		ClaimKey: claimKey,
+		Values:   values,
+	}
+}
+
+func (c *SubstringExpr) Evaluate(claims jwt.MapClaims) (bool, error) {
+	value, err := extractClaimValue(claims, c.ClaimKey)
+	if err != nil {
+		return false, err
+	}
+	return matchClaim(value, func(s string) bool {
+		for _, want := range c.Values {
+			if strings.Contains(s, want) {
+				return true
+			}
+		}
+		return false
+	}), nil
+}
+
+// matchClaim applies match to a claim value, descending into an array claim so
+// that a match on any element counts. Non-string scalars are formatted first,
+// preserving the behaviour of the expression functions for numeric and boolean
+// claims.
+func matchClaim(value any, match func(string) bool) bool {
 	switch v := value.(type) {
 	case string:
-		if c.IsArray {
-			for _, expected := range c.Values {
-				if v == expected {
-					return true, nil
-				}
-			}
-			return false, nil
-		} else {
-			return strings.Contains(v, c.Values[0]), nil
-		}
+		return match(v)
 	case []interface{}:
-		if c.IsArray {
-			for _, item := range v {
-				if str, ok := item.(string); ok {
-					for _, expected := range c.Values {
-						if str == expected {
-							return true, nil
-						}
-					}
-				}
+		for _, item := range v {
+			if str, ok := item.(string); ok && match(str) {
+				return true
 			}
-			return false, nil
-		} else {
-			for _, item := range v {
-				if str, ok := item.(string); ok && strings.Contains(str, c.Values[0]) {
-					return true, nil
-				}
-			}
-			return false, nil
 		}
+		return false
 	default:
-		str := fmt.Sprintf("%v", v)
-		if c.IsArray {
-			for _, expected := range c.Values {
-				if str == expected {
-					return true, nil
-				}
-			}
-			return false, nil
-		} else {
-			return strings.Contains(str, c.Values[0]), nil
-		}
+		return match(fmt.Sprintf("%v", v))
 	}
 }
 
@@ -371,7 +379,7 @@ func (p *ExpressionParser) parseFunction() (Expression, error) {
 
 	// Match function patterns - updated to support multiple parameters
 	singleParamPattern := regexp.MustCompile(`^(Equals|Prefix)\s*\(\s*` + "`" + `([^` + "`" + `]+)` + "`" + `\s*,\s*` + "`" + `([^` + "`" + `]*)` + "`" + `\s*\)`)
-	multiParamPattern := regexp.MustCompile(`^(Contains|OneOf)\s*\(\s*` + "`" + `([^` + "`" + `]+)` + "`" + `\s*,\s*(.+?)\s*\)`)
+	multiParamPattern := regexp.MustCompile(`^(Contains|Substring|OneOf)\s*\(\s*` + "`" + `([^` + "`" + `]+)` + "`" + `\s*,\s*(.+?)\s*\)`)
 
 	if p.pos >= p.length {
 		return nil, fmt.Errorf("unexpected end of input")
@@ -421,6 +429,8 @@ func (p *ExpressionParser) parseFunction() (Expression, error) {
 		switch funcName {
 		case "Contains":
 			return Contains(claimKey, params...), nil
+		case "Substring":
+			return Substring(claimKey, params...), nil
 		case "OneOf":
 			return OneOf(claimKey, params...), nil
 		default:

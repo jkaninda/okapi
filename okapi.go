@@ -74,10 +74,14 @@ type (
 		logger              *slog.Logger
 		renderer            Renderer
 		corsEnabled         bool
+		corsMiddleware      bool
 		cors                Cors
 		writeTimeout        int
 		readTimeout         int
 		idleTimeout         int
+		readHeaderTimeout   int
+		trustedProxies      []*net.IPNet
+		maxRequestBody      int64
 		optionsRegistered   map[string]bool
 		openapiSpec         *openapi3.T
 		openapiSpec31       *openapi3.T
@@ -356,11 +360,24 @@ func WithLogger(logger *slog.Logger) OptionFunc {
 	}
 }
 
-// WithCors returns an OptionFunc that configures CORS settings
+// WithCors returns an OptionFunc that configures CORS settings.
+//
+// It both registers the per-path OPTIONS preflight handler and installs
+// Cors.CORSHandler in the middleware chain, so actual responses carry
+// Access-Control-Allow-Origin too. Registering only the preflight handler —
+// as this option previously did — produces a preflight that says yes followed
+// by a response the browser blocks for having no CORS headers.
 func WithCors(cors Cors) OptionFunc {
 	return func(o *Okapi) {
 		o.corsEnabled = true
 		o.cors = cors
+
+		if !o.corsMiddleware {
+			o.corsMiddleware = true
+			// Read o.cors at call time so a later WithCors replaces the
+			// configuration rather than stacking a second handler.
+			o.Use(func(c *Context) error { return o.cors.CORSHandler(c) })
+		}
 	}
 }
 
@@ -377,6 +394,53 @@ func WithReadTimeout(t int) OptionFunc {
 	return func(o *Okapi) {
 		o.readTimeout = t
 		o.server.ReadTimeout = secondsToDuration(t)
+	}
+}
+
+// WithReadHeaderTimeout returns an OptionFunc that sets how long the server
+// waits for a request's headers. Zero means no limit.
+func WithReadHeaderTimeout(t int) OptionFunc {
+	return func(o *Okapi) {
+		o.readHeaderTimeout = t
+		o.server.ReadHeaderTimeout = secondsToDuration(t)
+	}
+}
+
+// WithTrustedProxies configures which peers may set the X-Forwarded-For and
+// X-Real-IP headers that RealIP reads.
+//
+// Entries are CIDR blocks ("10.0.0.0/8") or bare addresses ("192.0.2.7"). When
+// configured, those headers are honoured only for connections originating from
+// one of them, and ignored otherwise; RealIP then falls back to the connection
+// address. Passing no entries restores the default of trusting the headers
+// unconditionally, which is spoofable by any client.
+//
+// Invalid entries are ignored, with a warning, so a malformed configuration
+// cannot silently widen what is trusted.
+func WithTrustedProxies(cidrs ...string) OptionFunc {
+	return func(o *Okapi) {
+		if len(cidrs) == 0 {
+			o.trustedProxies = nil
+			return
+		}
+		networks, err := parseCIDRs(cidrs)
+		if err != nil {
+			o.logger.Warn("Invalid trusted proxy configuration", "error", err)
+			return
+		}
+		o.trustedProxies = networks
+	}
+}
+
+// WithMaxRequestBody sets the largest request body the binders will read when
+// no BodyLimit middleware is installed. Defaults to 8 MB; zero or negative
+// restores the default.
+//
+// BodyLimit, where installed, takes precedence: it has already bounded the
+// body by the time a binder runs.
+func WithMaxRequestBody(bytes int64) OptionFunc {
+	return func(o *Okapi) {
+		o.maxRequestBody = bytes
 	}
 }
 
@@ -521,6 +585,18 @@ func (o *Okapi) WithReadTimeout(seconds int) *Okapi {
 
 func (o *Okapi) WithIdleTimeout(seconds int) *Okapi {
 	return o.apply(WithIdleTimeout(seconds))
+}
+
+func (o *Okapi) WithReadHeaderTimeout(seconds int) *Okapi {
+	return o.apply(WithReadHeaderTimeout(seconds))
+}
+
+func (o *Okapi) WithTrustedProxies(cidrs ...string) *Okapi {
+	return o.apply(WithTrustedProxies(cidrs...))
+}
+
+func (o *Okapi) WithMaxRequestBody(bytes int64) *Okapi {
+	return o.apply(WithMaxRequestBody(bytes))
 }
 
 func (o *Okapi) WithStrictSlash(strict bool) *Okapi {
@@ -1011,7 +1087,19 @@ func (o *Okapi) Shutdown(server *http.Server, ctx ...context.Context) error {
 	return server.Shutdown(shutdownCtx)
 }
 
-// GetContext returns the current context
+// GetContext returns the application-level Context.
+//
+// This is NOT the context of the request being handled. It is a single
+// instance created with the application, shared by every goroutine: its
+// request is an empty *http.Request and anything stored on it with Set is
+// visible process-wide, concurrently. Since the store is also where forwarded
+// JWT claims land, using this where a request Context was meant leaks identity
+// between users.
+//
+// Handlers already receive their own request-scoped *Context; use that.
+//
+// Deprecated: use the *Context passed to the handler. This accessor exists for
+// application-level setup and will be removed.
 func (o *Okapi) GetContext() *Context {
 	return o.context
 }
@@ -1300,13 +1388,14 @@ func (o *Okapi) registerOptionsHandler(path string) {
 		o.optionsRegistered[path] = true
 
 		o.mustRegister(http.MethodOptions, path, func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if origin == "" || !originAllowed(o.cors.AllowedOrigins, origin) {
+			addVary(w.Header(), "Origin")
+
+			cors := o.cors
+			allowed, ok := cors.resolveOrigin(r.Header.Get("Origin"))
+			if !ok {
 				http.Error(w, "", http.StatusMethodNotAllowed)
 				return
 			}
-
-			cors := o.cors
 
 			if len(cors.AllowMethods) == 0 {
 				for _, route := range o.routes {
@@ -1315,7 +1404,7 @@ func (o *Okapi) registerOptionsHandler(path string) {
 					}
 				}
 			}
-			cors.writeHeaders(w.Header(), r, true)
+			cors.writeHeaders(w.Header(), r, allowed, true)
 
 			w.WriteHeader(http.StatusNoContent)
 		})
@@ -1388,8 +1477,15 @@ func (o *Okapi) Group(prefix string, middlewares ...Middleware) *Group {
 
 // initConfig initializes a new Okapi instance.
 func initConfig(options ...OptionFunc) *Okapi {
+	// Every timeout on a zero-valued http.Server means "no limit": a Slowloris
+	// client dribbling headers holds a connection and its goroutine
+	// indefinitely. ReadHeaderTimeout and IdleTimeout are conservative enough
+	// to default; ReadTimeout and WriteTimeout are left unset because a
+	// default there would cut off legitimate uploads and streaming responses.
 	server := &http.Server{
-		Addr: defaultAddr,
+		Addr:              defaultAddr,
+		ReadHeaderTimeout: secondsToDuration(defaultReadHeaderTimeout),
+		IdleTimeout:       secondsToDuration(defaultIdleTimeout),
 	}
 
 	o := &Okapi{
@@ -1403,6 +1499,8 @@ func initConfig(options ...OptionFunc) *Okapi {
 		tlsServer:          &http.Server{},
 		logger:             slog.Default(),
 		accessLog:          true,
+		idleTimeout:        defaultIdleTimeout,
+		readHeaderTimeout:  defaultReadHeaderTimeout,
 		middlewares:        []Middleware{handleAccessLog},
 		optionsRegistered:  make(map[string]bool),
 		maxMultipartMemory: defaultMaxMemory,
@@ -1429,6 +1527,7 @@ func (o *Okapi) applyServerConfig(s *http.Server) {
 	s.ReadTimeout = secondsToDuration(o.readTimeout)
 	s.WriteTimeout = secondsToDuration(o.writeTimeout)
 	s.IdleTimeout = secondsToDuration(o.idleTimeout)
+	s.ReadHeaderTimeout = secondsToDuration(o.readHeaderTimeout)
 }
 
 // apply is a helper method to apply an OptionFunc to the Okapi instance

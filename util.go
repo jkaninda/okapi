@@ -39,28 +39,74 @@ import (
 	"strings"
 )
 
-// realIP extracts the real IP address of the client from the HTTP Request.
-func realIP(r *http.Request) string {
-	// Check the X-Forwarded-For header for the client IP.
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP in the comma-separated list.
-		if ips := strings.Split(xff, ","); len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
+// realIP extracts the client IP from the HTTP request, honouring the
+// X-Forwarded-For and X-Real-IP headers.
+//
+// trustedProxies, when non-empty, restricts that: the headers are read only if
+// the connection's own address falls inside one of the networks.
+func realIP(r *http.Request, trustedProxies []*net.IPNet) string {
+	if trustedProxies == nil || remoteAddrIn(r.RemoteAddr, trustedProxies) {
+		// Check the X-Forwarded-For header for the client IP.
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if ips := strings.Split(xff, ","); len(ips) > 0 {
+				return strings.TrimSpace(ips[0])
+			}
+		}
+
+		if ip := r.Header.Get("X-Real-IP"); ip != "" {
+			return strings.TrimSpace(ip)
 		}
 	}
 
-	// Check the X-Real-IP header as a fallback.
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return strings.TrimSpace(ip)
-	}
-
-	// Use the remote address if headers are not set.
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return ip
 	}
 
 	// Return the raw remote address as a last resort.
 	return r.RemoteAddr
+}
+
+// remoteAddrIn reports whether addr's host falls inside one of the networks.
+func remoteAddrIn(addr string, networks []*net.IPNet) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, n := range networks {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseCIDRs converts CIDR blocks and bare IP addresses into networks.
+func parseCIDRs(entries []string) ([]*net.IPNet, error) {
+	networks := make([]*net.IPNet, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if _, n, err := net.ParseCIDR(entry); err == nil {
+			networks = append(networks, n)
+			continue
+		}
+		ip := net.ParseIP(entry)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid trusted proxy %q: not an IP address or CIDR block", entry)
+		}
+		bits := 32
+		if ip.To4() == nil {
+			bits = 128
+		}
+		networks = append(networks, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+	}
+	return networks, nil
 }
 
 // normalizeRoutePath ensures a clean path starting with '/'

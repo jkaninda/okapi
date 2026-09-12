@@ -63,6 +63,24 @@ jwtAuth := okapi.JWTAuth{
 }
 ```
 
+### Claim Validation Defaults
+
+`Audience` and `Issuer` are optional: when either is left empty the
+corresponding claim is not checked, and a token is accepted whether or not it
+carries one. Set them to require a specific value.
+
+An `exp` (expiry) claim is **required** by default. A signed token without one
+never expires and the middleware has no revocation path, so any such token that
+leaks stays valid until the signing key is rotated. If your issuer deliberately
+mints non-expiring tokens, opt in explicitly:
+
+```go
+jwtAuth := okapi.JWTAuth{
+    SigningSecret:      []byte("supersecret"),
+    AllowMissingExpiry: true, // accept tokens with no "exp" claim
+}
+```
+
 ### Remote JWKS (OIDC, Auth0)
 
 ```go
@@ -81,8 +99,14 @@ Use `ClaimsExpression` to validate claims using simple expressions:
 
 * `Equals(field, value)`
 * `Prefix(field, prefix)`
-* `Contains(field, val1, val2, ...)`
+* `Contains(field, val1, val2, ...)` — the claim equals one of the values, or, for an array claim, has an element equal to one of them
 * `OneOf(field, val1, val2, ...)`
+* `Substring(field, val1, val2, ...)` — the claim contains one of the values as a substring
+
+`Substring` is a deliberately weak test and is not suitable for authorization
+decisions: wherever any part of a role, scope or tenant string is
+user-influenced, an attacker can make it contain the value you are checking
+for. Prefer `Equals`, `OneOf` or `Contains`.
 
 #### Logical Operators
 

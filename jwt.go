@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -104,12 +105,16 @@ func (jwtAuth *JWTAuth) ValidateToken(c *Context) (jwt.MapClaims, error) {
 		return nil, err
 	}
 
+	var parseOpts []jwt.ParserOption
+	if !jwtAuth.AllowMissingExpiry {
+		parseOpts = append(parseOpts, jwt.WithExpirationRequired())
+	}
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
 		return signingSecret(jwtAuth.SigningSecret, jwtAuth.SecretKey), nil
-	})
+	}, parseOpts...)
 
 	if err != nil || !token.Valid {
 		return nil, errors.New("invalid or expired token")
@@ -120,6 +125,31 @@ func (jwtAuth *JWTAuth) ValidateToken(c *Context) (jwt.MapClaims, error) {
 	}
 	return nil, errors.New("invalid claims type")
 }
+
+// parserOptions builds the jwt.Parser options for this configuration.
+//
+// Audience and Issuer are only registered when set. jwt.WithAudience and
+// jwt.WithIssuer are variadic, so passing an empty string is not "no
+// expectation" — it registers "" as the expected value and makes the claim
+// mandatory, which rejects every real token.
+//
+// An "exp" claim is required unless AllowMissingExpiry is set: golang-jwt
+// validates "exp" only when it is present, so a signed token that omits it
+// would otherwise be valid forever.
+func (jwtAuth *JWTAuth) parserOptions(validMethods []string) []jwt.ParserOption {
+	opts := []jwt.ParserOption{jwt.WithValidMethods(validMethods)}
+	if !jwtAuth.AllowMissingExpiry {
+		opts = append(opts, jwt.WithExpirationRequired())
+	}
+	if jwtAuth.Audience != "" {
+		opts = append(opts, jwt.WithAudience(jwtAuth.Audience))
+	}
+	if jwtAuth.Issuer != "" {
+		opts = append(opts, jwt.WithIssuer(jwtAuth.Issuer))
+	}
+	return opts
+}
+
 func (jwtAuth *JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 	if jwtAuth.JwksUrl != "" {
 		return func(token *jwt.Token) (interface{}, error) {
@@ -127,11 +157,24 @@ func (jwtAuth *JWTAuth) resolveKeyFunc() (jwt.Keyfunc, error) {
 			if !ok {
 				return nil, fmt.Errorf("missing 'kid' in JWT header")
 			}
-			jwks, err := fetchJWKS(jwtAuth.JwksUrl)
+
+			jwks, err := jwksFromCache(jwtAuth.JwksUrl, jwtAuth.JwksCacheTTL)
 			if err != nil {
 				return nil, err
 			}
-			return jwks.getKey(kid)
+
+			key, err := jwks.getKey(kid)
+			if err == nil {
+				return key, nil
+			}
+
+			// An unknown kid usually means the issuer rotated keys, so try
+			// once more with a fresh set. The refresh is rate-limited, so a
+			// stream of invented kids cannot drive outbound traffic.
+			if refreshed, ok := jwksRefresh(jwtAuth.JwksUrl); ok {
+				return refreshed.getKey(kid)
+			}
+			return nil, err
 		}, nil
 	}
 
@@ -167,7 +210,34 @@ func signingSecret(signingSecret, old []byte) []byte {
 
 }
 
-// Updated validateJWTClaims method
+var (
+	claimsExprMu    sync.Mutex
+	claimsExprCache = map[string]Expression{}
+)
+
+// compileClaimsExpression parses expr, reusing the result across calls.
+//
+// The cache lives here rather than on JWTAuth because a single *JWTAuth is
+// shared by every concurrent request: caching the compiled form on the struct
+// meant an unsynchronised check-then-write from many goroutines at once, in
+// the middle of an authorization decision. A parsed Expression is immutable,
+// so one compiled form can be shared by every caller using that expression.
+func compileClaimsExpression(expr string) (Expression, error) {
+	claimsExprMu.Lock()
+	defer claimsExprMu.Unlock()
+
+	if parsed, ok := claimsExprCache[expr]; ok {
+		return parsed, nil
+	}
+
+	parsed, err := ParseExpression(expr)
+	if err != nil {
+		return nil, err
+	}
+	claimsExprCache[expr] = parsed
+	return parsed, nil
+}
+
 func (jwtAuth *JWTAuth) validateJWTClaims(token *jwt.Token) (bool, error) {
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
@@ -176,16 +246,12 @@ func (jwtAuth *JWTAuth) validateJWTClaims(token *jwt.Token) (bool, error) {
 
 	// Use expression-based validation if available
 	if jwtAuth.ClaimsExpression != "" {
-		// Parse expression if not already cached
-		if jwtAuth.parsedExpression == nil {
-			expr, err := ParseExpression(jwtAuth.ClaimsExpression)
-			if err != nil {
-				return false, fmt.Errorf("failed to parse claims expression: %v", err)
-			}
-			jwtAuth.parsedExpression = expr
+		expr, err := compileClaimsExpression(jwtAuth.ClaimsExpression)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse claims expression: %v", err)
 		}
 
-		result, err := jwtAuth.parsedExpression.Evaluate(claims)
+		result, err := expr.Evaluate(claims)
 		if err != nil {
 			return false, fmt.Errorf("expression evaluation failed: %v", err)
 		}

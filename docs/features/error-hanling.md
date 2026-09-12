@@ -9,6 +9,19 @@ nav_order: 11
 
 Okapi provides a flexible error handling system with built-in support for standard JSON errors, custom error formats, and RFC 7807 Problem Details.
 
+> **Note on error details in production**
+>
+> `DefaultErrorHandler` puts the underlying error's text into the `details`
+> field of the response, and middleware such as the JWT authenticator passes
+> its internal error through. Clients therefore learn exactly why a request
+> failed — with a JWKS-backed setup that can include the JWKS URL and the
+> network error behind it, which is useful reconnaissance against an internal
+> endpoint.
+>
+> If that matters for your deployment, install a custom `ErrorHandler` that
+> logs the error server-side and omits `details` from the response. See
+> [Custom Error Handlers](#custom-error-handlers) below.
+
 ## Quick Start
 
 Use `c.Abort*` methods to immediately stop request processing and return an error response:

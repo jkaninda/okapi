@@ -26,18 +26,39 @@ package okapi
 
 import (
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"path/filepath"
-	"text/template"
 )
 
+// Template is the built-in Renderer, backed by html/template.
+//
+// html/template applies contextual auto-escaping, so values interpolated into
+// a template are escaped for the context they land in (HTML body, attribute,
+// URL, JavaScript, CSS). Templates that must emit markup verbatim have to pass
+// a template.HTML, template.JS or template.URL value explicitly.
 type Template struct {
 	templates *template.Template
 }
 
 func (t *Template) Render(w io.Writer, name string, data interface{}, _ *Context) error {
 	return t.templates.ExecuteTemplate(w, name, data)
+}
+
+// definedTemplates counts the templates that actually have a parsed body.
+//
+// html/template.Templates reports every template in the namespace, including
+// the bodyless root produced by template.New(""), so a plain length check
+// would read "nothing was parsed" as success.
+func definedTemplates(t *template.Template) int {
+	n := 0
+	for _, tt := range t.Templates() {
+		if tt.Tree != nil {
+			n++
+		}
+	}
+	return n
 }
 
 // TemplateConfig holds configuration for template loading
@@ -113,7 +134,7 @@ func NewTemplateFromDirectory(dir string, extensions ...string) (*Template, erro
 		}
 	}
 
-	if len(tmpl.Templates()) == 0 {
+	if definedTemplates(tmpl) == 0 {
 		return nil, fmt.Errorf("no templates found in directory: %s", dir)
 	}
 
@@ -162,7 +183,7 @@ func NewTemplateWithConfig(config TemplateConfig) (*Template, error) {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
 
-	if len(tmpl.Templates()) == 0 {
+	if definedTemplates(tmpl) == 0 {
 		return nil, fmt.Errorf("no templates found with config: %+v", config)
 	}
 

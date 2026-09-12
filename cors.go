@@ -61,8 +61,13 @@ type Cors struct {
 	AllowMethods []string
 
 	// AllowCredentials enables Access-Control-Allow-Credentials: true.
-	// When set, AllowedOrigins should not rely on the bare "*" wildcard —
-	// the origin is always echoed verbatim so credentialed requests work.
+	//
+	// Credentials are never granted to the bare "*" wildcard: a request
+	// matched by it receives the literal "*" and no credentials header.
+	// Browsers reject that pairing precisely because it would let any site
+	// read authenticated responses, and echoing the request's origin back
+	// instead would sidestep the guard rather than honour it. Configurations
+	// that need credentials must name their origins, exactly or by pattern.
 	AllowCredentials bool
 }
 
@@ -70,11 +75,13 @@ type Cors struct {
 // requests (OPTIONS with Access-Control-Request-Method) with 204.
 // Plain OPTIONS requests fall through to the next handler.
 func (cors Cors) CORSHandler(c *Context) error {
-	origin := c.request.Header.Get("Origin")
 	isPreflight := c.request.Method == http.MethodOptions &&
 		c.request.Header.Get("Access-Control-Request-Method") != ""
 
-	if origin == "" || !originAllowed(cors.AllowedOrigins, origin) {
+	addVary(c.response.Header(), "Origin")
+
+	allowed, ok := cors.resolveOrigin(c.request.Header.Get("Origin"))
+	if !ok {
 		if isPreflight {
 			c.response.WriteHeader(http.StatusNoContent)
 			return nil
@@ -82,7 +89,7 @@ func (cors Cors) CORSHandler(c *Context) error {
 		return c.Next()
 	}
 
-	cors.writeHeaders(c.response.Header(), c.request, isPreflight)
+	cors.writeHeaders(c.response.Header(), c.request, allowed, isPreflight)
 
 	if isPreflight {
 		c.response.WriteHeader(http.StatusNoContent)
@@ -91,13 +98,47 @@ func (cors Cors) CORSHandler(c *Context) error {
 	return c.Next()
 }
 
-func (cors Cors) writeHeaders(h http.Header, r *http.Request, isPreflight bool) {
-	origin := r.Header.Get("Origin")
+// allowedOrigin is the outcome of matching a request's Origin against the
+// configuration: the value to send in Access-Control-Allow-Origin, and whether
+// credentials may be granted alongside it.
+type allowedOrigin struct {
+	value       string
+	credentials bool
+}
 
-	h.Set(constAccessControlAllowOrigin, origin)
+// resolveOrigin matches origin against AllowedOrigins.
+//
+// The bare "*" wildcard resolves to the literal "*" and never carries
+// credentials, so the unsafe wildcard-plus-credentials configuration degrades
+// to the safe one instead of quietly working.
+//
+// The "null" origin never matches. It is what sandboxed iframes, data:
+// documents and some redirect chains send, so reflecting it grants any of them
+// the access the allow-list was meant to restrict.
+func (cors Cors) resolveOrigin(origin string) (allowedOrigin, bool) {
+	if origin == "" || strings.EqualFold(origin, "null") {
+		return allowedOrigin{}, false
+	}
+
+	loweredOrigin := strings.ToLower(origin)
+	for _, entry := range cors.AllowedOrigins {
+		switch {
+		case entry == "*":
+			return allowedOrigin{value: "*"}, true
+		case strings.EqualFold(entry, origin):
+			return allowedOrigin{value: origin, credentials: cors.AllowCredentials}, true
+		case strings.Contains(entry, "*") && matchWildcardOrigin(entry, loweredOrigin):
+			return allowedOrigin{value: origin, credentials: cors.AllowCredentials}, true
+		}
+	}
+	return allowedOrigin{}, false
+}
+
+func (cors Cors) writeHeaders(h http.Header, r *http.Request, allowed allowedOrigin, isPreflight bool) {
+	h.Set(constAccessControlAllowOrigin, allowed.value)
 	addVary(h, "Origin")
 
-	if cors.AllowCredentials {
+	if allowed.credentials {
 		h.Set(constAccessControlAllowCredentials, "true")
 	}
 
@@ -130,23 +171,12 @@ func (cors Cors) writeHeaders(h http.Header, r *http.Request, isPreflight bool) 
 	}
 }
 
+// originAllowed reports whether origin matches the allow-list. It answers only
+// the membership question; use Cors.resolveOrigin when the header values
+// matter, since the wildcard and credentials interact.
 func originAllowed(allowed []string, origin string) bool {
-	if origin == "" {
-		return false
-	}
-	loweredOrigin := strings.ToLower(origin)
-	for _, entry := range allowed {
-		if entry == "*" {
-			return true
-		}
-		if strings.EqualFold(entry, origin) {
-			return true
-		}
-		if strings.Contains(entry, "*") && matchWildcardOrigin(entry, loweredOrigin) {
-			return true
-		}
-	}
-	return false
+	_, ok := Cors{AllowedOrigins: allowed}.resolveOrigin(origin)
+	return ok
 }
 
 func matchWildcardOrigin(pattern, origin string) bool {

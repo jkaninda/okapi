@@ -28,11 +28,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // *********** SSE ***********
@@ -136,11 +137,17 @@ func (m *Message) flush(w http.ResponseWriter) {
 	}
 }
 
+// sanitizeSSEField strips the line terminators that separate fields in the
+// event stream.
+func sanitizeSSEField(value string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(value)
+}
+
 func (m *Message) writeID(w http.ResponseWriter, id string) error {
 	if id == "" {
 		return nil
 	}
-	_, err := fmt.Fprintf(w, "id: %s\n", id)
+	_, err := fmt.Fprintf(w, "id: %s\n", sanitizeSSEField(id))
 	return err
 }
 
@@ -148,7 +155,7 @@ func (m *Message) writeEvent(w http.ResponseWriter, eventType string) error {
 	if eventType == "" {
 		return nil
 	}
-	_, err := fmt.Fprintf(w, "event: %s\n", eventType)
+	_, err := fmt.Fprintf(w, "event: %s\n", sanitizeSSEField(eventType))
 	return err
 }
 

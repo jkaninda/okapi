@@ -111,7 +111,10 @@ func TestCORSHandler_DisallowedOriginFallsThrough(t *testing.T) {
 	rec := invokeCORS(cors, r)
 
 	assert.Empty(t, rec.Header().Get(constAccessControlAllowOrigin))
-	assert.Empty(t, rec.Header().Get("Vary"))
+	// Vary is set even when the origin is refused: the response still depends
+	// on Origin, and a cache that does not know that can serve this
+	// header-less response to an allowed origin.
+	assert.Contains(t, rec.Header().Values("Vary"), "Origin")
 }
 
 func TestCORSHandler_EmptyOriginFallsThrough(t *testing.T) {
@@ -234,4 +237,107 @@ func TestCORSHandler_WildcardSubdomainMatches(t *testing.T) {
 
 	assert.Equal(t, "https://tenant-1.example.com",
 		rec.Header().Get(constAccessControlAllowOrigin))
+}
+
+// TestCORSWildcardNeverGrantsCredentials guards the combination the same-origin
+// policy exists to prevent: reflecting the caller's origin alongside
+// Access-Control-Allow-Credentials lets any site read authenticated responses.
+func TestCORSWildcardNeverGrantsCredentials(t *testing.T) {
+	cors := Cors{AllowedOrigins: []string{"*"}, AllowCredentials: true}
+
+	t.Run("simple request", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/x", nil)
+		r.Header.Set("Origin", "https://evil.example")
+
+		h := invokeCORS(cors, r).Header()
+
+		assert.Equal(t, "*", h.Get(constAccessControlAllowOrigin))
+		assert.Empty(t, h.Get(constAccessControlAllowCredentials))
+	})
+
+	t.Run("preflight", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodOptions, "/x", nil)
+		r.Header.Set("Origin", "https://evil.example")
+		r.Header.Set("Access-Control-Request-Method", http.MethodGet)
+
+		h := invokeCORS(cors, r).Header()
+
+		assert.Equal(t, "*", h.Get(constAccessControlAllowOrigin))
+		assert.Empty(t, h.Get(constAccessControlAllowCredentials))
+	})
+
+	t.Run("named origins still receive credentials", func(t *testing.T) {
+		named := Cors{AllowedOrigins: []string{"https://app.example"}, AllowCredentials: true}
+		r := httptest.NewRequest(http.MethodGet, "/x", nil)
+		r.Header.Set("Origin", "https://app.example")
+
+		h := invokeCORS(named, r).Header()
+
+		assert.Equal(t, "https://app.example", h.Get(constAccessControlAllowOrigin))
+		assert.Equal(t, "true", h.Get(constAccessControlAllowCredentials))
+	})
+
+	t.Run("pattern origins still receive credentials", func(t *testing.T) {
+		pattern := Cors{AllowedOrigins: []string{"https://*.example.com"}, AllowCredentials: true}
+		r := httptest.NewRequest(http.MethodGet, "/x", nil)
+		r.Header.Set("Origin", "https://app.example.com")
+
+		h := invokeCORS(pattern, r).Header()
+
+		assert.Equal(t, "https://app.example.com", h.Get(constAccessControlAllowOrigin))
+		assert.Equal(t, "true", h.Get(constAccessControlAllowCredentials))
+	})
+}
+
+// TestCORSNullOriginNeverReflected covers the origin sent by sandboxed iframes,
+// data: documents and some redirect chains.
+func TestCORSNullOriginNeverReflected(t *testing.T) {
+	for _, allowed := range [][]string{{"*"}, {"null"}, {"https://app.example"}} {
+		cors := Cors{AllowedOrigins: allowed, AllowCredentials: true}
+		r := httptest.NewRequest(http.MethodGet, "/x", nil)
+		r.Header.Set("Origin", "null")
+
+		h := invokeCORS(cors, r).Header()
+
+		assert.NotEqual(t, "null", h.Get(constAccessControlAllowOrigin),
+			"null origin reflected for AllowedOrigins %v", allowed)
+		assert.Empty(t, h.Get(constAccessControlAllowCredentials))
+	}
+}
+
+// TestWithCorsInstallsHandler covers the setup the documentation shows:
+// okapi.New(okapi.WithCors(...)) alone must put CORS headers on actual
+// responses, not only answer the preflight.
+func TestWithCorsInstallsHandler(t *testing.T) {
+	cors := Cors{AllowedOrigins: []string{"https://app.example"}, AllowCredentials: true}
+	app := New(WithCors(cors))
+	app.Get("/probe", func(c *Context) error { return c.String(http.StatusOK, "data") })
+
+	r := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	r.Header.Set("Origin", "https://app.example")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, r)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "https://app.example", rec.Header().Get(constAccessControlAllowOrigin))
+	assert.Equal(t, "true", rec.Header().Get(constAccessControlAllowCredentials))
+	assert.Contains(t, rec.Header().Values("Vary"), "Origin")
+}
+
+// TestWithCorsInstallsHandlerOnce ensures repeated configuration replaces the
+// settings rather than stacking handlers.
+func TestWithCorsInstallsHandlerOnce(t *testing.T) {
+	app := New(WithCors(Cors{AllowedOrigins: []string{"https://first.example"}}))
+	before := len(app.middlewares)
+	app.WithCORS(Cors{AllowedOrigins: []string{"https://second.example"}})
+
+	assert.Equal(t, before, len(app.middlewares))
+
+	app.Get("/probe", func(c *Context) error { return c.String(http.StatusOK, "data") })
+	r := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	r.Header.Set("Origin", "https://second.example")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, r)
+
+	assert.Equal(t, "https://second.example", rec.Header().Get(constAccessControlAllowOrigin))
 }

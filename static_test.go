@@ -271,3 +271,65 @@ func TestSPA(t *testing.T) {
 	okapitest.GET(t, ts.BaseURL+"/scalar").ExpectStatusOK().ExpectBodyContains("@scalar/api-reference")
 
 }
+
+// TestServeFileFromFSRejectsTraversal covers a guard that wrote a 404 and then
+// fell through to serve the file anyway, for want of a return.
+func TestServeFileFromFSRejectsTraversal(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("TOP-SECRET"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+
+	app := New()
+	app.Get("/dl", func(c *Context) error {
+		c.ServeFileFromFS("../../secret.txt", http.Dir(dir))
+		return nil
+	})
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/dl", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	if strings.Contains(rec.Body.String(), "TOP-SECRET") {
+		t.Errorf("rejected path was served anyway: %q", rec.Body.String())
+	}
+}
+
+// TestServeFileFromConfinesToRoot covers the safe entry point for names that
+// come from a request.
+func TestServeFileFromConfinesToRoot(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("TOP-SECRET"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	pub := filepath.Join(dir, "public")
+	if err := os.Mkdir(pub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pub, "ok.txt"), []byte("PUBLIC"), 0o600); err != nil {
+		t.Fatalf("write public file: %v", err)
+	}
+
+	app := New()
+	app.Get("/f", func(c *Context) error {
+		c.ServeFileFrom(pub, c.Query("name"))
+		return nil
+	})
+
+	serve := func(name string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/f?name="+name, nil))
+		return rec
+	}
+
+	if rec := serve("ok.txt"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "PUBLIC") {
+		t.Errorf("legitimate file: status = %d body = %q", rec.Code, rec.Body.String())
+	}
+	for _, name := range []string{"../secret.txt", "%2e%2e/secret.txt", "/../secret.txt"} {
+		if rec := serve(name); strings.Contains(rec.Body.String(), "TOP-SECRET") {
+			t.Errorf("name %q escaped the root: %q", name, rec.Body.String())
+		}
+	}
+}

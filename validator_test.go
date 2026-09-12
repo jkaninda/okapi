@@ -1340,8 +1340,6 @@ func BenchmarkCheckEnum(b *testing.B) {
 	}
 }
 
-// --- Tier 2 & 3 format validations ---
-
 func TestNewFormatValidations(t *testing.T) {
 	tests := []struct {
 		format  string
@@ -1448,8 +1446,6 @@ func TestNewFormatEmptyValueSkipped(t *testing.T) {
 	}
 }
 
-// --- Tier 1: const ---
-
 func TestCheckConst(t *testing.T) {
 	// scalar
 	if err := checkConst(reflect.ValueOf("v1"), "v1"); err != nil {
@@ -1475,8 +1471,6 @@ func TestCheckConst(t *testing.T) {
 		t.Error("expected error for non-string field")
 	}
 }
-
-// --- Tier 1: exclusiveMin / exclusiveMax ---
 
 func TestCheckExclusiveMinMax(t *testing.T) {
 	// int: strictly greater / less than
@@ -1505,8 +1499,6 @@ func TestCheckExclusiveMinMax(t *testing.T) {
 		t.Error("uint 5 is not > 5, expected error")
 	}
 }
-
-// --- Tier 1: minProperties / maxProperties ---
 
 func TestCheckMinMaxProperties(t *testing.T) {
 	m := map[string]int{"a": 1, "b": 2}

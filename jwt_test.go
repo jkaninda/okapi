@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -421,9 +422,10 @@ func TestValidateJWTClaims_Expression(t *testing.T) {
 		t.Errorf("expected expression to pass")
 	}
 
-	// Caches the parsed expression on first call.
-	if auth.parsedExpression == nil {
-		t.Errorf("parsedExpression should be cached")
+	// The compiled expression is cached process-wide, not on the struct: a
+	// single *JWTAuth is shared by every concurrent request.
+	if _, cached := claimsExprCache[auth.ClaimsExpression]; !cached {
+		t.Errorf("compiled expression should be cached")
 	}
 
 	// Second call should hit the cache and behave the same.
@@ -610,5 +612,174 @@ func TestGenerateJwtToken_RoundTrip(t *testing.T) {
 	}
 	if _, ok := claims["iat"]; !ok {
 		t.Error("missing iat claim")
+	}
+}
+
+// parserOptions
+
+// serveJWT runs a request carrying tok through the JWT middleware and reports
+// the resulting status code.
+func serveJWT(auth *JWTAuth, tok string) int {
+	app := New()
+	app.Use(auth.Middleware)
+	app.Get("/probe", func(c *Context) error { return c.String(http.StatusOK, "OK") })
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	return rec.Code
+}
+
+// TestParserOptionsAudienceAndIssuerAreOptional guards against passing
+// jwt.WithAudience("") / jwt.WithIssuer(""), which registers "" as the
+// expected value and makes the claim mandatory, rejecting every real token.
+func TestParserOptionsAudienceAndIssuerAreOptional(t *testing.T) {
+	t.Parallel()
+
+	exp := time.Now().Add(time.Hour).Unix()
+
+	t.Run("unset audience and issuer accept a valid token", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "exp": exp})
+		if got := serveJWT(auth, tok); got != http.StatusOK {
+			t.Errorf("status = %d, want %d for a token with no aud/iss", got, http.StatusOK)
+		}
+	})
+
+	t.Run("unset audience accepts a token that carries one", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "aud": "other", "exp": exp})
+		if got := serveJWT(auth, tok); got != http.StatusOK {
+			t.Errorf("status = %d, want %d when Audience is unset", got, http.StatusOK)
+		}
+	})
+
+	t.Run("set audience is still enforced", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret, Audience: "api"}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "aud": "wrong", "exp": exp})
+		if got := serveJWT(auth, tok); got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d for a mismatched aud", got, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("set issuer is still enforced", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret, Issuer: "iss"}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "iss": "wrong", "exp": exp})
+		if got := serveJWT(auth, tok); got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d for a mismatched iss", got, http.StatusUnauthorized)
+		}
+	})
+}
+
+// TestParserOptionsRequiresExpiry guards against accepting signed tokens that
+// omit "exp": golang-jwt validates the claim only when it is present, so such
+// a token would never expire.
+func TestParserOptionsRequiresExpiry(t *testing.T) {
+	t.Parallel()
+
+	t.Run("token without exp is rejected by default", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret, Audience: "api"}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "aud": "api"})
+		if got := serveJWT(auth, tok); got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d for a token with no exp", got, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("AllowMissingExpiry opts back in", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret, Audience: "api", AllowMissingExpiry: true}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "aud": "api"})
+		if got := serveJWT(auth, tok); got != http.StatusOK {
+			t.Errorf("status = %d, want %d with AllowMissingExpiry", got, http.StatusOK)
+		}
+	})
+
+	t.Run("expired token is still rejected with AllowMissingExpiry", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret, AllowMissingExpiry: true}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice", "exp": time.Now().Add(-time.Hour).Unix()})
+		if got := serveJWT(auth, tok); got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d for an expired token", got, http.StatusUnauthorized)
+		}
+	})
+}
+
+// TestValidateTokenRequiresExpiry mirrors TestParserOptionsRequiresExpiry for
+// the ValidateToken entry point, which shares the same parser configuration.
+func TestValidateTokenRequiresExpiry(t *testing.T) {
+	t.Parallel()
+
+	newCtx := func(tok string) *Context {
+		req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		return &Context{request: req, response: newResponseWriter(httptest.NewRecorder())}
+	}
+
+	t.Run("rejects a token with no exp", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice"})
+		if _, err := auth.ValidateToken(newCtx(tok)); err == nil {
+			t.Error("expected error for a token with no exp")
+		}
+	})
+
+	t.Run("AllowMissingExpiry opts back in", func(t *testing.T) {
+		t.Parallel()
+		auth := &JWTAuth{SigningSecret: jwtTestSecret, AllowMissingExpiry: true}
+		tok := signHMACToken(t, jwt.MapClaims{"sub": "alice"})
+		if _, err := auth.ValidateToken(newCtx(tok)); err != nil {
+			t.Errorf("ValidateToken: %v", err)
+		}
+	})
+}
+
+// TestClaimsExpressionConcurrentUse guards the compiled-expression cache
+// against the unsynchronised check-then-write it replaced: a single *JWTAuth
+// is shared by every concurrent request, so the race sat inside an
+// authorization decision. Meaningful under -race.
+func TestClaimsExpressionConcurrentUse(t *testing.T) {
+	auth := &JWTAuth{
+		SigningSecret:    jwtTestSecret,
+		Audience:         "api",
+		ClaimsExpression: "Equals(`role`, `admin`) && OneOf(`tier`, `gold`, `silver`)",
+	}
+	tok := signHMACToken(t, jwt.MapClaims{
+		"role":  "admin",
+		"tier":  "gold",
+		"aud":   "api",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"scope": "read",
+	})
+
+	app := New()
+	app.Use(auth.Middleware)
+	app.Get("/probe", func(c *Context) error { return c.String(http.StatusOK, "OK") })
+
+	var wg sync.WaitGroup
+	codes := make([]int, 32)
+	for i := range codes {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+			req.Header.Set("Authorization", "Bearer "+tok)
+			rec := httptest.NewRecorder()
+			app.ServeHTTP(rec, req)
+			codes[i] = rec.Code
+		}(i)
+	}
+	wg.Wait()
+
+	for i, code := range codes {
+		if code != http.StatusOK {
+			t.Errorf("request %d: status = %d, want %d", i, code, http.StatusOK)
+		}
 	}
 }

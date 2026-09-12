@@ -88,13 +88,35 @@ type (
 		// Optional.
 		JwksUrl string
 
-		// Audience is the expected "aud" (audience) claim in the token.
+		// JwksCacheTTL is how long a key set fetched from JwksUrl is reused
+		// before the endpoint is consulted again. Defaults to 15 minutes.
+		//
+		// The set is cached because the key function runs on every token
+		// validation: fetching per request lets unauthenticated traffic drive
+		// one outbound request to the identity provider per inbound request.
+		// A kid missing from the cached set still triggers a rate-limited
+		// refresh, so key rotation is picked up without waiting out the TTL.
 		// Optional.
+		JwksCacheTTL time.Duration
+
+		// Audience is the expected "aud" (audience) claim in the token.
+		// Optional. When empty, the "aud" claim is not checked and tokens are
+		// accepted whether or not they carry one.
 		Audience string
 
 		// Issuer is the expected "iss" (issuer) claim in the token.
-		// Optional.
+		// Optional. When empty, the "iss" claim is not checked and tokens are
+		// accepted whether or not they carry one.
 		Issuer string
+
+		// AllowMissingExpiry accepts tokens that carry no "exp" claim.
+		//
+		// By default an "exp" claim is required, because a signed token without
+		// one never expires and the middleware has no revocation path: any such
+		// token that leaks stays valid until the signing key is rotated. Set
+		// this only for issuers that deliberately mint non-expiring tokens.
+		// Optional.
+		AllowMissingExpiry bool
 
 		// RsaKey is a public RSA key used to verify tokens signed with RS256.
 		// Optional.
@@ -151,8 +173,13 @@ type (
 		// Supported functions:
 		//   - Equals(field, value)
 		//   - Prefix(field, prefix)
-		//   - Contains(field, val1, val2, ...)
+		//   - Contains(field, val1, val2, ...)  — claim equals one of the
+		//     values, or an array claim has an element equal to one of them
 		//   - OneOf(field, val1, val2, ...)
+		//   - Substring(field, val1, val2, ...) — claim contains one of the
+		//     values as a substring. Not suitable for authorization: any
+		//     user-influenced part of a role or scope can be made to contain
+		//     the value being checked for.
 		//
 		// Logical Operators:
 		//   - !   — NOT
@@ -167,8 +194,6 @@ type (
 		//   - The expression ensures the user is verified AND either has an admin/owner role,
 		//     OR belongs to a premium tag group.
 		ClaimsExpression string
-		// parsedExpression holds the compiled version of ClaimsExpression.
-		parsedExpression Expression
 		// ValidateClaims is an optional custom validation function for processing JWT claims.
 		// This provides full control over claim validation logic and can be used alongside or
 		// instead of ClaimsExpression.
@@ -289,6 +314,7 @@ func (b BodyLimit) Middleware(c *Context) error {
 
 	// Reset request body for downstream handlers
 	c.request.Body = io.NopCloser(bytes.NewReader(body))
+	c.bodyLimited = true
 	return c.Next()
 }
 
@@ -317,10 +343,7 @@ func (jwtAuth *JWTAuth) Middleware(c *Context) error {
 	} else if jwtAuth.Algo != "" {
 		validMethods = []string{jwtAuth.Algo}
 	}
-	token, err := jwt.Parse(tokenStr, keyFunc,
-		jwt.WithValidMethods(validMethods),
-		jwt.WithAudience(jwtAuth.Audience),
-		jwt.WithIssuer(jwtAuth.Issuer))
+	token, err := jwt.Parse(tokenStr, keyFunc, jwtAuth.parserOptions(validMethods)...)
 	if err != nil || !token.Valid {
 		if jwtAuth.OnUnauthorized != nil {
 			return jwtAuth.OnUnauthorized(c)

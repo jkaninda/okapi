@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
@@ -554,20 +555,39 @@ func setValueWithValidation(field reflect.Value, value string, sf reflect.Struct
 	return fmt.Errorf("unsupported field type %s", field.Kind())
 }
 
+// limitedBody returns the request body bounded by the default request-body cap.
+//
+// Without it the binders read whatever a client sends: BodyLimit is opt-in, so
+// the default path was unbounded, and combined with the absence of a read
+// timeout that made memory pressure cheap to create. When BodyLimit is
+// installed it has already enforced its own limit and rebuffered the body, so
+// its configuration wins and nothing further is applied here.
+func (c *Context) limitedBody() io.Reader {
+	if c.bodyLimited {
+		return c.request.Body
+	}
+
+	limit := int64(defaultMaxRequestBody)
+	if c.okapi != nil && c.okapi.maxRequestBody > 0 {
+		limit = c.okapi.maxRequestBody
+	}
+	return http.MaxBytesReader(c.response, c.request.Body, limit)
+}
+
 func (c *Context) BindJSON(v any) error {
-	return json.NewDecoder(c.request.Body).Decode(v)
+	return json.NewDecoder(c.limitedBody()).Decode(v)
 }
 
 func (c *Context) BindXML(v any) error {
-	return xml.NewDecoder(c.request.Body).Decode(v)
+	return xml.NewDecoder(c.limitedBody()).Decode(v)
 }
 
 func (c *Context) BindYAML(v any) error {
-	return yaml.NewDecoder(c.request.Body).Decode(v)
+	return yaml.NewDecoder(c.limitedBody()).Decode(v)
 }
 
 func (c *Context) BindProtoBuf(v proto.Message) error {
-	body, err := io.ReadAll(c.request.Body)
+	body, err := io.ReadAll(c.limitedBody())
 	if err != nil {
 		return fmt.Errorf("failed to read request body: %w", err)
 	}

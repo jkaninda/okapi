@@ -158,19 +158,49 @@ func TestPrefixExpr(t *testing.T) {
 
 // ContainsExpr
 
-func TestContainsExpr_Substring(t *testing.T) {
+func TestContainsExpr_MatchesByEquality(t *testing.T) {
 	t.Parallel()
 
 	claims := sampleClaims()
 
-	got, err := Contains("name", "Jane").Evaluate(claims)
+	got, err := Contains("name", "Jane Doe").Evaluate(claims)
+	if err != nil || !got {
+		t.Errorf("equal value: got (%v, %v), want (true, nil)", got, err)
+	}
+
+	// A single value is a membership test, not a substring test: matching a
+	// fragment of a role or scope is a privilege-escalation path wherever any
+	// part of the claim is user-influenced.
+	got, err = Contains("name", "Jane").Evaluate(claims)
+	if err != nil || got {
+		t.Errorf("substring of value: got (%v, %v), want (false, nil)", got, err)
+	}
+
+	got, err = Contains("role", "admin").Evaluate(jwt.MapClaims{"role": "not-admin-at-all"})
+	if err != nil || got {
+		t.Errorf("role fragment: got (%v, %v), want (false, nil)", got, err)
+	}
+}
+
+func TestSubstringExpr(t *testing.T) {
+	t.Parallel()
+
+	claims := sampleClaims()
+
+	got, err := Substring("name", "Jane").Evaluate(claims)
 	if err != nil || !got {
 		t.Errorf("substring match: got (%v, %v), want (true, nil)", got, err)
 	}
 
-	got, err = Contains("name", "Bob").Evaluate(claims)
+	got, err = Substring("name", "Bob").Evaluate(claims)
 	if err != nil || got {
 		t.Errorf("substring miss: got (%v, %v), want (false, nil)", got, err)
+	}
+
+	// Array claims match when any element contains the value.
+	got, err = Substring("tags", "ol").Evaluate(claims)
+	if err != nil || !got {
+		t.Errorf("array substring match: got (%v, %v), want (true, nil)", got, err)
 	}
 }
 
@@ -340,8 +370,11 @@ func TestParseExpression_LeafFunctions(t *testing.T) {
 		{"Equals matches", "Equals(`role`, `admin`)", true},
 		{"Equals miss", "Equals(`role`, `guest`)", false},
 		{"Prefix matches", "Prefix(`role`, `adm`)", true},
-		{"Contains substring", "Contains(`name`, `Jane`)", true},
+		{"Contains equality", "Contains(`name`, `Jane Doe`)", true},
+		{"Contains is not substring", "Contains(`name`, `Jane`)", false},
 		{"Contains array membership", "Contains(`tags`, `vip`, `gold`)", true},
+		{"Substring matches", "Substring(`name`, `Jane`)", true},
+		{"Substring miss", "Substring(`name`, `Bob`)", false},
 		{"OneOf matches", "OneOf(`role`, `admin`, `owner`)", true},
 		{"OneOf miss", "OneOf(`role`, `guest`, `viewer`)", false},
 	}

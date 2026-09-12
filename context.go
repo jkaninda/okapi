@@ -55,6 +55,10 @@ type (
 		// store is a key/value store for storing data in the context
 		store        *Store
 		errorHandler ErrorHandler
+		// bodyLimited records that a BodyLimit middleware has already bounded
+		// and rebuffered the request body, so the binders' default cap should
+		// stand aside for the configured one.
+		bodyLimited bool
 		// handlers is the chain of middleware + final handler for the current request
 		handlers []HandlerFunc
 		// index tracks the current position in the handler chain
@@ -250,9 +254,18 @@ func (c *Context) Copy() *Context {
 
 // ************** request Utilities *****************
 
-// RealIP returns the client's real IP address, handling proxies.
+// RealIP returns the client's IP address.
+//
+// By default the X-Forwarded-For and X-Real-IP headers are trusted, so the
+// value is whatever the caller sent and can be forged by any client. Configure
+// WithTrustedProxies to have them honoured only for connections coming from
+// your proxies; until then, do not use this for rate limiting, IP allow-lists
+// or audit trails.
 func (c *Context) RealIP() string {
-	return realIP(c.request)
+	if c.okapi == nil {
+		return realIP(c.request, nil)
+	}
+	return realIP(c.request, c.okapi.trustedProxies)
 }
 
 // Referer retrieves the Referer header value from the request.
@@ -745,19 +758,54 @@ func (c *Context) Redirect(code int, location string) {
 // *********** File Serving **************
 
 // ServeFile serves a file from the filesystem.
+//
+// The path is used as given. http.ServeFile's built-in ".." precaution
+// inspects only r.URL.Path, so it does not apply to a path assembled by the
+// handler: a name taken from a route parameter, query string or header reaches
+// the filesystem unchecked, and filepath.Join collapses any ".." before this
+// function ever sees it. Use ServeFileFrom to serve a caller-supplied name
+// confined to a directory.
 func (c *Context) ServeFile(path string) {
 	http.ServeFile(c.response, c.request, path) // Use standard library file server
 }
 
+// ServeFileFrom serves name from within root, and cannot escape it.
+//
+// name is a slash-separated path interpreted relative to root. A name
+// containing a ".." element is refused with 404, and the lookup is anchored at
+// root regardless, so it cannot reach above it. This is the safe way to serve
+// a path derived from a request.
+//
+// Example:
+//
+//	app.Get("/files/{name}", func(c *okapi.Context) error {
+//		c.ServeFileFrom("public", c.Param("name"))
+//		return nil
+//	})
+func (c *Context) ServeFileFrom(root, name string) {
+	c.ServeFileFromFS(name, http.Dir(root))
+}
+
 // ServeFileFromFS serves a file from a custom http.FileSystem.
+//
+// Names containing a ".." element are refused with 404, and the lookup is
+// anchored at the filesystem root regardless, so it cannot escape it.
 func (c *Context) ServeFileFromFS(filepath string, fs http.FileSystem) {
-	// Sanitize the path to prevent directory traversal
-	filepath = path.Clean(filepath)
-	if filepath == "." || strings.Contains(filepath, "..") {
-		err := c.ErrorNotFound("Not found")
-		if err != nil {
+	// Refuse traversal outright rather than quietly rewriting it: a caller
+	// passing ".." is either mistaken or hostile, and neither deserves a file.
+	for _, elem := range strings.Split(filepath, "/") {
+		if elem == ".." {
+			_ = c.ErrorNotFound("Not found")
 			return
 		}
+	}
+
+	// Anchor at the filesystem root, so the name is resolved the same way
+	// http.FileServer resolves a request path.
+	filepath = path.Clean("/" + strings.TrimPrefix(filepath, "/"))
+	if filepath == "/" {
+		_ = c.ErrorNotFound("Not found")
+		return
 	}
 
 	// Preserve original URL.Path
@@ -769,12 +817,18 @@ func (c *Context) ServeFileFromFS(filepath string, fs http.FileSystem) {
 }
 
 // ServeFileAttachment serves a file as an attachment (download).
+//
+// The path is used as given; see ServeFile for what that means for names
+// derived from a request.
 func (c *Context) ServeFileAttachment(path, filename string) {
 	c.SetHeader("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	http.ServeFile(c.response, c.request, path)
 }
 
 // ServeFileInline serves a file to be displayed inline in the browser.
+//
+// The path is used as given; see ServeFile for what that means for names
+// derived from a request.
 func (c *Context) ServeFileInline(path, filename string) {
 	c.SetHeader("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
 	http.ServeFile(c.response, c.request, path)

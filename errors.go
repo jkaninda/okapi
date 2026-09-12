@@ -116,7 +116,14 @@ type ErrorHandlerConfig struct {
 	CustomFields map[string]any
 }
 
-// DefaultErrorHandler provides the standard error response format
+// DefaultErrorHandler provides the standard error response format.
+//
+// The error's text is returned to the client in the "details" field. That is
+// useful in development and a disclosure risk in production: clients learn
+// exactly why a request failed, and for a JWKS-backed setup the text can carry
+// the JWKS URL and the underlying network error. Where that matters, install
+// an ErrorHandler that logs err server-side and omits details from the
+// response.
 func DefaultErrorHandler(c *Context, code int, message string, err error) error {
 	details := ""
 	if err != nil {

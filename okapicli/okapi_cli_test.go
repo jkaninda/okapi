@@ -27,7 +27,9 @@ package okapicli
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -49,6 +51,28 @@ func setOSArgs(args ...string) func() {
 	oldArgs := os.Args
 	os.Args = append([]string{os.Args[0]}, args...)
 	return func() { os.Args = oldArgs }
+}
+
+// freePort reserves an ephemeral TCP port on the loopback interface and returns
+// it, so tests never depend on a fixed port being available.
+func freePort(t *testing.T) int {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to reserve a free port: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	return port
+}
+
+// freeAddr returns a loopback address whose port is free.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(freePort(t)))
 }
 
 func TestNew(t *testing.T) {
@@ -81,7 +105,7 @@ func TestRun(t *testing.T) {
 	// Set up CLI flags
 	cli := New(app, "Okapi Test").
 		String("config", "c", "", "Path to provider configuration file").
-		Int("port", "p", 8000, "HTTP server port").
+		Int("port", "p", freePort(t), "HTTP server port").
 		Bool("debug", "d", false, "Enable debug mode")
 
 	err := cli.Parse()
@@ -106,7 +130,7 @@ func TestCLI_RunServer(t *testing.T) {
 	// Set up CLI flags
 	cli := New(app, "Okapi Test").
 		String("config", "c", "", "Path to provider configuration file").
-		Int("port", "p", 8000, "HTTP server port").
+		Int("port", "p", freePort(t), "HTTP server port").
 		Bool("debug", "d", false, "Enable debug mode").
 		Duration("timeout", "t", 30*time.Second, "Request timeout")
 
@@ -534,7 +558,7 @@ func TestCLI_Command_RunServer(t *testing.T) {
 		})
 	}).Int("port", "p", 8080, "HTTP port")
 
-	restore := setOSArgs("serve", "--port", "18923")
+	restore := setOSArgs("serve", "--port", strconv.Itoa(freePort(t)))
 	defer restore()
 
 	if err := cli.Execute(); err != nil {

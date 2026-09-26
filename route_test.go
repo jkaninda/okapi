@@ -114,7 +114,10 @@ func TestRouteDefinition(t *testing.T) {
 	}
 
 	t.Logf("Defined %d routes successfully", len(routes))
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	app := Default()
+	app.WithAddr(addr)
 	RegisterRoutes(app, routes)
 
 	// Start server in background
@@ -132,12 +135,12 @@ func TestRouteDefinition(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.GET(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.POST(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.PUT(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.PATCH(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.OPTIONS(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.DELETE(t, "http://localhost:8080/api/hello").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.POST(t, baseURL+"/hello").ExpectStatusOK()
+	okapitest.PUT(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.PATCH(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.OPTIONS(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.DELETE(t, baseURL+"/api/hello").ExpectStatusOK()
 
 }
 
@@ -234,7 +237,9 @@ func TestRegisterRoutes_AppliesMiddlewares(t *testing.T) {
 		return c.Next()
 	}
 
-	o := New()
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
+	o := New().WithAddr(addr)
 	RegisterRoutes(o, []RouteDefinition{
 		{
 			Method:      http.MethodGet,
@@ -252,7 +257,7 @@ func TestRegisterRoutes_AppliesMiddlewares(t *testing.T) {
 	defer func() { _ = o.Stop() }()
 	waitForServer()
 
-	okapitest.GET(t, "http://localhost:8080/ping").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/ping").ExpectStatusOK()
 	assert.Equal(t, int32(1), atomic.LoadInt32(&hits), "custom middleware should run exactly once")
 }
 

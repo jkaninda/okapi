@@ -64,7 +64,9 @@ func TestWithRenderer(t *testing.T) {
 	temp := &templateTest{
 		templates: template.Must(template.ParseGlob("public/*.html")),
 	}
-	o := New().WithRenderer(temp)
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
+	o := New().WithAddr(addr).WithRenderer(temp)
 	o.Get("/", func(c *Context) error {
 
 		title := "Greeting Page"
@@ -89,7 +91,7 @@ func TestWithRenderer(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.GET(t, fmt.Sprintf("%s/", testBaseURL)).ExpectBodyContains("Hello, World!").ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/", baseURL)).ExpectBodyContains("Hello, World!").ExpectStatusOK()
 
 }
 

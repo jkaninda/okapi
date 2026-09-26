@@ -36,7 +36,10 @@ import (
 
 func TestParam(t *testing.T) {
 
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	o := Default()
+	o.WithAddr(addr)
 	o.Get("/api/:version/users/:id", func(c *Context) error {
 		version := c.Param("version")
 		q := c.Query("q")
@@ -67,6 +70,6 @@ func TestParam(t *testing.T) {
 	body := `{"version":"v1","user_id":1}`
 	res := `{"version":"v1","user_id":1,"q":"Hello","tags":"hp,pc,mini"}`
 
-	okapitest.GET(t, "http://localhost:8080/api/v1/users/1?q=Hello&tags=hp,pc&tags=mini").ExpectStatusOK().Body(strings.NewReader(body)).ExpectBody(res)
+	okapitest.GET(t, baseURL+"/api/v1/users/1?q=Hello&tags=hp,pc&tags=mini").ExpectStatusOK().Body(strings.NewReader(body)).ExpectBody(res)
 
 }

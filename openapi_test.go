@@ -168,14 +168,17 @@ func TestOpenAPI(t *testing.T) {
 	apiV3.Put("/books", anyHandler).WithInput(&input{})
 	apiV3.Get("/books/:id", anyHandler).WithOutput(&output{})
 
-	o.StartForTest(t)
+	baseURL := o.With(WithAddr(freeAddr(t))).StartForTest(t)
 
-	okapitest.GET(t, fmt.Sprintf("%s/docs", testBaseURL)).ExpectStatusOK()
-	okapitest.GET(t, fmt.Sprintf("%s/openapi.json", testBaseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/docs", baseURL)).ExpectStatusOK()
+	okapitest.GET(t, fmt.Sprintf("%s/openapi.json", baseURL)).ExpectStatusOK()
 
 }
 func TestNew(t *testing.T) {
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	o := New()
+	o.WithAddr(addr)
 	o.WithContext(context.Background())
 	o.WithOpenAPIDocs(OpenAPI{
 		Title:       "Okapi Web Framework Example",
@@ -255,12 +258,14 @@ func TestNew(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/docs").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/openapi.json").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/openapi.yaml").ExpectStatusOK()
 }
 func TestWithOpenAPIDisabled(t *testing.T) {
-	o := Default().WithOpenAPIDisabled().WithDebug()
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
+	o := Default().WithAddr(addr).WithOpenAPIDisabled().WithDebug()
 	o.Get("/", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	}).Hide()
@@ -277,9 +282,9 @@ func TestWithOpenAPIDisabled(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusNotFound()
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusNotFound()
-	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusNotFound()
+	okapitest.GET(t, baseURL+"/docs").ExpectStatusNotFound()
+	okapitest.GET(t, baseURL+"/openapi.json").ExpectStatusNotFound()
+	okapitest.GET(t, baseURL+"/openapi.yaml").ExpectStatusNotFound()
 
 }
 

@@ -1,0 +1,65 @@
+import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
+
+/**
+ * Navigation for the v1 documentation.
+ *
+ * The Jekyll site ordered pages with a flat `nav_order` per section; the same
+ * order is kept here so readers who know the site still find things where they
+ * expect them.
+ */
+const sidebars: SidebarsConfig = {
+  docsSidebar: [
+    {
+      type: 'category',
+      label: 'Getting Started',
+      collapsed: false,
+      items: ['index', 'installation', 'quickstart/index', 'why-use-okapi'],
+    },
+    {
+      type: 'category',
+      label: 'Core Concepts',
+      link: {type: 'doc', id: 'core-concepts/index'},
+      items: [
+        'core-concepts/routing',
+        'core-concepts/request-handling',
+        'core-concepts/response-handling',
+        'core-concepts/group',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Features',
+      link: {type: 'doc', id: 'features/index'},
+      items: [
+        'features/validation',
+        'features/middleware',
+        'features/openapi',
+        'features/route-definition',
+        'features/sse',
+        'features/templating',
+        'features/spa',
+        'features/tls-https',
+        'features/testing',
+        'features/cli',
+        'features/error-handling',
+        'features/std-lib-compatibility',
+        'features/websocket',
+        'features/client',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Comparison',
+      link: {type: 'doc', id: 'comparison/index'},
+      items: ['comparison/okapi-vs-huma'],
+    },
+    'built-with-okapi',
+    {
+      type: 'link',
+      label: 'Examples',
+      href: 'https://github.com/jkaninda/okapi/tree/main/examples',
+    },
+  ],
+};
+
+export default sidebars;

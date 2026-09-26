@@ -303,7 +303,7 @@ inherit the group's prefix and middleware.
 
 Path parameters work as they do under `http.ServeMux` — `r.PathValue("id")` inside a
 standard handler returns what the route captured. See the
-[standard library compatibility guide](https://okapi.jkaninda.dev/features/std-lib-compatibility.html)
+[standard library compatibility guide](https://okapi.jkaninda.dev/features/std-lib-compatibility/)
 for the full details, and [`examples/std`](examples/std) for a runnable server.
 
 ---
@@ -460,7 +460,7 @@ func main() {
 > `SPA` / `SPAFS` / `SPAConfig` remain as deprecated aliases of
 > `Web` / `WebFS` / `WebConfig`.
 
-See the [SPA guide](https://okapi.jkaninda.dev/features/spa.html) and the
+See the [SPA guide](https://okapi.jkaninda.dev/features/spa/) and the
 [`examples/web`](examples/web) example for the full configuration.
 
 ---
@@ -671,7 +671,7 @@ o.Post("/books", handler).WithInput(&BookRequest{})                 // Request o
 o.Get("/books", handler).WithOutput(&BooksResponse{})               // Response only
 ```
 
-See the full guide at **[okapi.jkaninda.dev/features/openapi](https://okapi.jkaninda.dev/features/openapi.html)**
+See the full guide at **[okapi.jkaninda.dev/features/openapi](https://okapi.jkaninda.dev/features/openapi/)**
 
 #### Route Definition
 
@@ -782,6 +782,7 @@ Check out **[Goma Gateway](https://github.com/jkaninda/goma-gateway)** a high-pe
 - **[Posta](https://github.com/goposta/posta)** — Self-hosted email delivery platform. Send emails via HTTP API with SMTP delivery, templates, storage, and analytics.
 - **[Goma Admin](https://github.com/jkaninda/goma-admin)** — Control plane for Goma Gateway. Manage, configure, and monitor distributed API gateways from a unified dashboard.
 - **[Miabi](https://github.com/miabi-io/miabi)** — Open-source, self-hosted PaaS. Deploy containerized apps from Git, Docker images, or templates with builds, domains, SSL, databases, backups, and monitoring built in.
+- **[Certio](https://github.com/jkaninda/certio)** — Self-signed PKI and TLS certificate management in a single binary. Run an internal certificate authority from a dashboard, REST API, CLI, and ACME server, with issuance, renewal, revocation, and trust distribution built in.
 
 
 ## Okapi vs Huma

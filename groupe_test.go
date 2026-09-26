@@ -35,7 +35,10 @@ import (
 )
 
 func TestGroup(t *testing.T) {
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	o := Default()
+	o.WithAddr(addr)
 	// create api group
 	api := o.Group("/api").setDisabled(false).WithTagInfo(GroupTag{
 		Name:        "api",
@@ -105,20 +108,22 @@ func TestGroup(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.GET(t, "http://localhost:8080/api/group").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/api/standard").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/api/group").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/api/standard").ExpectStatusOK()
 
-	okapitest.GET(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.POST(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.PUT(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.PATCH(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.DELETE(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.OPTIONS(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.HEAD(t, "http://localhost:8080/api/hello").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/api/tandard-http").ExpectStatusNotFound()
+	okapitest.GET(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.POST(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.PUT(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.PATCH(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.DELETE(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.OPTIONS(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.HEAD(t, baseURL+"/api/hello").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/api/tandard-http").ExpectStatusNotFound()
 }
 func TestRegister(t *testing.T) {
-	app := New()
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
+	app := New().WithAddr(addr)
 	coreGroup := app.Group("/core").setDisabled(false).WithTags([]string{"CoreGroup"})
 
 	coreGroup.Use(func(c *Context) error {
@@ -142,8 +147,8 @@ func TestRegister(t *testing.T) {
 		}
 	}(app)
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/core/books").ExpectStatusOK()
-	okapitest.POST(t, "http://localhost:8080/core/books").ExpectStatusCreated()
+	okapitest.GET(t, baseURL+"/core/books").ExpectStatusOK()
+	okapitest.POST(t, baseURL+"/core/books").ExpectStatusCreated()
 
 }
 func helloHandler(c *Context) error {

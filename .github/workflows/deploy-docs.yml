@@ -23,31 +23,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout specified branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.branch }}
+          # Docusaurus reads git history for "Last updated" timestamps.
+          fetch-depth: 0
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Setup Node
+        uses: actions/setup-node@v7
         with:
-          ruby-version: '3.2'
-          bundler-cache: true
-          working-directory: docs
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
 
       - name: Setup GitHub Pages
-        id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
-      - name: Build with Jekyll
+      - name: Install dependencies
         working-directory: docs
-        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
-        env:
-          JEKYLL_ENV: production
+        run: npm ci
+
+      - name: Build with Docusaurus
+        working-directory: docs
+        run: npm run build
 
       - name: Upload site artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
-          path: 'docs/_site/'
+          path: 'docs/build/'
 
   deploy:
     needs: build
@@ -58,4 +61,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

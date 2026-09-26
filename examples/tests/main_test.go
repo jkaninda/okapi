@@ -75,7 +75,7 @@ func TestBooksAPI(t *testing.T) {
 // ************* Using Standalone Request Helpers ****************
 
 func TestGetBookHandler(t *testing.T) {
-	server := okapi.NewTestServerOn(t, 8000)
+	server := okapi.NewTestServerOn(t, 0)
 	server.Get("/books/:id", GetBookHandler)
 
 	// Test successful retrieval
@@ -90,7 +90,7 @@ func TestGetBookHandler(t *testing.T) {
 }
 
 func TestCreateBookHandler(t *testing.T) {
-	server := okapi.NewTestServerOn(t, 8000)
+	server := okapi.NewTestServerOn(t, 0)
 	server.Post("/books", CreateBookHandler)
 
 	book := Book{

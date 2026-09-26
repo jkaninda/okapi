@@ -1,0 +1,45 @@
+/**
+ * Okapi documentation theme.
+ *
+ * The palette is the chestnut of the animal the framework is named after, so
+ * the docs read as part of the project rather than as a stock Docusaurus site.
+ */
+
+:root {
+  --ifm-color-primary: #9b4a1c;
+  --ifm-color-primary-dark: #8c4319;
+  --ifm-color-primary-darker: #843f18;
+  --ifm-color-primary-darkest: #6d3414;
+  --ifm-color-primary-light: #aa511f;
+  --ifm-color-primary-lighter: #b25520;
+  --ifm-color-primary-lightest: #cc6d33;
+
+  --ifm-code-font-size: 92%;
+  --ifm-font-size-base: 16px;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #e79a6b;
+  --ifm-color-primary-dark: #e2854d;
+  --ifm-color-primary-darker: #df7b3e;
+  --ifm-color-primary-darkest: #c86124;
+  --ifm-color-primary-light: #ecaf89;
+  --ifm-color-primary-lighter: #efb998;
+  --ifm-color-primary-lightest: #f7dbc9;
+
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* Go examples are the bulk of these docs and often run long. */
+.markdown pre code {
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* Struct-tag and option tables are wide; let them scroll. */
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}

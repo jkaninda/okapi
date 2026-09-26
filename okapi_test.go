@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -43,8 +44,6 @@ import (
 	"github.com/jkaninda/njia"
 )
 
-var testBaseURL = "http://localhost:8080"
-
 type Book struct {
 	ID    int    `json:"id" param:"id" query:"id" form:"id"  xml:"id" max:"50" multipleOf:"1" example:"1"`
 	Name  string `json:"name" form:"name"  maxLength:"50" example:"The Go Programming Language" yaml:"name"`
@@ -53,24 +52,40 @@ type Book struct {
 }
 
 var (
-	books = []*Book{
+	books            = defaultBooks()
+	pageNotFound     = "Page non trouvée"
+	methodNotAllowed = "Cette Methode n'est pas autorisée"
+)
+
+// defaultBooks returns a fresh fixture. The admin handlers below append to and
+// mutate the books slice, so a test that uses them starts from this state
+// rather than from whatever an earlier run left behind.
+func defaultBooks() []*Book {
+	return []*Book{
 		{ID: 1, Name: "The Go Programming Language", Price: 30, Qty: 100},
 		{ID: 2, Name: "Learning Go", Price: 25, Qty: 50},
 		{ID: 3, Name: "Go in Action", Price: 40, Qty: 75},
 		{ID: 4, Name: "Go Web Programming", Price: 35, Qty: 60},
 		{ID: 5, Name: "Go Design Patterns", Price: 45, Qty: 80},
 	}
-	pageNotFound     = "Page non trouvée"
-	methodNotAllowed = "Cette Methode n'est pas autorisée"
-)
+}
 
 func TestStart(t *testing.T) {
+	// The admin routes registered below mutate the shared fixture, and the
+	// assertions expect the ids it produces, so reset it for this run and
+	// leave it as the next test expects to find it.
+	books = defaultBooks()
+	t.Cleanup(func() { books = defaultBooks() })
+
 	basicAuth := BasicAuth{
 		Username: "admin",
 		Password: "password",
 		Realm:    "Restricted Area",
 	}
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	o := Default()
+	o.WithAddr(addr)
 	o.NoRoute(func(c C) error {
 		return c.String(http.StatusNotFound, pageNotFound)
 	})
@@ -168,49 +183,49 @@ func TestStart(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/api/v1/books").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/api/v1/books/1").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/api/v1/books").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/api/v1/books/1").ExpectStatusOK()
 
 	// Docs
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/openapi.json").ExpectStatusOK()
 
 	// API V2
-	okapitest.GET(t, "http://localhost:8080/api/v2/books/1").ExpectStatusNotFound()
+	okapitest.GET(t, baseURL+"/api/v2/books/1").ExpectStatusNotFound()
 
 	// Any
-	okapitest.GET(t, "http://localhost:8080/api/v1/any/request").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/api/v1/all/request").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/favicon.ico").ExpectStatusNotFound()
+	okapitest.GET(t, baseURL+"/api/v1/any/request").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/api/v1/all/request").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/favicon.ico").ExpectStatusNotFound()
 
-	okapitest.GET(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.POST(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.PUT(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.PATCH(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.DELETE(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.OPTIONS(t, "http://localhost:8080/hello").ExpectStatusOK()
-	okapitest.HEAD(t, "http://localhost:8080/hello").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/hello").ExpectStatusOK()
+	okapitest.POST(t, baseURL+"/hello").ExpectStatusOK()
+	okapitest.PUT(t, baseURL+"/hello").ExpectStatusOK()
+	okapitest.PATCH(t, baseURL+"/hello").ExpectStatusOK()
+	okapitest.DELETE(t, baseURL+"/hello").ExpectStatusOK()
+	okapitest.OPTIONS(t, baseURL+"/hello").ExpectStatusOK()
+	okapitest.HEAD(t, baseURL+"/hello").ExpectStatusOK()
 
-	okapitest.GET(t, "http://localhost:8080/api/standard-httpo").ExpectStatusNotFound()
-	okapitest.GET(t, fmt.Sprintf("%s/api/standard-http", testBaseURL)).ExpectStatusNotFound()
+	okapitest.GET(t, baseURL+"/api/standard-httpo").ExpectStatusNotFound()
+	okapitest.GET(t, fmt.Sprintf("%s/api/standard-http", baseURL)).ExpectStatusNotFound()
 
 	// NoRoute and NotMethod
-	okapitest.GET(t, fmt.Sprintf("%s/api/standard-http", testBaseURL)).ExpectStatusNotFound().ExpectBody(pageNotFound)
+	okapitest.GET(t, fmt.Sprintf("%s/api/standard-http", baseURL)).ExpectStatusNotFound().ExpectBody(pageNotFound)
 
-	okapitest.GET(t, fmt.Sprintf("%s/custom", testBaseURL)).ExpectStatusNotFound().ExpectBody(pageNotFound)
+	okapitest.GET(t, fmt.Sprintf("%s/custom", baseURL)).ExpectStatusNotFound().ExpectBody(pageNotFound)
 
-	okapitest.POST(t, fmt.Sprintf("%s/standard", testBaseURL)).ExpectStatus(http.StatusMethodNotAllowed).ExpectBody(methodNotAllowed)
+	okapitest.POST(t, fmt.Sprintf("%s/standard", baseURL)).ExpectStatus(http.StatusMethodNotAllowed).ExpectBody(methodNotAllowed)
 
 	// Unauthorized admin Post
 	body := `{"id":5,"name":"The Go Programming Language","price":30,"qty":100}`
-	okapitest.POST(t, fmt.Sprintf("%s/api/admin/books", testBaseURL)).
+	okapitest.POST(t, fmt.Sprintf("%s/api/admin/books", baseURL)).
 		Header("Content-Type", "application/json").
 		Body(strings.NewReader(body)).
 		ExpectStatusUnauthorized()
 
 	// Authorized admin Post
 	body = `{"id":6,"name":"Advanced Go Programming","price":50,"qty":200}`
-	okapitest.POST(t, fmt.Sprintf("%s/api/admin/books", testBaseURL)).
+	okapitest.POST(t, fmt.Sprintf("%s/api/admin/books", baseURL)).
 		Header("Content-Type", "application/json").
 		SetBasicAuth("admin", "password").
 		Body(strings.NewReader(body)).
@@ -221,13 +236,16 @@ func TestWithServer(t *testing.T) {
 	opts := &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}
+	port := freePort(t)
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	baseURL := "http://" + addr
 	server := &http.Server{
-		Addr: ":8081",
+		Addr: addr,
 	}
 	logger := slog.New(slog.NewJSONHandler(defaultWriter, opts))
 	cors := Cors{AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}, AllowedOrigins: []string{"*"}}
 	o := New()
-	o.With(WithPort(8081), WithIdleTimeout(15),
+	o.With(WithPort(port), WithIdleTimeout(15),
 		WithWriteTimeout(10), WithReadTimeout(15),
 		WithMaxMultipartMemory(20>>10), WithCors(cors),
 		WithLogger(logger), WithContext(context.Background()),
@@ -256,13 +274,15 @@ func TestWithServer(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.GET(t, "http://localhost:8081").ExpectStatusOK()
+	okapitest.GET(t, baseURL).ExpectStatusOK()
 
 }
 func TestWithAddr(t *testing.T) {
 
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	o := New()
-	o.With(WithAddr(":8081"), WithStrictSlash(true)).DisableAccessLog()
+	o.With(WithAddr(addr), WithStrictSlash(true)).DisableAccessLog()
 
 	o.Get("/", func(c *Context) error { return c.OK(Book{}) })
 	// Start server in background
@@ -279,7 +299,7 @@ func TestWithAddr(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8081").ExpectStatusOK()
+	okapitest.GET(t, baseURL).ExpectStatusOK()
 
 }
 func TestCustomConfig(t *testing.T) {
@@ -287,9 +307,11 @@ func TestCustomConfig(t *testing.T) {
 	if err != nil {
 		return
 	}
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	router := njia.New()
 	o := New()
-	o.With(WithAddr(":8081"),
+	o.With(WithAddr(addr),
 		WithStrictSlash(true),
 		WithOpenAPIDisabled(),
 		WithMuxRouter(router)).WithDebug().
@@ -310,8 +332,8 @@ func TestCustomConfig(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8081").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8081/openapi.json").ExpectStatusNotFound()
+	okapitest.GET(t, baseURL).ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/openapi.json").ExpectStatusNotFound()
 }
 
 type BookController struct{}
@@ -329,7 +351,10 @@ func (bc *BookController) CreateBook(c *Context) error {
 	})
 }
 func TestRegisterRoutes(t *testing.T) {
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	app := New()
+	app.WithAddr(addr)
 	bookController := &BookController{}
 
 	// Method 1: Register directly to the app instance
@@ -354,8 +379,8 @@ func TestRegisterRoutes(t *testing.T) {
 
 	waitForServer()
 
-	okapitest.GET(t, "http://localhost:8080/core/books").ExpectStatusOK()
-	okapitest.POST(t, "http://localhost:8080/core/books").ExpectStatusCreated()
+	okapitest.GET(t, baseURL+"/core/books").ExpectStatusOK()
+	okapitest.POST(t, baseURL+"/core/books").ExpectStatusCreated()
 
 }
 
@@ -474,7 +499,10 @@ func (bc *BookController) Routes() []RouteDefinition {
 }
 
 func TestWithComponentSchemaRef(t *testing.T) {
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
 	o := Default()
+	o.WithAddr(addr)
 	err := o.RegisterSchemas(map[string]*SchemaInfo{
 		"fieldNames": {
 			Schema: openapi3.NewSchemaRef("", openapi3.NewStringSchema().WithEnum([]string{"fldA", "fldB"})),
@@ -508,8 +536,8 @@ func TestWithComponentSchemaRef(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/docs").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/openapi.json").ExpectStatusOK()
 }
 
 type BookTest struct {

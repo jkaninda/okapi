@@ -28,10 +28,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -285,14 +283,9 @@ func TestStaticFSDoesNotListDirectories(t *testing.T) {
 // contexts before the server has drained, which failed every in-flight request.
 // Run with -race: Start and Stop touch the server from different goroutines.
 func TestStopDrainsInFlightRequests(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	_ = ln.Close()
+	addr := freeAddr(t)
 
-	o := New(WithAddr("127.0.0.1:" + strconv.Itoa(port)))
+	o := New(WithAddr(addr))
 	started := make(chan struct{})
 	o.Get("/slow", func(c *Context) error {
 		close(started)
@@ -315,7 +308,7 @@ func TestStopDrainsInFlightRequests(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		resp, err := http.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/slow")
+		resp, err := http.Get("http://" + addr + "/slow")
 		if err != nil {
 			done <- result{err: err}
 			return
@@ -341,14 +334,9 @@ func TestStopDrainsInFlightRequests(t *testing.T) {
 // finishes on its own, so it must end when shutdown begins rather than hold
 // StopWithContext until its deadline.
 func TestSSEStreamEndsOnShutdown(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	_ = ln.Close()
+	addr := freeAddr(t)
 
-	o := New(WithAddr("127.0.0.1:" + strconv.Itoa(port)))
+	o := New(WithAddr(addr))
 	streaming := make(chan struct{})
 	streamErr := make(chan error, 1)
 	o.Get("/events", func(c *Context) error {
@@ -364,7 +352,7 @@ func TestSSEStreamEndsOnShutdown(t *testing.T) {
 	}
 
 	go func() {
-		resp, err := http.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/events")
+		resp, err := http.Get("http://" + addr + "/events")
 		if err == nil {
 			_ = resp.Body.Close()
 		}

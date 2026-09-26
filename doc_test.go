@@ -33,7 +33,9 @@ import (
 )
 
 func TestRegisterDocRoutes(t *testing.T) {
-	o := New()
+	addr := freeAddr(t)
+	baseURL := "http://" + addr
+	o := New().WithAddr(addr)
 	o.Get("/", func(c *Context) error {
 		return c.Text(http.StatusOK, "Hello World!")
 	})
@@ -54,9 +56,9 @@ func TestRegisterDocRoutes(t *testing.T) {
 	}(o)
 
 	waitForServer()
-	okapitest.GET(t, "http://localhost:8080/openapi.json").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/openapi.yaml").ExpectStatusOK()
-	okapitest.GET(t, "http://localhost:8080/docs").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/openapi.json").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/openapi.yaml").ExpectStatusOK()
+	okapitest.GET(t, baseURL+"/docs").ExpectStatusOK()
 
 }
 

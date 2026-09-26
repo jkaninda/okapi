@@ -25,6 +25,8 @@
 package okapi
 
 import (
+	"net"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -41,4 +43,12 @@ func TestNewTestServer(t *testing.T) {
 
 func waitForServer() {
 	time.Sleep(100 * time.Millisecond)
+}
+
+// freeAddr returns a loopback address whose port is free, so tests that start a
+// real server never depend on a fixed port being available.
+func freeAddr(t TestingT) string {
+	t.Helper()
+
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(freePort(t)))
 }

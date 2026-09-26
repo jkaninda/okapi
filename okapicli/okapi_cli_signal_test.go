@@ -79,12 +79,7 @@ func TestCLI_RunServer_ReleasesSignalHandler(t *testing.T) {
 // TestCLI_RunServer_PartialOptions checks that zero fields in RunOptions keep
 // their defaults, so in-flight requests survive a graceful shutdown.
 func TestCLI_RunServer_PartialOptions(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := ln.Addr().String()
-	_ = ln.Close()
+	addr := freeAddr(t)
 
 	app := okapi.New().WithAddr(addr)
 	app.Get("/slow", func(c *okapi.Context) error {

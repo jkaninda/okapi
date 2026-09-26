@@ -661,7 +661,7 @@ func TestAbortValidationErrors(t *testing.T) {
 	})
 }
 func TestProblemDetailWithCustomFields(t *testing.T) {
-	app := NewTestServerOn(t, 8001)
+	app := NewTestServer(t)
 
 	app.With(
 		WithProblemDetailErrorHandler(&ErrorHandlerConfig{
@@ -688,7 +688,7 @@ func TestProblemDetailWithCustomFields(t *testing.T) {
 
 }
 func TestOkapi_WithErrorHandler(t *testing.T) {
-	app := NewTestServerOn(t, 8002)
+	app := NewTestServer(t)
 
 	app.With(
 		WithErrorHandler(func(c *Context, code int, message string, err error) error {
@@ -708,7 +708,7 @@ func TestOkapi_WithErrorHandler(t *testing.T) {
 		ExpectBodyContains("code").ExpectBodyContains("msg")
 }
 func TestOkapi_WithSimpleProblemDetailErrorHandler(t *testing.T) {
-	app := NewTestServerOn(t, 8003)
+	app := NewTestServer(t)
 
 	app.WithSimpleProblemDetailErrorHandler()
 

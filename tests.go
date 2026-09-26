@@ -121,7 +121,10 @@ func NewTestServerWithOkapi(t TestingT, o *Okapi) *TestServer {
 	}
 }
 
-// NewTestServerOn creates and starts a new Okapi test server.
+// NewTestServerOn creates and starts a new Okapi test server on the given port.
+//
+// A port lower than or equal to zero lets the operating system choose a free
+// port, which keeps tests independent of any fixed port being available.
 //
 // Example:
 //
@@ -132,6 +135,9 @@ func NewTestServerWithOkapi(t TestingT, o *Okapi) *TestServer {
 // okapitest.GET(t, testServer.BaseURL+"/books").ExpectStatusOK().ExpectBodyContains("The Go Programming Language")
 func NewTestServerOn(t TestingT, port int) *TestServer {
 	t.Helper()
+	if port <= 0 {
+		port = freePort(t)
+	}
 	o := New(WithPort(port))
 	baseURL := o.StartForTest(t)
 
@@ -140,6 +146,22 @@ func NewTestServerOn(t TestingT, port int) *TestServer {
 		BaseURL: baseURL,
 		t:       t,
 	}
+}
+
+// freePort reserves an ephemeral TCP port on the loopback interface and returns
+// it, so tests can bind a port that is free instead of a fixed one.
+func freePort(t TestingT) int {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to reserve a free port: %v", err)
+		return 0
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	return port
 }
 
 // StartForTest starts the Okapi server for testing and returns the base URL.

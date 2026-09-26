@@ -170,7 +170,7 @@ func capitalize(s string) string {
 // is not considered, so a payload field tagged `json:"body"` is bound as data.
 func hasBodyField(v any) bool {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 	}
 	if rv.Kind() != reflect.Struct {

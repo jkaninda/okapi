@@ -912,7 +912,7 @@ func (c *Context) Respond(output any) error {
 	}
 
 	// Dereference pointer if needed
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return c.AbortInternalServerError("Internal Server Error", fmt.Errorf("output is nil pointer"))
 		}

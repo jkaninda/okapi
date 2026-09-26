@@ -469,7 +469,7 @@ func setWithType(field reflect.Value, raw string) error {
 		}
 		field.SetBool(b)
 		return nil
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
 		}

@@ -288,7 +288,7 @@ func (c *CLI) GetDuration(name string) time.Duration {
 // Supported types: string, int*, bool, float*
 func (c *CLI) FromStruct(v interface{}) *CLI {
 	val := reflect.ValueOf(v)
-	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Struct {
+	if val.Kind() != reflect.Pointer || val.Elem().Kind() != reflect.Struct {
 		panic("FromStruct requires a non-nil pointer to a struct")
 	}
 
@@ -692,7 +692,7 @@ func (cmd *Command) Args() []string {
 // Uses the same tags as CLI.FromStruct: cli, short, desc, env, default
 func (cmd *Command) FromStruct(v interface{}) *Command {
 	val := reflect.ValueOf(v)
-	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Struct {
+	if val.Kind() != reflect.Pointer || val.Elem().Kind() != reflect.Struct {
 		panic("FromStruct requires a non-nil pointer to a struct")
 	}
 

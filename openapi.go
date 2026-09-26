@@ -1655,7 +1655,7 @@ func reflectToSchemaWithInfo(v any) *SchemaInfo {
 	t := reflect.TypeOf(v)
 
 	// Handle pointers
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -2219,7 +2219,7 @@ func extractPathParamsFromStruct(v any) []*openapi3.ParameterRef {
 	typ := val.Type()
 
 	// Handle pointer types
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil
 		}
@@ -2293,7 +2293,7 @@ func getFieldTypeName(t reflect.Type) string {
 		return constFloat
 	case reflect.Bool:
 		return constBool
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return getFieldTypeName(t.Elem())
 	default:
 		return t.String()
@@ -2485,7 +2485,7 @@ func normalizeToStructPointer(input any, inputType string) reflect.Value {
 		v = _ptr
 	}
 
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		panic(fmt.Sprintf(
 			"Invalid %s: expected struct or non-nil pointer to struct, but got %T. "+
 				"Example: My%s{} or &My%s{}",

@@ -325,16 +325,21 @@ func parseECDSAPublicKey(crv, xB64, yB64 string) (*ecdsa.PublicKey, error) {
 		return nil, fmt.Errorf("unsupported EC curve: %s", crv)
 	}
 
-	pubKey := &ecdsa.PublicKey{
-		Curve: curve,
-		X:     new(big.Int).SetBytes(xBytes),
-		Y:     new(big.Int).SetBytes(yBytes),
-	}
-
 	// A point that is not on the named curve is not a usable public key, and
-	// accepting one invites invalid-curve attacks.
-	if !curve.IsOnCurve(pubKey.X, pubKey.Y) {
-		return nil, fmt.Errorf("ec public key is not on curve %s", crv)
+	// accepting one invites invalid-curve attacks. Parsing an uncompressed
+	// point performs that check; elliptic.Curve.IsOnCurve is deprecated.
+	byteLen := (curve.Params().BitSize + 7) / 8
+	if len(xBytes) > byteLen || len(yBytes) > byteLen {
+		return nil, fmt.Errorf("ec public key coordinates are too large for curve %s", crv)
+	}
+	point := make([]byte, 1+2*byteLen)
+	point[0] = 4 // uncompressed form, SEC 1 section 2.3.3
+	new(big.Int).SetBytes(xBytes).FillBytes(point[1 : 1+byteLen])
+	new(big.Int).SetBytes(yBytes).FillBytes(point[1+byteLen:])
+
+	pubKey, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+	if err != nil {
+		return nil, fmt.Errorf("ec public key is not on curve %s: %w", crv, err)
 	}
 	return pubKey, nil
 }

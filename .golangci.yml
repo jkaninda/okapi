@@ -32,10 +32,14 @@ linters:
           - dupl
           - lll
         path: /*
+    # Test files are analysed but not reported on: table-driven tests repeat
+    # literals by nature, which goconst flags with nothing to fix. They stay
+    # analysed so `unused` still sees helpers that only tests call.
     paths:
+      - _test\.go$
       - third_party$
       - builtin$
-      - examples$
+      - ^examples/
 formatters:
   enable:
     - gofmt
@@ -44,4 +48,4 @@ formatters:
     paths:
       - third_party$
       - builtin$
-      - examples$
+      - ^examples/

@@ -109,7 +109,7 @@ func (c *Context) Bind(out any) error {
 // Bind binds the request data to the provided struct based on the content type and tags.
 func (c *Context) bindRequest(out any) error {
 	v := reflect.ValueOf(out)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return errors.New("bind target must be a non-nil pointer to a struct")
 	}
 	elem := v.Elem()
@@ -688,7 +688,7 @@ func formToStruct(data url.Values, v any) error {
 
 func validateStruct(v any) error {
 	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 

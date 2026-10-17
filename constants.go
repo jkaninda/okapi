@@ -202,6 +202,7 @@ const (
 	// Default HTTP status
 	defaultStatus    = 200
 	constLocalhost   = "localhost"
+	okapiModulePath  = "github.com/jkaninda/okapi"
 	constDevelopment = "development"
 
 	requestIDHeader = "X-Request-ID"

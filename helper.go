@@ -26,11 +26,14 @@ package okapi
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
 	"runtime"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -238,48 +241,72 @@ func normalizeEnvironment(env string) string {
 
 // Helper function for colored output
 func getMethodColor(method string) string {
-	colors := map[string]string{
-		methodGet:    "\033[32m", // Green
-		methodPost:   "\033[34m", // Blue
-		methodPut:    "\033[33m", // Yellow
-		methodPatch:  "\033[36m", // Cyan
-		methodDelete: "\033[31m", // Red
+	switch method {
+	case methodGet:
+		return "\033[32m" // Green
+	case methodPost:
+		return "\033[34m" // Blue
+	case methodPut:
+		return "\033[33m" // Yellow
+	case methodPatch:
+		return "\033[36m" // Cyan
+	case methodDelete:
+		return "\033[31m" // Red
+	default:
+		return "\033[0m" // Default
 	}
-
-	if color, ok := colors[method]; ok {
-		return color
-	}
-	return "\033[0m" // Default
 }
 
-// parseAddr parses the server address into host and port
+// colorEnabled reports whether ANSI colors should be written to f: only
+// when f is a terminal and NO_COLOR (https://no-color.org) is not set.
+func colorEnabled(f *os.File) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+// parseAddr parses the server address into host and port.
+// Wildcard hosts are shown as localhost, and named ports such as
+// "http" are resolved to their number.
 func parseAddr(addr string) (host, port string) {
-	// Handle different address formats
-	if addr == ":http" {
-		return constLocalhost, "80"
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return constLocalhost, "8080"
 	}
-	if addr == ":https" {
-		return constLocalhost, "443"
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = constLocalhost
 	}
-
-	if strings.HasPrefix(addr, ":") {
-		return constLocalhost, strings.TrimPrefix(addr, ":")
+	if p, err := net.LookupPort("tcp", port); err == nil {
+		port = strconv.Itoa(p)
 	}
+	return host, port
+}
 
-	// Split host:port
-	parts := strings.Split(addr, ":")
-	if len(parts) == 2 {
-		host = parts[0]
-		port = parts[1]
-
-		// If host is empty or 0.0.0.0, show localhost for clarity
-		if host == "" || host == "0.0.0.0" {
-			host = constLocalhost
+// okapiVersion returns the okapi module version recorded in the build
+// info, or "" when it is unknown (e.g. a local or replaced build).
+func okapiVersion() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	mod := &bi.Main
+	for _, dep := range bi.Deps {
+		if dep.Path == okapiModulePath {
+			mod = dep
+			break
 		}
-
-		return host, port
 	}
+	if mod.Path != okapiModulePath || mod.Replace != nil || mod.Version == "(devel)" {
+		return ""
+	}
+	return mod.Version
+}
 
-	// Fallback
-	return constLocalhost, "8080"
+// serverURL builds the URL shown for a server listening on addr.
+func serverURL(scheme, addr, path string) string {
+	host, port := parseAddr(addr)
+	return scheme + "://" + net.JoinHostPort(host, port) + path
 }

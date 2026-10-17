@@ -25,9 +25,11 @@
 package okapi
 
 import (
+	"bytes"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -181,12 +183,128 @@ func TestIsSensitiveParam(t *testing.T) {
 	}
 }
 func TestParseAddr(t *testing.T) {
-	host, port := parseAddr("http://localhost:8080")
-	if host != "localhost" {
-		t.Errorf("parseAddr(\"http:localhost:8080\") = %s; want http", host)
+	tests := []struct {
+		addr, host, port string
+	}{
+		{":8080", "localhost", "8080"},
+		{":http", "localhost", "80"},
+		{":https", "localhost", "443"},
+		{"0.0.0.0:9000", "localhost", "9000"},
+		{"127.0.0.1:9000", "127.0.0.1", "9000"},
+		{"[::]:9000", "localhost", "9000"},
+		{"[::1]:9000", "::1", "9000"},
+		{"example.com:8443", "example.com", "8443"},
+		{"invalid", "localhost", "8080"},
 	}
-	if port != "8080" {
-		t.Errorf("parseAddr(\"http:localhost:8080\") = %s; want http", port)
+	for _, tt := range tests {
+		host, port := parseAddr(tt.addr)
+		if host != tt.host || port != tt.port {
+			t.Errorf("parseAddr(%q) = %q, %q; want %q, %q", tt.addr, host, port, tt.host, tt.port)
+		}
 	}
+}
 
+func TestServerURL(t *testing.T) {
+	tests := []struct {
+		scheme, addr, path, want string
+	}{
+		{"http", ":8080", "", "http://localhost:8080"},
+		{"https", ":https", "/docs", "https://localhost:443/docs"},
+		{"http", "[::1]:9000", "/openapi.json", "http://[::1]:9000/openapi.json"},
+	}
+	for _, tt := range tests {
+		if got := serverURL(tt.scheme, tt.addr, tt.path); got != tt.want {
+			t.Errorf("serverURL(%q, %q, %q) = %q; want %q", tt.scheme, tt.addr, tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestWithoutBanner(t *testing.T) {
+	if New().noBanner {
+		t.Error("banner should be enabled by default")
+	}
+	if !New(WithoutBanner()).noBanner {
+		t.Error("WithoutBanner() option should disable the banner")
+	}
+	if !New().WithoutBanner().noBanner {
+		t.Error("(*Okapi).WithoutBanner() should disable the banner")
+	}
+}
+
+func TestOkapiVersionLocalBuild(t *testing.T) {
+	// The test binary is a local build of the okapi module itself.
+	if v := okapiVersion(); v != "" {
+		t.Errorf("okapiVersion() = %q; want empty for a local build", v)
+	}
+}
+
+func TestWriteRoutes(t *testing.T) {
+	h := func(c *Context) error { return nil }
+
+	t.Run("aligns columns with headers and skips hidden routes", func(t *testing.T) {
+		o := New()
+		o.Get("/a", h).Name = "home"
+		o.Get("/a-very-long-hidden-path", h).Hide()
+		o.Get("/disabled", h).Disable()
+
+		var buf bytes.Buffer
+		o.writeRoutes(&buf, false)
+		want := "METHOD | PATH | NAME\n" +
+			"--------------------\n" +
+			"GET    | /a   | home\n" +
+			"====================\n"
+		if got := buf.String(); got != want {
+			t.Errorf("writeRoutes() =\n%s\nwant\n%s", got, want)
+		}
+	})
+
+	t.Run("drops NAME column when no route has a name", func(t *testing.T) {
+		o := New()
+		o.Get("/a", h).Name = ""
+		o.Post("/items", h).Name = ""
+
+		var buf bytes.Buffer
+		o.writeRoutes(&buf, false)
+		want := "METHOD | PATH\n" +
+			"---------------\n" +
+			"GET    | /a\n" +
+			"POST   | /items\n" +
+			"===============\n"
+		if got := buf.String(); got != want {
+			t.Errorf("writeRoutes() =\n%s\nwant\n%s", got, want)
+		}
+	})
+
+	t.Run("reports no routes when all are hidden", func(t *testing.T) {
+		o := New()
+		o.Get("/hidden", h).Hide()
+
+		var buf bytes.Buffer
+		o.writeRoutes(&buf, false)
+		if got := buf.String(); got != "No routes registered\n" {
+			t.Errorf("writeRoutes() = %q; want %q", got, "No routes registered\n")
+		}
+	})
+
+	t.Run("colors methods only when enabled", func(t *testing.T) {
+		o := New()
+		o.Get("/a", h)
+
+		var plain, colored bytes.Buffer
+		o.writeRoutes(&plain, false)
+		o.writeRoutes(&colored, true)
+		if strings.Contains(plain.String(), "\033[") {
+			t.Errorf("writeRoutes(color=false) contains ANSI codes: %q", plain.String())
+		}
+		if !strings.Contains(colored.String(), "\033[32mGET") {
+			t.Errorf("writeRoutes(color=true) missing GET color: %q", colored.String())
+		}
+	})
+}
+
+func TestColorEnabledNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	if colorEnabled(os.Stdout) {
+		t.Error("colorEnabled() = true with NO_COLOR set")
+	}
 }

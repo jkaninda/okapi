@@ -51,6 +51,21 @@ o.Use(okapi.RequestID())
 It reuses an incoming `X-Request-Id`, or generates one, stores it under
 `request_id` in the context, and sets the response header.
 
+### Access Logging
+
+Okapi logs every request through its `slog` logger, set with
+`okapi.WithLogger`. 5xx responses are logged at `ERROR`, 4xx at `WARN`, and
+everything else at `INFO`. Each entry carries a `component=okapi` attribute, so
+you can tell Okapi's own logs apart from your application's:
+
+```text
+level=INFO msg="Incoming request" method=GET path=/ status=200 duration=1.25ms ip=127.0.0.1 host=localhost:8080 bytes_in=0 bytes_out=42 referer="" user_agent=curl/8.7.1 component=okapi
+```
+
+Logs written through `c.Logger()` are not tagged, because they are your
+application's logs. To turn access logging off, use
+`okapi.WithAccessLogDisabled()` or `o.DisableAccessLog()`.
+
 ### CORS Middleware
 
 ```go

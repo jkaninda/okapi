@@ -1897,55 +1897,65 @@ func (o *Okapi) printServerInfo() {
 }
 
 func (o *Okapi) printRoutes() {
-	routes := o.routes
+	o.writeRoutes(os.Stdout, colorEnabled(os.Stdout))
+}
+
+// writeRoutes writes the table of visible routes to w, coloring the
+// method column when color is true.
+func (o *Okapi) writeRoutes(w io.Writer, color bool) {
+	routes := make([]*Route, 0, len(o.routes))
+	for _, route := range o.routes {
+		if !route.hidden && !route.isDisabled() {
+			routes = append(routes, route)
+		}
+	}
 	if len(routes) == 0 {
-		fmt.Println("No routes registered")
+		_, _ = fmt.Fprintln(w, "No routes registered")
 		return
 	}
 
-	// Calculate column widths for better formatting
-	maxMethod := 0
-	maxPath := 0
+	// Column widths start at the header labels so rows line up with them.
+	maxMethod := len("METHOD")
+	maxPath := len("PATH")
 	maxName := 0
-
 	for _, route := range routes {
-		if len(route.Method) > maxMethod {
-			maxMethod = len(route.Method)
-		}
-		if len(route.Path) > maxPath {
-			maxPath = len(route.Path)
-		}
-		if len(route.Name) > maxName {
-			maxName = len(route.Name)
-		}
+		maxMethod = max(maxMethod, len(route.Method))
+		maxPath = max(maxPath, len(route.Path))
+		maxName = max(maxName, len(route.Name))
+	}
+	// Drop the NAME column when no route has a name.
+	showName := maxName > 0
+	if showName {
+		maxName = max(maxName, len("NAME"))
 	}
 
-	// Calculate total width for the separator
-	totalWidth := maxMethod + maxPath + maxName + 6
-	separatorWidth := totalWidth
+	totalWidth := maxMethod + maxPath + 3
+	if showName {
+		totalWidth += maxName + 3
+	}
 
 	// Print table header
-	fmt.Printf("%-*s | %-*s | %-*s\n",
-		maxMethod, "METHOD",
-		maxPath, "PATH",
-		maxName, "NAME")
-	fmt.Println(strings.Repeat("-", totalWidth))
+	header := fmt.Sprintf("%-*s | %-*s", maxMethod, "METHOD", maxPath, "PATH")
+	if showName {
+		header += fmt.Sprintf(" | %-*s", maxName, "NAME")
+	}
+	_, _ = fmt.Fprintln(w, strings.TrimRight(header, " "))
+	_, _ = fmt.Fprintln(w, strings.Repeat("-", totalWidth))
 
 	// Print routes
 	for _, route := range routes {
-		if route.hidden || route.isDisabled() {
-			continue // Skip hidden/disabled routes
+		method := fmt.Sprintf("%-*s", maxMethod, route.Method)
+		if color {
+			method = getMethodColor(route.Method) + method + "\033[0m"
 		}
-
-		methodColor := getMethodColor(route.Method)
-		fmt.Printf("%s%-*s\033[0m | %-*s | %-*s\n",
-			methodColor,
-			maxMethod, route.Method,
-			maxPath, route.Path,
-			maxName, route.Name)
+		row := fmt.Sprintf("%s | %-*s", method, maxPath, route.Path)
+		if showName {
+			row += fmt.Sprintf(" | %s", route.Name)
+		}
+		_, _ = fmt.Fprintln(w, strings.TrimRight(row, " "))
 	}
 
-	fmt.Println(strings.Repeat("=", separatorWidth))
+	_, _ = fmt.Fprintln(w, strings.Repeat("=", totalWidth))
 }
 
 // Register registers a list of RouteDefinition to the Okapi instance.

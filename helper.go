@@ -241,18 +241,30 @@ func normalizeEnvironment(env string) string {
 
 // Helper function for colored output
 func getMethodColor(method string) string {
-	colors := map[string]string{
-		methodGet:    "\033[32m", // Green
-		methodPost:   "\033[34m", // Blue
-		methodPut:    "\033[33m", // Yellow
-		methodPatch:  "\033[36m", // Cyan
-		methodDelete: "\033[31m", // Red
+	switch method {
+	case methodGet:
+		return "\033[32m" // Green
+	case methodPost:
+		return "\033[34m" // Blue
+	case methodPut:
+		return "\033[33m" // Yellow
+	case methodPatch:
+		return "\033[36m" // Cyan
+	case methodDelete:
+		return "\033[31m" // Red
+	default:
+		return "\033[0m" // Default
 	}
+}
 
-	if color, ok := colors[method]; ok {
-		return color
+// colorEnabled reports whether ANSI colors should be written to f: only
+// when f is a terminal and NO_COLOR (https://no-color.org) is not set.
+func colorEnabled(f *os.File) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
 	}
-	return "\033[0m" // Default
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 // parseAddr parses the server address into host and port.

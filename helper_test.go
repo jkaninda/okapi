@@ -25,9 +25,11 @@
 package okapi
 
 import (
+	"bytes"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -233,5 +235,76 @@ func TestOkapiVersionLocalBuild(t *testing.T) {
 	// The test binary is a local build of the okapi module itself.
 	if v := okapiVersion(); v != "" {
 		t.Errorf("okapiVersion() = %q; want empty for a local build", v)
+	}
+}
+
+func TestWriteRoutes(t *testing.T) {
+	h := func(c *Context) error { return nil }
+
+	t.Run("aligns columns with headers and skips hidden routes", func(t *testing.T) {
+		o := New()
+		o.Get("/a", h).Name = "home"
+		o.Get("/a-very-long-hidden-path", h).Hide()
+		o.Get("/disabled", h).Disable()
+
+		var buf bytes.Buffer
+		o.writeRoutes(&buf, false)
+		want := "METHOD | PATH | NAME\n" +
+			"--------------------\n" +
+			"GET    | /a   | home\n" +
+			"====================\n"
+		if got := buf.String(); got != want {
+			t.Errorf("writeRoutes() =\n%s\nwant\n%s", got, want)
+		}
+	})
+
+	t.Run("drops NAME column when no route has a name", func(t *testing.T) {
+		o := New()
+		o.Get("/a", h).Name = ""
+		o.Post("/items", h).Name = ""
+
+		var buf bytes.Buffer
+		o.writeRoutes(&buf, false)
+		want := "METHOD | PATH\n" +
+			"---------------\n" +
+			"GET    | /a\n" +
+			"POST   | /items\n" +
+			"===============\n"
+		if got := buf.String(); got != want {
+			t.Errorf("writeRoutes() =\n%s\nwant\n%s", got, want)
+		}
+	})
+
+	t.Run("reports no routes when all are hidden", func(t *testing.T) {
+		o := New()
+		o.Get("/hidden", h).Hide()
+
+		var buf bytes.Buffer
+		o.writeRoutes(&buf, false)
+		if got := buf.String(); got != "No routes registered\n" {
+			t.Errorf("writeRoutes() = %q; want %q", got, "No routes registered\n")
+		}
+	})
+
+	t.Run("colors methods only when enabled", func(t *testing.T) {
+		o := New()
+		o.Get("/a", h)
+
+		var plain, colored bytes.Buffer
+		o.writeRoutes(&plain, false)
+		o.writeRoutes(&colored, true)
+		if strings.Contains(plain.String(), "\033[") {
+			t.Errorf("writeRoutes(color=false) contains ANSI codes: %q", plain.String())
+		}
+		if !strings.Contains(colored.String(), "\033[32mGET") {
+			t.Errorf("writeRoutes(color=true) missing GET color: %q", colored.String())
+		}
+	})
+}
+
+func TestColorEnabledNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	if colorEnabled(os.Stdout) {
+		t.Error("colorEnabled() = true with NO_COLOR set")
 	}
 }

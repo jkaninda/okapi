@@ -282,37 +282,47 @@ func (c *Context) Error(code int, message string) error {
 	return nil
 }
 
+// IsAborted reports whether an Abort helper has already answered the request. Next runs no further
+// handler once it has.
+func (c *Context) IsAborted() bool { return c.aborted }
+
+// abort marks the request answered, so Next runs no further handler, and passes writeErr through.
+func (c *Context) abort(writeErr error) error {
+	c.aborted = true
+	return writeErr
+}
+
 // AbortWithError writes a standardized error response using the configured error handler.
 func (c *Context) AbortWithError(code int, err error) error {
 	message := http.StatusText(code)
-	return c.getContextErrorHandler()(c, code, message, err)
+	return c.abort(c.getContextErrorHandler()(c, code, message, err))
 }
 
 // abortWithError writes a standardized error response with custom message using the configured error handler.
 func (c *Context) abortWithError(code int, msg string, err error) error {
-	return c.getContextErrorHandler()(c, code, msg, err)
+	return c.abort(c.getContextErrorHandler()(c, code, msg, err))
 }
 
 // AbortWithJSON writes a custom JSON error response.
 func (c *Context) AbortWithJSON(code int, jsonObj interface{}) error {
-	return c.JSON(code, jsonObj)
+	return c.abort(c.JSON(code, jsonObj))
 }
 
 // AbortWithProblemDetail writes an RFC 7807 Problem Details response.
 func (c *Context) AbortWithProblemDetail(problem *ProblemDetail) error {
-	return c.jsonProblemError(problem.Status, problem)
+	return c.abort(c.jsonProblemError(problem.Status, problem))
 }
 
 // AbortWithStatus writes an error response with status code and custom message.
 // Note: This method maintains backward compatibility by using the default ErrorResponse structure.
 // For full customization, use AbortWithError or set a custom ErrorHandler.
 func (c *Context) AbortWithStatus(code int, message string) error {
-	return c.JSON(code, ErrorResponse{
+	return c.abort(c.JSON(code, ErrorResponse{
 		Code:      code,
 		Message:   http.StatusText(code),
 		Details:   message,
 		Timestamp: time.Now(),
-	})
+	}))
 }
 
 // ********** Helper Method *************
@@ -554,14 +564,14 @@ func (c *Context) AbortValidationErrors(errors []ValidationError, msg ...string)
 		message = msg[0]
 	}
 
-	return c.JSON(http.StatusUnprocessableEntity, ValidationErrorResponse{
+	return c.abort(c.JSON(http.StatusUnprocessableEntity, ValidationErrorResponse{
 		ErrorResponse: ErrorResponse{
 			Code:      http.StatusUnprocessableEntity,
 			Message:   message,
 			Timestamp: time.Now(),
 		},
 		Errors: errors,
-	})
+	}))
 }
 
 // AbortValidationErrorsWithProblemDetail writes validation errors as RFC 7807 Problem Details
@@ -599,10 +609,10 @@ func (c *Context) ErrorNotModified() error {
 func (c *Context) AbortNotModified() error {
 	if c.committed() {
 		c.logDiscardedWrite(http.StatusNotModified)
-		return nil
+		return c.abort(nil)
 	}
 	c.response.WriteHeader(http.StatusNotModified)
-	return nil
+	return c.abort(nil)
 }
 
 // ErrorLocked writes a 423 Locked response.

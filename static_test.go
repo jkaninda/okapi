@@ -70,8 +70,11 @@ func TestWebRoutesFlowThroughAccessLog(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s: status = %d, want 200", tc.name, rec.Code)
 		}
-		if !strings.Contains(buf.String(), "[okapi] Incoming request") {
+		if !strings.Contains(buf.String(), "Incoming request") {
 			t.Fatalf("%s: expected access log entry, got %q", tc.name, buf.String())
+		}
+		if !strings.Contains(buf.String(), "component=okapi") {
+			t.Fatalf("%s: expected component=okapi in access log, got %q", tc.name, buf.String())
 		}
 	}
 }

@@ -492,11 +492,12 @@ func (c *Context) logDiscardedWrite(attemptedCode int) {
 		return
 	}
 	c.okapi.logger.Debug(
-		"[okapi] response already committed; skipping write",
+		"response already committed; skipping write",
 		"attempted_status", attemptedCode,
 		"committed_status", c.response.StatusCode(),
 		"method", c.request.Method,
 		"path", c.request.URL.Path,
+		"component", "okapi",
 	)
 }
 

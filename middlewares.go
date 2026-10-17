@@ -253,14 +253,15 @@ func LoggerMiddleware(c *Context) error {
 		"duration", duration,
 		"referer", c.request.Referer(),
 		"user_agent", c.request.UserAgent(),
+		"component", "okapi",
 	}
 	switch {
 	case status >= 500:
-		logger.Error("[okapi] Incoming request", args...)
+		logger.Error("Incoming request", args...)
 	case status >= 400:
-		logger.Warn("[okapi] Incoming request", args...)
+		logger.Warn("Incoming request", args...)
 	default:
-		logger.Info("[okapi] Incoming request", args...)
+		logger.Info("Incoming request", args...)
 	}
 	return err
 }

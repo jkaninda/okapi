@@ -7,7 +7,7 @@ sidebar_position: 2
 
 ## Prerequisites
 
-- Go 1.25.0 or higher (the module declares `go 1.25.0`)
+- Go 1.26.0 or higher (the module declares `go 1.26.0`)
 
 ## Create a New Project
 

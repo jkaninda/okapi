@@ -1,6 +1,6 @@
 module github.com/jkaninda/okapi
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -9,7 +9,7 @@ require (
 )
 
 require (
-	github.com/getkin/kin-openapi v0.145.0
+	github.com/getkin/kin-openapi v0.151.0
 	github.com/google/uuid v1.6.0
 	github.com/jkaninda/go-utils v0.1.4
 	github.com/jkaninda/njia v0.0.3
@@ -18,12 +18,11 @@ require (
 )
 
 require (
-	github.com/go-openapi/jsonpointer v0.22.5 // indirect
-	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+	github.com/go-openapi/jsonpointer v1.0.2 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/oasdiff/yaml v0.1.1 // indirect
 	github.com/oasdiff/yaml3 v0.0.14 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 )

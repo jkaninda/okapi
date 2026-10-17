@@ -254,10 +254,15 @@ func (o *Origin) ToOpenAPI() *openapi3.Origin {
 		}
 	}
 	if len(o.Fields) > 0 {
-		origin.Fields = make(map[string]openapi3.Location)
+		origin.Fields = make(openapi3.FieldLocations, 0, len(o.Fields))
 		for k, v := range o.Fields {
-			origin.Fields[k] = v.ToOpenAPI()
+			loc := v.ToOpenAPI()
+			loc.Name = k
+			origin.Fields = append(origin.Fields, loc)
 		}
+		sort.Slice(origin.Fields, func(i, j int) bool {
+			return origin.Fields[i].Name < origin.Fields[j].Name
+		})
 	}
 	return origin
 }

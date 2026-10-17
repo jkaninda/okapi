@@ -1725,17 +1725,18 @@ func handleAccessLog(c *Context) error {
 	status := c.response.StatusCode()
 	logger := c.okapi.logger
 	logFields := buildBaseLogFields(c, status, time.Since(startTime))
+	logFields = append(logFields, "component", "okapi")
 	if c.okapi.debug {
 		debugFields := buildDebugFields(c)
 		logFields = append(logFields, debugFields...)
 	}
 	switch {
 	case status >= 500:
-		logger.Error("[okapi] Incoming request", logFields...)
+		logger.Error("Incoming request", logFields...)
 	case status >= 400:
-		logger.Warn("[okapi] Incoming request", logFields...)
+		logger.Warn("Incoming request", logFields...)
 	default:
-		logger.Info("[okapi] Incoming request", logFields...)
+		logger.Info("Incoming request", logFields...)
 	}
 	return err
 }

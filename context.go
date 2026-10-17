@@ -67,6 +67,8 @@ type (
 		handlers []HandlerFunc
 		// index tracks the current position in the handler chain
 		index int
+		// aborted is set once an Abort helper has answered the request, so Next runs no further handler.
+		aborted bool
 	}
 	Store struct {
 		mu   sync.RWMutex
@@ -142,7 +144,13 @@ func (c *Context) Logger() *slog.Logger {
 
 // Next executes the next handler in the middleware chain.
 // It should be called inside middleware to pass control to the next middleware or final handler.
+//
+// After an Abort helper has answered the request, Next runs nothing and returns nil: a middleware
+// that aborts and then calls Next anyway must not reach the handler it refused.
 func (c *Context) Next() error {
+	if c.aborted {
+		return nil
+	}
 	c.index++
 	if c.index < len(c.handlers) {
 		return c.handlers[c.index](c)
@@ -249,6 +257,7 @@ func (c *Context) Copy() *Context {
 		store:    newStoreData(), // Initialize new data map
 		handlers: c.handlers,     // Share handler chain
 		index:    c.index,        // Copy current position
+		aborted:  c.aborted,
 	}
 	// Copy all key-value pairs to the new context
 	for k, v := range c.store.data {

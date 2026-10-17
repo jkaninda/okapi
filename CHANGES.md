@@ -1,5 +1,28 @@
 # Changes
 
+## v1.1.0 - 2026-10-17
+
+### Security
+
+- **`Next` no longer runs the handler after an abort.** The Abort helpers write the error
+  response and return the write result, which is nil on success. A middleware that aborted
+  and then went on to call `c.Next()` — directly, or through a helper whose nil return it
+  took for "allowed" — still ran the rest of the chain, so the handler it had just refused
+  executed behind the 403. Every Abort helper now marks the request, and `Next` runs no
+  further handler once it is marked. The helpers' return values are unchanged.
+
+### Features
+
+- **`Context.IsAborted()`** reports whether an Abort helper has already answered the request.
+
+### Notes
+
+- A check inside a handler is not covered by the `Next` guard: the handler keeps running its
+  own code after an Abort helper returns. Have the check return its refusal as an error and
+  abort in the caller, or test `c.IsAborted()` after calling it.
+- `Error*` response writers (`ErrorForbidden` and the rest) do not mark the request; only
+  the Abort helpers do.
+
 ## v1.0.0 - 2026-09-26
 
 ### Security

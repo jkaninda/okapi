@@ -50,6 +50,34 @@ Visit `http://localhost:8080` to see the response:
 }
 ```
 
+### Startup Banner
+
+When the server starts, Okapi prints a short banner with the server address,
+environment, and documentation links:
+
+```text
+========================================================
+Starting Okapi server v1.1.0...
+  • Local:       http://localhost:8080
+  • Environment: development
+  • Docs:        http://localhost:8080/docs
+  • OpenAPI:     http://localhost:8080/openapi.json
+--------------------------------------------------------
+```
+
+The version is read from your build info, so it is omitted for local or
+replaced builds. In debug mode (`okapi.WithDebug()`), the registered routes
+are listed below the banner.
+
+To start silently, for example in tests or when Okapi is embedded in another
+program, disable the banner:
+
+```go
+o := okapi.New(okapi.WithoutBanner())
+// or
+o.WithoutBanner()
+```
+
 ## Simple HTTP POST
 
 Let's create a more complex example with request validation:

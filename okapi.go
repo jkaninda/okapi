@@ -71,6 +71,7 @@ type (
 		routes              []*Route
 		debug               bool
 		accessLog           bool
+		noBanner            bool
 		strictSlash         bool
 		logger              *slog.Logger
 		renderer            Renderer
@@ -488,6 +489,13 @@ func WithAccessLogDisabled() OptionFunc {
 	}
 }
 
+// WithoutBanner disables the server info banner printed on startup
+func WithoutBanner() OptionFunc {
+	return func(o *Okapi) {
+		o.noBanner = true
+	}
+}
+
 // WithPort sets the server port
 func WithPort(port int) OptionFunc {
 	return func(o *Okapi) {
@@ -682,6 +690,11 @@ func (o *Okapi) WithAddr(addr string) *Okapi {
 
 func (o *Okapi) DisableAccessLog() *Okapi {
 	return o.apply(WithAccessLogDisabled())
+}
+
+// WithoutBanner disables the server info banner printed on startup
+func (o *Okapi) WithoutBanner() *Okapi {
+	return o.apply(WithoutBanner())
 }
 func (o *Okapi) WithMaxMultipartMemory(max int64) *Okapi {
 	return o.apply(WithMaxMultipartMemory(max))
@@ -1017,7 +1030,9 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	o.baseCancel = baseCancel
 	o.shutdownCh = make(chan struct{})
 	tlsServer := o.tlsServer
-	o.printServerInfo()
+	if !o.noBanner {
+		o.printServerInfo()
+	}
 	o.lifecycleMu.Unlock()
 
 	// Serve with TLS if configured
@@ -1830,25 +1845,26 @@ func (o *Okapi) wrapHTTPHandler(h http.Handler) HandlerFunc {
 }
 
 func (o *Okapi) printServerInfo() {
-	if o.server == nil {
-		fmt.Println("Server not initialized")
-		return
-	}
-
 	addr := o.server.Addr
-	if addr == "" {
-		addr = ":http"
+	scheme := "http"
+	if o.server.TLSConfig != nil {
+		scheme = "https"
 	}
-
-	host, port := parseAddr(addr)
+	if addr == "" {
+		addr = ":" + scheme
+	}
 
 	separatorWidth := 56
 	fmt.Println(strings.Repeat("=", separatorWidth))
 
-	fmt.Println("Starting Okapi server...")
+	if v := okapiVersion(); v != "" {
+		fmt.Printf("Starting Okapi server %s...\n", v)
+	} else {
+		fmt.Println("Starting Okapi server...")
+	}
 
-	// Local HTTP
-	fmt.Printf("  • Local:       http://%s:%s\n", host, port)
+	// Local
+	fmt.Printf("  • Local:       %s\n", serverURL(scheme, addr, ""))
 
 	// TLS (if enabled)
 	if o.withTlsServer && o.tlsServerConfig != nil {
@@ -1856,8 +1872,7 @@ func (o *Okapi) printServerInfo() {
 		if tlsAddr == "" {
 			tlsAddr = ":https"
 		}
-		tlsHost, tlsPort := parseAddr(tlsAddr)
-		fmt.Printf("  • Local TLS:   https://%s:%s\n", tlsHost, tlsPort)
+		fmt.Printf("  • Local TLS:   %s\n", serverURL("https", tlsAddr, ""))
 	}
 
 	// Environment
@@ -1869,8 +1884,8 @@ func (o *Okapi) printServerInfo() {
 
 	// Docs
 	if o.openApiEnabled {
-		fmt.Printf("  • Docs:        http://%s:%s/docs\n", host, port)
-		fmt.Printf("  • OpenAPI:     http://%s:%s/openapi.json\n", host, port)
+		fmt.Printf("  • Docs:        %s\n", serverURL(scheme, addr, openApiDocPrefix))
+		fmt.Printf("  • OpenAPI:     %s\n", serverURL(scheme, addr, openApiDocPath))
 	}
 	fmt.Println(strings.Repeat("-", separatorWidth))
 
@@ -1881,11 +1896,10 @@ func (o *Okapi) printServerInfo() {
 
 }
 
-// printRoutes prints all registered routes in a formatted table
 func (o *Okapi) printRoutes() {
 	routes := o.routes
 	if len(routes) == 0 {
-		fmt.Printf("No routes registered")
+		fmt.Println("No routes registered")
 		return
 	}
 

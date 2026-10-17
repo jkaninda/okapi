@@ -26,11 +26,14 @@ package okapi
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"reflect"
 	"runtime"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -252,34 +255,46 @@ func getMethodColor(method string) string {
 	return "\033[0m" // Default
 }
 
-// parseAddr parses the server address into host and port
+// parseAddr parses the server address into host and port.
+// Wildcard hosts are shown as localhost, and named ports such as
+// "http" are resolved to their number.
 func parseAddr(addr string) (host, port string) {
-	// Handle different address formats
-	if addr == ":http" {
-		return constLocalhost, "80"
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return constLocalhost, "8080"
 	}
-	if addr == ":https" {
-		return constLocalhost, "443"
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = constLocalhost
 	}
-
-	if strings.HasPrefix(addr, ":") {
-		return constLocalhost, strings.TrimPrefix(addr, ":")
+	if p, err := net.LookupPort("tcp", port); err == nil {
+		port = strconv.Itoa(p)
 	}
+	return host, port
+}
 
-	// Split host:port
-	parts := strings.Split(addr, ":")
-	if len(parts) == 2 {
-		host = parts[0]
-		port = parts[1]
-
-		// If host is empty or 0.0.0.0, show localhost for clarity
-		if host == "" || host == "0.0.0.0" {
-			host = constLocalhost
+// okapiVersion returns the okapi module version recorded in the build
+// info, or "" when it is unknown (e.g. a local or replaced build).
+func okapiVersion() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	mod := &bi.Main
+	for _, dep := range bi.Deps {
+		if dep.Path == okapiModulePath {
+			mod = dep
+			break
 		}
-
-		return host, port
 	}
+	if mod.Path != okapiModulePath || mod.Replace != nil || mod.Version == "(devel)" {
+		return ""
+	}
+	return mod.Version
+}
 
-	// Fallback
-	return constLocalhost, "8080"
+// serverURL builds the URL shown for a server listening on addr.
+func serverURL(scheme, addr, path string) string {
+	host, port := parseAddr(addr)
+	return scheme + "://" + net.JoinHostPort(host, port) + path
 }

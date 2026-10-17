@@ -181,12 +181,57 @@ func TestIsSensitiveParam(t *testing.T) {
 	}
 }
 func TestParseAddr(t *testing.T) {
-	host, port := parseAddr("http://localhost:8080")
-	if host != "localhost" {
-		t.Errorf("parseAddr(\"http:localhost:8080\") = %s; want http", host)
+	tests := []struct {
+		addr, host, port string
+	}{
+		{":8080", "localhost", "8080"},
+		{":http", "localhost", "80"},
+		{":https", "localhost", "443"},
+		{"0.0.0.0:9000", "localhost", "9000"},
+		{"127.0.0.1:9000", "127.0.0.1", "9000"},
+		{"[::]:9000", "localhost", "9000"},
+		{"[::1]:9000", "::1", "9000"},
+		{"example.com:8443", "example.com", "8443"},
+		{"invalid", "localhost", "8080"},
 	}
-	if port != "8080" {
-		t.Errorf("parseAddr(\"http:localhost:8080\") = %s; want http", port)
+	for _, tt := range tests {
+		host, port := parseAddr(tt.addr)
+		if host != tt.host || port != tt.port {
+			t.Errorf("parseAddr(%q) = %q, %q; want %q, %q", tt.addr, host, port, tt.host, tt.port)
+		}
 	}
+}
 
+func TestServerURL(t *testing.T) {
+	tests := []struct {
+		scheme, addr, path, want string
+	}{
+		{"http", ":8080", "", "http://localhost:8080"},
+		{"https", ":https", "/docs", "https://localhost:443/docs"},
+		{"http", "[::1]:9000", "/openapi.json", "http://[::1]:9000/openapi.json"},
+	}
+	for _, tt := range tests {
+		if got := serverURL(tt.scheme, tt.addr, tt.path); got != tt.want {
+			t.Errorf("serverURL(%q, %q, %q) = %q; want %q", tt.scheme, tt.addr, tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestWithoutBanner(t *testing.T) {
+	if New().noBanner {
+		t.Error("banner should be enabled by default")
+	}
+	if !New(WithoutBanner()).noBanner {
+		t.Error("WithoutBanner() option should disable the banner")
+	}
+	if !New().WithoutBanner().noBanner {
+		t.Error("(*Okapi).WithoutBanner() should disable the banner")
+	}
+}
+
+func TestOkapiVersionLocalBuild(t *testing.T) {
+	// The test binary is a local build of the okapi module itself.
+	if v := okapiVersion(); v != "" {
+		t.Errorf("okapiVersion() = %q; want empty for a local build", v)
+	}
 }

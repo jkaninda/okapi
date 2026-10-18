@@ -135,7 +135,13 @@ type (
 		basicAuth       bool
 		security        []map[string][]string
 		deprecated      bool
-		requestExample  map[string]interface{}
+		requestExample  any
+		// requestContentTypes are the body media types inferred from the
+		// request type; consumes, when set, overrides them.
+		requestContentTypes []string
+		consumes            []string
+		// requestOptional marks the request body as not required.
+		requestOptional bool
 		responses       map[int]*openapi3.SchemaRef
 		description     string
 		disabled        bool

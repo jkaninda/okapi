@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"mime/multipart"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -339,6 +340,23 @@ type DocBuilder struct {
 // RequestBody adds a request body schema to the route documentation using the provided value.
 func (b *DocBuilder) RequestBody(v any) *DocBuilder {
 	b.options = append(b.options, DocRequestBody(v))
+	return b
+}
+
+// RequestExample sets an example value for the request body.
+func (b *DocBuilder) RequestExample(v any) *DocBuilder {
+	b.options = append(b.options, DocRequestExample(v))
+	return b
+}
+
+// RequestContentType sets the media types the request body is documented
+// with, overriding the ones inferred from the request type.
+//
+// Example:
+//
+//	okapi.Doc().RequestBody(Book{}).RequestContentType("application/json", "application/xml")
+func (b *DocBuilder) RequestContentType(contentTypes ...string) *DocBuilder {
+	b.options = append(b.options, DocRequestContentType(contentTypes...))
 	return b
 }
 
@@ -821,7 +839,24 @@ func DocRequestBody(v any) RouteOption {
 		if v == nil {
 			return
 		}
-		doc.request = reflectToSchemaWithInfo(v).Schema
+		doc.setRequestBody(v)
+	}
+}
+
+// DocRequestExample sets an example value for the request body.
+func DocRequestExample(v any) RouteOption {
+	return func(r *Route) {
+		r.requestExample = v
+	}
+}
+
+// DocRequestContentType sets the media types the request body is documented
+// with, overriding the ones inferred from the request type. By default a body
+// is documented as application/json, or as a form when its fields carry form
+// tags (multipart/form-data when one of them is a file).
+func DocRequestContentType(contentTypes ...string) RouteOption {
+	return func(r *Route) {
+		r.consumes = contentTypes
 	}
 }
 
@@ -1043,7 +1078,7 @@ func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[st
 		Summary:     r.summary,
 		Description: r.description,
 		Tags:        goutils.RemoveDuplicates(r.tags), // Remove duplicates in tags
-		Parameters:  append(append(r.pathParams, r.queryParams...), r.headers...),
+		Parameters:  r.parameters(),
 		Responses:   &openapi3.Responses{},
 		Deprecated:  r.deprecated,
 	}
@@ -1054,14 +1089,23 @@ func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[st
 		// Generate reusable schema component if it's a complex type
 		schemaRef := o.getOrCreateSchemaComponent(r.request, schemaRegistry, spec.Components.Schemas)
 
+		contentTypes := r.consumes
+		if len(contentTypes) == 0 {
+			contentTypes = r.requestContentTypes
+		}
+		if len(contentTypes) == 0 {
+			contentTypes = []string{constJSON}
+		}
 		requestBody := &openapi3.RequestBody{
-			Content:  openapi3.NewContentWithJSONSchemaRef(schemaRef),
-			Required: true,
+			Content:  openapi3.NewContentWithSchemaRef(schemaRef, contentTypes),
+			Required: !r.requestOptional,
 		}
 
 		// Add example if available
 		if r.requestExample != nil {
-			requestBody.Content[constJSON].Example = r.requestExample
+			for _, mediaType := range requestBody.Content {
+				mediaType.Example = r.requestExample
+			}
 		}
 
 		op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
@@ -1711,6 +1755,9 @@ func typeToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.
 	case reflect.Bool:
 		return openapi3.NewSchemaRef("", openapi3.NewBoolSchema())
 
+	case reflect.Pointer:
+		return typeToSchemaWithInfo(t.Elem(), inProgress)
+
 	case reflect.Slice, reflect.Array:
 		elemSchema := typeToSchemaWithInfo(t.Elem(), inProgress)
 		schema := openapi3.NewArraySchema()
@@ -1729,14 +1776,32 @@ func typeToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.
 		return openapi3.NewSchemaRef("", openapi3.NewObjectSchema())
 
 	case reflect.Struct:
+		if t == fileHeaderType {
+			return binarySchema()
+		}
 		return structToSchemaWithInfo(t, inProgress)
 
 	case reflect.Interface:
+		if t == multipartFileType {
+			return binarySchema()
+		}
 		return openapi3.NewSchemaRef("", &openapi3.Schema{})
 
 	default:
 		return openapi3.NewSchemaRef("", openapi3.NewObjectSchema())
 	}
+}
+
+var (
+	fileHeaderType    = reflect.TypeOf(multipart.FileHeader{})
+	multipartFileType = reflect.TypeOf((*multipart.File)(nil)).Elem()
+)
+
+// binarySchema returns the schema of an uploaded file.
+func binarySchema() *openapi3.SchemaRef {
+	schema := openapi3.NewStringSchema()
+	schema.Format = "binary"
+	return openapi3.NewSchemaRef("", schema)
 }
 
 func structToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.Schema) *openapi3.SchemaRef {
@@ -2248,10 +2313,12 @@ func extractPathParamsFromStruct(v any) []*openapi3.ParameterRef {
 			continue
 		}
 
-		// Get the field type as string
-		fieldType := getFieldTypeName(field.Type)
-
-		param := buildPathParam(paramName, fieldType)
+		info := extractFieldInfo(field)
+		if info.description == "" {
+			info.description = generateParamDescription(paramName, getFieldTypeName(field.Type))
+		}
+		param := createParameter(paramName, paramPath, info)
+		param.Value.Required = true
 		params = append(params, param)
 	}
 	return params
@@ -2517,9 +2584,46 @@ func extractFieldInfo(field reflect.StructField) fieldInfo {
 	}
 	return fieldInfo{
 		field:       field,
-		required:    field.Tag.Get(tagRequired) == constTRUE,
+		required:    isRequiredParam(field),
 		description: description,
 	}
+}
+
+// isRequiredParam reports whether a parameter or form field is required,
+// through a `required:"true"` tag or a `required` validate rule.
+func isRequiredParam(field reflect.StructField) bool {
+	if field.Tag.Get(tagRequired) == constTRUE {
+		return true
+	}
+	for _, rule := range strings.Split(field.Tag.Get("validate"), ",") {
+		if strings.TrimSpace(rule) == "required" {
+			return true
+		}
+	}
+	return false
+}
+
+// fieldValueSchema returns the schema of a parameter, header or form field,
+// with the constraints its tags declare.
+func fieldValueSchema(field reflect.StructField) *openapi3.SchemaRef {
+	t := field.Type
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	schema := typeToSchemaWithInfo(t, make(map[reflect.Type]*openapi3.Schema))
+	if schema.Value == nil {
+		return schema
+	}
+	applyValidationTags(schema.Value, field.Tag, t)
+	if def := field.Tag.Get(tagDefault); def != "" {
+		schema.Value.Default = parseTagValue(def, t)
+	}
+	if field.Tag.Get(tagDeprecated) == constTRUE {
+		schema.Value.Deprecated = true
+	}
+	// The description belongs to the parameter
+	schema.Value.Description = ""
+	return schema
 }
 
 // createParameter creates an OpenAPI parameter
@@ -2529,10 +2633,21 @@ func createParameter(name, location string, info fieldInfo) *openapi3.ParameterR
 			Name:        name,
 			In:          location,
 			Required:    info.required,
-			Schema:      getSchemaForType(info.field.Type.Name()),
+			Schema:      fieldValueSchema(info.field),
 			Description: info.description,
+			Deprecated:  info.field.Tag.Get(tagDeprecated) == constTRUE,
 		},
 	}
+}
+
+// parameters returns the route's documented parameters: path, query, header
+// and cookie, in that order.
+func (r *Route) parameters() openapi3.Parameters {
+	params := make(openapi3.Parameters, 0, len(r.pathParams)+len(r.queryParams)+len(r.headers)+len(r.cookies))
+	params = append(params, r.pathParams...)
+	params = append(params, r.queryParams...)
+	params = append(params, r.headers...)
+	return append(params, r.cookies...)
 }
 
 // createHeader creates an OpenAPI Response Header
@@ -2542,7 +2657,7 @@ func createHeader(name string, info fieldInfo) *openapi3.HeaderRef {
 			Parameter: openapi3.Parameter{
 				Name:        name,
 				Required:    info.required,
-				Schema:      getSchemaForType(info.field.Type.Name()),
+				Schema:      fieldValueSchema(info.field),
 				Description: info.description,
 			},
 		},
@@ -2573,10 +2688,12 @@ func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 		}
 	}
 
-	// Cookie parameter
+	// Cookie parameter. A response cookie is a Set-Cookie header, not a
+	// parameter, so it is only recognized as a binding.
 	if key := sf.Tag.Get(tagCookie); key != "" {
-		param := createParameter(key, paramCookie, info)
-		r.cookies = append(r.cookies, param)
+		if isRequest {
+			r.cookies = append(r.cookies, createParameter(key, paramCookie, info))
+		}
 		return true
 	}
 
@@ -2610,14 +2727,99 @@ func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 
 // processBodyField processes a body field
 func (r *Route) processBodyField(field reflect.StructField, isRequest bool) {
-	bodyPtr := reflect.New(field.Type)
-	schema := reflectToSchemaWithInfo(bodyPtr.Interface()).Schema
-
 	if isRequest {
-		r.request = schema
-	} else {
-		r.responses[defaultStatus] = schema
+		r.setRequestBody(reflect.New(field.Type).Interface())
+		// A nil pointer body is allowed
+		r.requestOptional = field.Type.Kind() == reflect.Pointer
+		return
 	}
+	bodyPtr := reflect.New(field.Type)
+	r.responses[defaultStatus] = reflectToSchemaWithInfo(bodyPtr.Interface()).Schema
+}
+
+// setRequestBody documents v as the request body, as a form when v is a
+// struct with form fields and as JSON otherwise.
+func (r *Route) setRequestBody(v any) {
+	r.requestOptional = false
+	t := reflect.TypeOf(v)
+	for t != nil && t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t != nil && t.Kind() == reflect.Struct {
+		if schema, contentTypes := formSchema(t, false); schema != nil {
+			r.request = schema
+			r.requestContentTypes = contentTypes
+			return
+		}
+	}
+	r.request = reflectToSchemaWithInfo(v).Schema
+	r.requestContentTypes = nil
+}
+
+// formSchema returns the schema of the fields of struct type t that are bound
+// from a form, with the media types it is accepted as: multipart/form-data
+// when one of them is a file, and URL-encoded or multipart forms otherwise. It
+// returns nil when t has no form field. With skipParams, fields that are also
+// tagged as a path, query, header or cookie parameter are left out, as they
+// are documented as parameters.
+func formSchema(t reflect.Type, skipParams bool) (*openapi3.SchemaRef, []string) {
+	schema := openapi3.NewObjectSchema()
+	schema.Title = t.Name()
+	hasFile := false
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		name := parseTagName(field.Tag.Get(tagForm))
+		if name == "" || !field.IsExported() || field.Tag.Get(tagHidden) == constTRUE {
+			continue
+		}
+		if skipParams && hasParamTag(field) {
+			continue
+		}
+		hasFile = hasFile || isFileType(field.Type)
+
+		fieldSchema := fieldValueSchema(field)
+		if fieldSchema.Value != nil {
+			if desc := extractFieldInfo(field).description; desc != "" {
+				fieldSchema.Value.Description = desc
+			}
+		}
+		schema.WithPropertyRef(name, fieldSchema)
+		if isRequiredParam(field) {
+			schema.Required = append(schema.Required, name)
+		}
+	}
+	if len(schema.Properties) == 0 {
+		return nil, nil
+	}
+	if hasFile {
+		return openapi3.NewSchemaRef("", schema), []string{constFormData}
+	}
+	return openapi3.NewSchemaRef("", schema), []string{constFormURLEncoded, constFormData}
+}
+
+// hasBody reports whether requests to the route carry a body. A GET or HEAD
+// request has none: its form values come from the query string.
+func (r *Route) hasBody() bool {
+	return r.Method != http.MethodGet && r.Method != http.MethodHead
+}
+
+// hasParamTag reports whether field is bound from a path, query, header or
+// cookie parameter.
+func hasParamTag(field reflect.StructField) bool {
+	for _, tag := range []string{tagPath, tagParam, tagQuery, tagHeader, tagCookie} {
+		if field.Tag.Get(tag) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// isFileType reports whether a field of type t is bound from an uploaded file.
+func isFileType(t reflect.Type) bool {
+	if t.Kind() == reflect.Slice {
+		t = t.Elem()
+	}
+	return t == reflect.PointerTo(fileHeaderType) || t == multipartFileType
 }
 
 // processFields processes all fields in a struct
@@ -2627,6 +2829,16 @@ func (r *Route) processFields(v reflect.Value, t reflect.Type, isRequest bool) b
 	for i := 0; i < v.NumField(); i++ {
 		fInfo := extractFieldInfo(t.Field(i))
 		if r.processField(fInfo, isRequest) {
+			hasExplicitBinding = true
+		}
+	}
+
+	// Without a Body field, form fields are bound from the request body
+	if isRequest && r.hasBody() && !hasBodyField(v.Addr().Interface()) {
+		if schema, contentTypes := formSchema(t, true); schema != nil {
+			r.request = schema
+			r.requestContentTypes = contentTypes
+			r.requestOptional = false
 			hasExplicitBinding = true
 		}
 	}
@@ -2663,7 +2875,29 @@ func (r *Route) generateRequestSchema(input any) {
 
 	// Fallback: if no explicit binding, use whole struct as body
 	if !hasExplicitBinding {
-		r.request = reflectToSchemaWithInfo(input).Schema
+		if r.hasBody() {
+			r.setRequestBody(input)
+		} else {
+			r.request = reflectToSchemaWithInfo(input).Schema
+		}
 	}
-	r.pathParams = extractPathParamsFromStruct(input)
+	r.mergePathParams(extractPathParamsFromStruct(input))
+}
+
+// mergePathParams adds params to the route's path parameters, replacing any
+// already documented under the same name.
+func (r *Route) mergePathParams(params []*openapi3.ParameterRef) {
+	for _, param := range params {
+		replaced := false
+		for i, existing := range r.pathParams {
+			if existing.Value != nil && existing.Value.Name == param.Value.Name {
+				r.pathParams[i] = param
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			r.pathParams = append(r.pathParams, param)
+		}
+	}
 }

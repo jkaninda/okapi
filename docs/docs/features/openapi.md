@@ -190,6 +190,34 @@ bind or validate the request at runtime: the validation tags on `BookRequest`
 take effect where the handler binds it, with `c.Bind(&in)` or through
 `okapi.Handle` / `okapi.H`.
 
+On a response struct, the `Status` field sets the status code the body and
+headers are documented under, and a `description` tag on it describes that
+response (by default the status text, such as `Created`). Header fields apply to
+that status only.
+
+```go
+type CreateBookResponse struct {
+    Status   int    `description:"Book created"`
+    Location string `header:"Location" description:"URL of the new book"`
+    Body     Book
+}
+
+o.Post("/books", createBookHandler, okapi.Response(CreateBookResponse{Status: 201}))
+```
+
+To describe a response, or document one without a body such as a `204`:
+
+```go
+okapi.Doc().
+    ResponseDescription(204, "Book deleted").
+    Response(404, ErrorResponse{}).
+    ResponseHeaderFor(429, "Retry-After", "int", "Seconds to wait")
+```
+
+`DocResponseHeader` / `Doc().ResponseHeader()` adds a header to every documented
+response; `ResponseHeaderFor` scopes it to one status. Each route also documents
+a `500` response unless it declares its own.
+
 ### Forms and file uploads
 
 A request whose fields carry `form` tags is documented as a form instead of
@@ -334,7 +362,9 @@ registers a route matching every method.
 | `DocPathParam()` / `Doc().PathParam()`           | Document path parameters                 |
 | `DocQueryParam()` / `Doc().QueryParam()`         | Document query parameters                |
 | `DocHeader()` / `Doc().Header()`                 | Document request headers                 |
-| `DocResponseHeader()` / `Doc().ResponseHeader()` | Document response headers                |
+| `DocResponseHeader()` / `Doc().ResponseHeader()` | Document a header on every response      |
+| `DocResponseHeaderFor()` / `Doc().ResponseHeaderFor()` | Document a header on one status    |
+| `DocResponseDescription()` / `Doc().ResponseDescription()` | Describe the response for a status |
 | `DocDeprecated()` / `Doc().Deprecated()`         | Mark route as deprecated                 |
 | `DocHide()`                                      | Leave the route out of the document      |
 

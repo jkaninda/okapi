@@ -131,11 +131,15 @@ type (
 		headers         []*openapi3.ParameterRef
 		middlewares     []Middleware
 		responseHeaders map[string]*openapi3.HeaderRef
-		bearerAuth      bool
-		basicAuth       bool
-		security        []map[string][]string
-		deprecated      bool
-		requestExample  any
+		// statusHeaders are response headers documented for one status code
+		statusHeaders map[int]map[string]*openapi3.HeaderRef
+		// responseDescriptions override http.StatusText per status code
+		responseDescriptions map[int]string
+		bearerAuth           bool
+		basicAuth            bool
+		security             []map[string][]string
+		deprecated           bool
+		requestExample       any
 		// requestContentTypes are the body media types inferred from the
 		// request type; consumes, when set, overrides them.
 		requestContentTypes []string

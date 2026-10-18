@@ -485,12 +485,28 @@ func (b *DocBuilder) HeaderWithDefault(name, typ, desc string, required bool, de
 	return b
 }
 
-// ResponseHeader adds a response header to the route documentation
+// ResponseHeader adds a header to every documented response of the route
 // name: header name
 // typ: header value type (e.g., "string", "int")
 // desc: header description, optional
 func (b *DocBuilder) ResponseHeader(name, typ string, desc ...string) *DocBuilder {
 	b.options = append(b.options, DocResponseHeader(name, typ, desc...))
+	return b
+}
+
+// ResponseHeaderFor adds a header to the response documented for status.
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description, optional
+func (b *DocBuilder) ResponseHeaderFor(status int, name, typ string, desc ...string) *DocBuilder {
+	b.options = append(b.options, DocResponseHeaderFor(status, name, typ, desc...))
+	return b
+}
+
+// ResponseDescription sets the description of the response documented for
+// status, which defaults to its status text.
+func (b *DocBuilder) ResponseDescription(status int, description string) *DocBuilder {
+	b.options = append(b.options, DocResponseDescription(status, description))
 	return b
 }
 
@@ -760,25 +776,64 @@ func DocTags(tags ...string) RouteOption {
 // desc: header description, optional
 func DocResponseHeader(name, typ string, desc ...string) RouteOption {
 	return func(r *Route) {
-		schema := getSchemaForType(typ)
-		description := ""
 		// Initialize responseHeaders map if it doesn't exist
 		if r.responseHeaders == nil {
 			r.responseHeaders = make(map[string]*openapi3.HeaderRef)
 		}
-		if len(desc) != 0 {
-			description = desc[0]
-		}
-		r.responseHeaders[name] = &openapi3.HeaderRef{
-			Value: &openapi3.Header{
-				Parameter: openapi3.Parameter{
-					Description: description,
-					Required:    true,
-					Schema:      schema,
-				},
-			},
-		}
+		r.responseHeaders[name] = newResponseHeader(typ, desc)
 	}
+}
+
+// DocResponseHeaderFor adds a header to the response documented for status,
+// leaving the route's other responses without it.
+// name: header name
+// typ: header value type (e.g., "string", "int")
+// desc: header description, optional
+func DocResponseHeaderFor(status int, name, typ string, desc ...string) RouteOption {
+	return func(r *Route) {
+		r.addStatusHeader(status, name, newResponseHeader(typ, desc))
+	}
+}
+
+// DocResponseDescription sets the description of the response documented for
+// status, which defaults to its status text. A status with a description but
+// no schema is documented as a response without a body, as for a 204.
+func DocResponseDescription(status int, description string) RouteOption {
+	return func(r *Route) {
+		if r.responseDescriptions == nil {
+			r.responseDescriptions = make(map[int]string)
+		}
+		r.responseDescriptions[status] = description
+	}
+}
+
+// newResponseHeader returns a documented response header of type typ, with
+// the first of desc, if any, as its description.
+func newResponseHeader(typ string, desc []string) *openapi3.HeaderRef {
+	description := ""
+	if len(desc) != 0 {
+		description = desc[0]
+	}
+	return &openapi3.HeaderRef{
+		Value: &openapi3.Header{
+			Parameter: openapi3.Parameter{
+				Description: description,
+				Required:    true,
+				Schema:      getSchemaForType(typ),
+			},
+		},
+	}
+}
+
+// addStatusHeader documents header name on the response for status.
+func (r *Route) addStatusHeader(status int, name string, header *openapi3.HeaderRef) {
+	if r.statusHeaders == nil {
+		r.statusHeaders = make(map[int]map[string]*openapi3.HeaderRef)
+	}
+	if r.statusHeaders[status] == nil {
+		r.statusHeaders[status] = make(map[string]*openapi3.HeaderRef)
+	}
+	r.statusHeaders[status][name] = header
 }
 
 // DocResponse registers a response schema for the route's OpenAPI documentation.
@@ -1110,26 +1165,76 @@ func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[st
 
 		op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
 	}
-	if len(r.responses) != 0 {
-		for key, resp := range r.responses {
-			schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
-			apiResponse := &openapi3.Response{
-				Description: ptr(http.StatusText(key)),
-				Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
-				Headers:     r.responseHeaders,
-			}
-			op.Responses.Set(strconv.Itoa(key), &openapi3.ResponseRef{
-				Value: apiResponse,
-			})
+	for _, status := range r.responseStatuses() {
+		apiResponse := &openapi3.Response{
+			Description: ptr(r.responseDescription(status)),
+			Headers:     r.headersFor(status),
 		}
+		if resp := r.responses[status]; resp != nil {
+			schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
+			apiResponse.Content = openapi3.NewContentWithJSONSchemaRef(schemaRef)
+		}
+		op.Responses.Set(strconv.Itoa(status), &openapi3.ResponseRef{
+			Value: apiResponse,
+		})
 	}
-	// Add default responses
-	op.Responses.Set("500", &openapi3.ResponseRef{
-		Value: &openapi3.Response{
-			Description: ptr("Internal Server Error"),
-		},
-	})
+	// Add default responses, unless documented by the route
+	if op.Responses.Value("500") == nil {
+		op.Responses.Set("500", &openapi3.ResponseRef{
+			Value: &openapi3.Response{
+				Description: ptr("Internal Server Error"),
+			},
+		})
+	}
 	return op
+}
+
+// responseStatuses returns, in ascending order, the status codes the route
+// documents a response for: with a schema, a description or headers.
+func (r *Route) responseStatuses() []int {
+	seen := make(map[int]bool)
+	for status := range r.responses {
+		seen[status] = true
+	}
+	for status := range r.responseDescriptions {
+		seen[status] = true
+	}
+	for status := range r.statusHeaders {
+		seen[status] = true
+	}
+	statuses := make([]int, 0, len(seen))
+	for status := range seen {
+		statuses = append(statuses, status)
+	}
+	sort.Ints(statuses)
+	return statuses
+}
+
+// responseDescription returns the description of the response for status.
+func (r *Route) responseDescription(status int) string {
+	if desc := r.responseDescriptions[status]; desc != "" {
+		return desc
+	}
+	if text := http.StatusText(status); text != "" {
+		return text
+	}
+	return "Response"
+}
+
+// headersFor returns the headers of the response for status: the route's
+// response headers and the ones documented for that status only.
+func (r *Route) headersFor(status int) openapi3.Headers {
+	if len(r.responseHeaders) == 0 && len(r.statusHeaders[status]) == 0 {
+		return nil
+	}
+	headers := make(openapi3.Headers, len(r.responseHeaders)+len(r.statusHeaders[status]))
+	for name, header := range r.responseHeaders {
+		headers[name] = header
+	}
+	for name, header := range r.statusHeaders[status] {
+		headers[name] = header
+	}
+	return headers
 }
 
 // cloneSpec returns a deep copy of spec made through a JSON round-trip.
@@ -2651,11 +2756,11 @@ func (r *Route) parameters() openapi3.Parameters {
 }
 
 // createHeader creates an OpenAPI Response Header
-func createHeader(name string, info fieldInfo) *openapi3.HeaderRef {
+// The name is the key of the headers map: OpenAPI forbids repeating it.
+func createHeader(info fieldInfo) *openapi3.HeaderRef {
 	return &openapi3.HeaderRef{
 		Value: &openapi3.Header{
 			Parameter: openapi3.Parameter{
-				Name:        name,
 				Required:    info.required,
 				Schema:      fieldValueSchema(info.field),
 				Description: info.description,
@@ -2665,7 +2770,8 @@ func createHeader(name string, info fieldInfo) *openapi3.HeaderRef {
 }
 
 // processField processes a single struct field for parameter extraction
-func (r *Route) processField(info fieldInfo, isRequest bool) bool {
+// status is the status code a response struct is documented for.
+func (r *Route) processField(info fieldInfo, isRequest bool, status int) bool {
 	sf := info.field
 
 	// Header parameter
@@ -2675,17 +2781,10 @@ func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 			r.headers = append(r.headers, param)
 			return true
 		}
-	} else {
-		// Response Header
-		// Initialize responseHeaders map if it doesn't exist
-		if r.responseHeaders == nil {
-			r.responseHeaders = make(map[string]*openapi3.HeaderRef)
-		}
-		if key := sf.Tag.Get(tagHeader); key != "" {
-			header := createHeader(key, info)
-			r.responseHeaders[key] = header
-			return true
-		}
+	} else if key := sf.Tag.Get(tagHeader); key != "" {
+		// A response struct's headers belong to its status only
+		r.addStatusHeader(status, key, createHeader(info))
+		return true
 	}
 
 	// Cookie parameter. A response cookie is a Set-Cookie header, not a
@@ -2718,15 +2817,16 @@ func (r *Route) processField(info fieldInfo, isRequest bool) bool {
 
 	// Body field
 	if sf.Name == bodyField {
-		r.processBodyField(sf, isRequest)
+		r.processBodyField(sf, isRequest, status)
 		return true
 	}
 
 	return false
 }
 
-// processBodyField processes a body field
-func (r *Route) processBodyField(field reflect.StructField, isRequest bool) {
+// processBodyField processes a body field, of a response for status when
+// isRequest is false
+func (r *Route) processBodyField(field reflect.StructField, isRequest bool, status int) {
 	if isRequest {
 		r.setRequestBody(reflect.New(field.Type).Interface())
 		// A nil pointer body is allowed
@@ -2734,7 +2834,7 @@ func (r *Route) processBodyField(field reflect.StructField, isRequest bool) {
 		return
 	}
 	bodyPtr := reflect.New(field.Type)
-	r.responses[defaultStatus] = reflectToSchemaWithInfo(bodyPtr.Interface()).Schema
+	r.responses[status] = reflectToSchemaWithInfo(bodyPtr.Interface()).Schema
 }
 
 // setRequestBody documents v as the request body, as a form when v is a
@@ -2822,13 +2922,14 @@ func isFileType(t reflect.Type) bool {
 	return t == reflect.PointerTo(fileHeaderType) || t == multipartFileType
 }
 
-// processFields processes all fields in a struct
-func (r *Route) processFields(v reflect.Value, t reflect.Type, isRequest bool) bool {
+// processFields processes all fields in a struct, a response for status when
+// isRequest is false
+func (r *Route) processFields(v reflect.Value, t reflect.Type, isRequest bool, status int) bool {
 	hasExplicitBinding := false
 
 	for i := 0; i < v.NumField(); i++ {
 		fInfo := extractFieldInfo(t.Field(i))
-		if r.processField(fInfo, isRequest) {
+		if r.processField(fInfo, isRequest, status) {
 			hasExplicitBinding = true
 		}
 	}
@@ -2859,7 +2960,14 @@ func (r *Route) generateResponseSchema(input any) {
 	t := v.Type()
 	status := getResponseStatus(v)
 
-	hasExplicitBinding := r.processFields(v, t, false)
+	// A description on the Status field describes the response
+	if sf, ok := t.FieldByName("Status"); ok {
+		if desc := extractFieldInfo(sf).description; desc != "" {
+			DocResponseDescription(status, desc)(r)
+		}
+	}
+
+	hasExplicitBinding := r.processFields(v, t, false, status)
 
 	// Fallback: if no explicit binding, use whole struct as body
 	if !hasExplicitBinding {
@@ -2871,7 +2979,7 @@ func (r *Route) generateRequestSchema(input any) {
 	v := normalizeToStructPointer(input, "request")
 	t := v.Type()
 
-	hasExplicitBinding := r.processFields(v, t, true)
+	hasExplicitBinding := r.processFields(v, t, true, 0)
 
 	// Fallback: if no explicit binding, use whole struct as body
 	if !hasExplicitBinding {

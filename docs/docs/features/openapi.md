@@ -177,10 +177,50 @@ o.Post("/books", createBookHandler,
 )
 ```
 
+Fields tagged `path`/`param`, `query`, `header` and `cookie` become parameters
+of that kind. Their schema follows the field's Go type (`[]string` is an array,
+`*int` an integer, `time.Time` a `date-time` string) and carries the same
+constraint tags as body fields: `enum`, `min`, `max`, `minLength`, `pattern`,
+`format`, `default`, `example` and so on. A parameter is required when it has
+`required:"true"` or a `validate:"required"` rule; path parameters always are.
+A pointer `Body` documents an optional request body.
+
 `okapi.Request` and `okapi.Response` shape the OpenAPI document. They do **not**
 bind or validate the request at runtime: the validation tags on `BookRequest`
 take effect where the handler binds it, with `c.Bind(&in)` or through
 `okapi.Handle` / `okapi.H`.
+
+### Forms and file uploads
+
+A request whose fields carry `form` tags is documented as a form instead of
+JSON. With a file field (`*multipart.FileHeader`, `[]*multipart.FileHeader` or
+`multipart.File`) the body is `multipart/form-data` and files appear as
+`type: string, format: binary`; without one it is
+`application/x-www-form-urlencoded` or `multipart/form-data`.
+
+```go
+type UploadRequest struct {
+    Title string                `form:"title" validate:"required"`
+    File  *multipart.FileHeader `form:"file" description:"Document to upload"`
+    Lang  string                `query:"lang"`
+}
+
+o.Post("/uploads", uploadHandler, okapi.Request(&UploadRequest{}))
+```
+
+Top-level `form` fields are only documented as a body on methods that carry
+one: a `GET` or `HEAD` request reads its form values from the query string.
+
+To document other media types, override the inferred ones:
+
+```go
+o.Post("/books", handler, okapi.Doc().
+    RequestBody(Book{}).
+    RequestContentType("application/json", "application/xml").
+    RequestExample(Book{Name: "Dune", Price: 20}).
+    Build(),
+)
+```
 
 ### Using `.WithIO()`, `.WithInput()`, `.WithOutput()`
 
@@ -288,6 +328,8 @@ registers a route matching every method.
 | `DocTags()` / `Doc().Tags()`                     | Group endpoints under tags               |
 | `DocBearerAuth()` / `Doc().BearerAuth()`         | Enable Bearer token authentication       |
 | `DocRequestBody()` / `Doc().RequestBody()`       | Document request body schema             |
+| `DocRequestContentType()` / `Doc().RequestContentType()` | Set the request body media types  |
+| `DocRequestExample()` / `Doc().RequestExample()` | Add an example of the request body       |
 | `DocResponse()` / `Doc().Response()`             | Document response schema or status codes |
 | `DocPathParam()` / `Doc().PathParam()`           | Document path parameters                 |
 | `DocQueryParam()` / `Doc().QueryParam()`         | Document query parameters                |

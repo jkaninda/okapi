@@ -36,6 +36,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,6 +96,10 @@ type (
 		noRoute             HandlerFunc
 		noMethod            HandlerFunc
 		errorHandler        ErrorHandler
+		// errorFormat is the format errorHandler writes, for documenting
+		// error responses: empty for the default, errorFormatCustom when it
+		// is unknown.
+		errorFormat ErrorFormat
 		// optionsHandlers holds user-registered OPTIONS routes on paths whose
 		// OPTIONS method is already served by the CORS preflight handler.
 		optionsHandlers map[string]http.HandlerFunc
@@ -140,6 +145,13 @@ type (
 		security             []map[string][]string
 		deprecated           bool
 		requestExample       any
+		// bindsInput marks a handler that answers 400 when binding fails
+		bindsInput bool
+		// requestExamples are named examples of the request body
+		requestExamples map[string]any
+		// responseExamples are the examples of the response for a status: a
+		// single unnamed one under "", or named ones
+		responseExamples map[int]map[string]any
 		// requestContentTypes are the body media types inferred from the
 		// request type; consumes, when set, overrides them.
 		requestContentTypes []string
@@ -771,7 +783,7 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 // Describe the payload and responses with the same Doc* options used for routes:
 //
 //	o.Webhook("newPet", http.MethodPost,
-//	    okapi.DocSummary("Notifies subscribers about a newly added pet"),
+//	    okapi.Summary("Notifies subscribers about a newly added pet"),
 //	    okapi.DocRequestBody(Pet{}),
 //	    okapi.DocResponse(200, okapi.M{"received": true}),
 //	)
@@ -1020,6 +1032,9 @@ func (o *Okapi) StartServer(server *http.Server) error {
 	}
 	if o.openApiEnabled {
 		o.WithOpenAPIDocs()
+		if err := validateSpecs(o.openapiSpec, o.openapiSpec31); err != nil {
+			o.logger.Warn("Invalid OpenAPI document", slog.String("error", err.Error()))
+		}
 	}
 	server.Handler = o
 
@@ -1364,14 +1379,15 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts
 	}
 	normalizedPath := normalizeRoutePath(path)
 	route := &Route{
-		Name:      handleName(h),
-		Path:      normalizedPath,
-		docPath:   path,
-		Method:    method,
-		tags:      goutils.RemoveDuplicates(tags),
-		handle:    h,
-		chain:     o,
-		responses: make(map[int]*openapi3.SchemaRef),
+		Name:       handleName(h),
+		Path:       normalizedPath,
+		docPath:    path,
+		Method:     method,
+		tags:       goutils.RemoveDuplicates(tags),
+		handle:     h,
+		chain:      o,
+		responses:  make(map[int]*openapi3.SchemaRef),
+		bindsInput: isBindingHandler(h),
 	}
 	// Register all route options
 	for _, opt := range opts {
@@ -1990,7 +2006,7 @@ func (o *Okapi) writeRoutes(w io.Writer, color bool) {
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
 //	        Options: []okapi.RouteOption{
-//	            okapi.DocSummary("Example GET request"),
+//	            okapi.Summary("Example GET request"),
 //	        },
 //	    	Security: Security: []map[string][]string{
 //				{
@@ -2021,13 +2037,15 @@ func (o *Okapi) Register(routes ...RouteDefinition) {
 //	    return c.Created(in)
 //	}))
 func Handle[I any](h func(*Context, *I) error) HandlerFunc {
-	return func(c *Context) error {
+	handler := func(c *Context) error {
 		var in I
 		if err := c.Bind(&in); err != nil {
 			return c.AbortBadRequest("Bad Request", err)
 		}
 		return h(c, &in)
 	}
+	registerBindingHandler[I](handler)
+	return handler
 }
 
 // H is a shorthand alias for Handle.
@@ -2078,7 +2096,7 @@ func H[I any](h func(*Context, *I) error) HandlerFunc {
 //	// Client requests with Accept: application/json -> JSON response
 //	// Client requests with Accept: application/xml -> XML response
 func HandleIO[I any, O any](h func(*Context, *I) (*O, error)) HandlerFunc {
-	return func(c *Context) error {
+	handler := func(c *Context) error {
 		var in I
 		if err := c.Bind(&in); err != nil {
 			return c.AbortBadRequest("Bad Request", err)
@@ -2090,6 +2108,130 @@ func HandleIO[I any, O any](h func(*Context, *I) (*O, error)) HandlerFunc {
 		}
 		return c.Return(out) // Content negotiation based on Accept header
 	}
+	registerBindingHandler[I](handler)
+	return handler
+}
+
+// bindingHandlers holds the code pointers of the handlers Handle and HandleIO
+// return for inputs with fields, so that their routes document the 400
+// response a binding failure gets. A closure's code pointer is shared by every
+// handler of the same instantiation, which is all this needs to tell.
+var bindingHandlers sync.Map
+
+func registerBindingHandler[I any](h HandlerFunc) {
+	t := reflect.TypeFor[I]()
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() == reflect.Struct && t.NumField() == 0 {
+		return
+	}
+	bindingHandlers.Store(reflect.ValueOf(h).Pointer(), struct{}{})
+}
+
+// isBindingHandler reports whether h was returned by Handle or HandleIO.
+func isBindingHandler(h HandlerFunc) bool {
+	if h == nil {
+		return false
+	}
+	_, ok := bindingHandlers.Load(reflect.ValueOf(h).Pointer())
+	return ok
+}
+
+var (
+	_ RouteRegistrar = (*Okapi)(nil)
+	_ RouteRegistrar = (*Group)(nil)
+)
+
+// RouteRegistrar registers routes. It is implemented by *Okapi and *Group.
+type RouteRegistrar interface {
+	Get(path string, h HandlerFunc, opts ...RouteOption) *Route
+	Post(path string, h HandlerFunc, opts ...RouteOption) *Route
+	Put(path string, h HandlerFunc, opts ...RouteOption) *Route
+	Patch(path string, h HandlerFunc, opts ...RouteOption) *Route
+	Delete(path string, h HandlerFunc, opts ...RouteOption) *Route
+}
+
+// Get registers a GET route served by a typed handler, as HandleIO does, and
+// documents its input I and output O, so they are not repeated in Request
+// and Response options.
+//
+// Example:
+//
+//	okapi.Get(o, "/books/{id}", getBook, okapi.Summary("Get a book"))
+//	// func getBook(c *okapi.Context, in *GetBookInput) (*BookOutput, error)
+func Get[I, O any](r RouteRegistrar, path string, h func(*Context, *I) (*O, error), opts ...RouteOption) *Route {
+	return r.Get(path, HandleIO(h), typedRouteOptions[I, O](opts)...)
+}
+
+// Post registers a POST route served by a typed handler and documents its
+// input and output. See Get.
+func Post[I, O any](r RouteRegistrar, path string, h func(*Context, *I) (*O, error), opts ...RouteOption) *Route {
+	return r.Post(path, HandleIO(h), typedRouteOptions[I, O](opts)...)
+}
+
+// Put registers a PUT route served by a typed handler and documents its input
+// and output. See Get.
+func Put[I, O any](r RouteRegistrar, path string, h func(*Context, *I) (*O, error), opts ...RouteOption) *Route {
+	return r.Put(path, HandleIO(h), typedRouteOptions[I, O](opts)...)
+}
+
+// Patch registers a PATCH route served by a typed handler and documents its
+// input and output. See Get.
+func Patch[I, O any](r RouteRegistrar, path string, h func(*Context, *I) (*O, error), opts ...RouteOption) *Route {
+	return r.Patch(path, HandleIO(h), typedRouteOptions[I, O](opts)...)
+}
+
+// Delete registers a DELETE route served by a typed handler and documents its
+// input and output. See Get.
+func Delete[I, O any](r RouteRegistrar, path string, h func(*Context, *I) (*O, error), opts ...RouteOption) *Route {
+	return r.Delete(path, HandleIO(h), typedRouteOptions[I, O](opts)...)
+}
+
+// typedRouteOptions returns opts followed by the documentation of input I and
+// output O. They come last so that they only fill in what opts leave out: a
+// request documented by opts is kept, and so is a 2xx response, such as a 201
+// documented with Response(BookOutput{Status: 201}).
+func typedRouteOptions[I, O any](opts []RouteOption) []RouteOption {
+	return append(opts[:len(opts):len(opts)], func(r *Route) {
+		if !r.hasRequestDoc() {
+			if in := reflect.TypeFor[I](); in.Kind() == reflect.Struct {
+				if in.NumField() > 0 {
+					Request(new(I))(r)
+				}
+			} else {
+				DocRequestBody(new(I))(r)
+			}
+		}
+		if !r.hasSuccessResponse() {
+			if reflect.TypeFor[O]().Kind() == reflect.Struct {
+				Response(new(O))(r)
+			} else {
+				DocResponse(new(O))(r)
+			}
+		}
+	})
+}
+
+// hasRequestDoc reports whether the route documents a request body or
+// parameters other than its path parameters.
+func (r *Route) hasRequestDoc() bool {
+	return r.request != nil || len(r.queryParams) > 0 || len(r.headers) > 0 || len(r.cookies) > 0
+}
+
+// hasSuccessResponse reports whether the route documents a 2xx response.
+func (r *Route) hasSuccessResponse() bool {
+	for status := range r.responses {
+		if status >= 200 && status < 300 {
+			return true
+		}
+	}
+	for status := range r.statusHeaders {
+		if status >= 200 && status < 300 {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleO executes the handler and writes the response based on content negotiation.

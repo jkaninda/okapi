@@ -135,7 +135,7 @@ func TestStdHandlerAppearsInOpenAPISpec(t *testing.T) {
 	o := New()
 	o.HandleStd(http.MethodGet, "/std-documented", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}, DocSummary("A standard handler"), DocTag("std"))
+	}, Summary("A standard handler"), Tag("std"))
 
 	o.buildOpenAPISpec()
 	spec := o.openapiSpec
@@ -149,13 +149,13 @@ func TestStdHandlerAppearsInOpenAPISpec(t *testing.T) {
 	assert.Nil(t, item.Get.RequestBody, "no typed input, so no request schema")
 }
 
-// DocHide keeps a standard handler out of the specification without affecting
+// Hide keeps a standard handler out of the specification without affecting
 // routing.
-func TestStdHandlerDocHide(t *testing.T) {
+func TestStdHandlerHide(t *testing.T) {
 	o := New()
 	o.HandleStd(http.MethodGet, "/hidden", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}, DocHide())
+	}, Hide())
 	// Control route, so an empty spec cannot make this test pass by accident.
 	o.HandleStd(http.MethodGet, "/visible", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -164,7 +164,7 @@ func TestStdHandlerDocHide(t *testing.T) {
 	o.buildOpenAPISpec()
 	require.NotNil(t, o.openapiSpec)
 	require.NotNil(t, o.openapiSpec.Paths.Find("/visible"), "control route should be documented")
-	assert.Nil(t, o.openapiSpec.Paths.Find("/hidden"), "DocHide should omit the route")
+	assert.Nil(t, o.openapiSpec.Paths.Find("/hidden"), "Hide should omit the route")
 
 	// Hidden from the docs, but still routable.
 	assert.Equal(t, http.StatusOK, getStd(o, "/hidden").Code)

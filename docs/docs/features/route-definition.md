@@ -68,8 +68,8 @@ func (bc *BookService) BookRoutes() []okapi.RouteDefinition {
 
 			// Alternative way to define OpenAPI metadata using RouteOptions
 			Options: []okapi.RouteOption{
-				okapi.DocSummary("Create Book"),
-				okapi.DocDescription("Create a new book"),
+				okapi.Summary("Create Book"),
+				okapi.Description("Create a new book"),
 				okapi.DocRequestBody(&models.Book{}),
 				okapi.DocResponse(http.StatusCreated, &models.Book{}), // 201 Created
 				okapi.DocResponse(http.StatusUnauthorized, models.AuthResponse{}),

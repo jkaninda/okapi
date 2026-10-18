@@ -172,8 +172,8 @@ func (r *Router) bookRoutes() []okapi.RouteDefinition {
 			Group:   apiGroup,
 			Options: []okapi.RouteOption{
 				// OpenAPI Documentation can be added here or using the RouteDefinition fields directly
-				okapi.DocSummary("Get Book by ID"),
-				okapi.DocDescription("Retrieve a book by its ID"),
+				okapi.Summary("Get Book by ID"),
+				okapi.Description("Retrieve a book by its ID"),
 				okapi.DocPathParam("id", "int", "The ID of the book"),
 				okapi.DocResponse(models.Book{}),
 				okapi.DocResponse(http.StatusBadRequest, &models.ErrorResponseDto{}),
@@ -211,8 +211,8 @@ func (r *Router) v1BookRoutes() []okapi.RouteDefinition {
 			Handler: bookHandler.Get,
 			Group:   apiGroup,
 			Options: []okapi.RouteOption{
-				okapi.DocSummary("Get Book by ID"),
-				okapi.DocDescription("Retrieve a book by its ID"),
+				okapi.Summary("Get Book by ID"),
+				okapi.Description("Retrieve a book by its ID"),
 				okapi.DocResponse(models.Book{}),
 				okapi.DocResponse(http.StatusBadRequest, &models.ErrorResponseDto{}),
 				okapi.DocResponse(http.StatusNotFound, &models.ErrorResponseDto{}),
@@ -259,8 +259,8 @@ func (r *Router) securityRoutes() []okapi.RouteDefinition {
 			Handler: authHandler.WhoAmI,
 			Group:   coreGroup,
 			Options: []okapi.RouteOption{
-				okapi.DocSummary("Whoami"),
-				okapi.DocDescription("Get the current user's information"),
+				okapi.Summary("Whoami"),
+				okapi.Description("Get the current user's information"),
 				okapi.DocResponse(models.UserInfo{}),
 			},
 			Security: bearerAuthSecurity,

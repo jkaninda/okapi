@@ -146,7 +146,7 @@ type RouteDefinition struct {
 //			Handler: exampleHandler,
 //			Middlewares: []okapi.Middleware{customMiddleware}
 //			Options: []okapi.RouteOption{
-//			okapi.DocSummary("Example POST request"),
+//			okapi.Summary("Example POST request"),
 //			okapi.Request(&ExampleRequest{}),
 //			okapi.Response(&ExampleResponse{}),
 //		},

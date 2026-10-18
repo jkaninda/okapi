@@ -214,3 +214,36 @@ if err := cli.LoadConfig("config.yaml", cfg); err != nil {
 	panic(err)
 }
 ```
+
+---
+
+## Export the OpenAPI Document
+
+`WithOpenAPICommand` registers an `openapi` command that writes the
+application's OpenAPI document without starting the server, for a client
+generator or to check it in:
+
+```go
+cli := okapicli.New(o, "MyApp").WithOpenAPICommand()
+cli.Command("serve", "Start the server", func(cmd *okapicli.Command) error {
+    return cli.RunServer()
+})
+cli.DefaultCommand("serve")
+registerRoutes(o) // before Execute
+
+if err := cli.Execute(); err != nil {
+    log.Fatal(err)
+}
+```
+
+```bash
+./myapp openapi                     # OpenAPI 3.1 JSON on stdout
+./myapp openapi -o openapi.yaml     # format taken from the extension
+./myapp openapi --version 3.0 -f yaml
+```
+
+| Flag              | Default  | Description                                   |
+|-------------------|----------|-----------------------------------------------|
+| `-o`, `--output`  | stdout   | File to write the document to                 |
+| `-f`, `--format`  | `json`   | `json` or `yaml`; inferred from `--output`    |
+| `-v`, `--version` | `3.1`    | OpenAPI version, `3.1` or `3.0`               |

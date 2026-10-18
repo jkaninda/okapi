@@ -122,8 +122,8 @@ Simple and readable approach for small to medium routes:
 
 ```go
 o.Get("/books", getBooksHandler,
-    okapi.DocSummary("List all available books"),
-    okapi.DocTags("Books"),
+    okapi.Summary("List all available books"),
+    okapi.Tags("Books"),
     okapi.DocQueryParam("author", "string", "Filter by author name", false),
     okapi.DocQueryParam("limit", "int", "Maximum results to return", false),
     okapi.DocResponseHeader("X-Client-Id", "string", "Client ID"),
@@ -263,6 +263,48 @@ o.Post("/books", handler).WithInput(&BookRequest{})
 o.Get("/books", handler).WithOutput(&BooksResponse{})
 ```
 
+### Typed routes
+
+`okapi.Get`, `Post`, `Put`, `Patch` and `Delete` register a typed handler, as
+`okapi.HandleIO` does, and document its input and output types, so they are not
+repeated in `Request` and `Response` options. They take an `*Okapi` or a
+`*Group`:
+
+```go
+func createBook(c *okapi.Context, in *CreateBookInput) (*BookOutput, error) { ... }
+
+okapi.Post(o, "/books", createBook, okapi.Summary("Create a book"))
+okapi.Get(api, "/books/{id}", getBook) // api is a *okapi.Group
+```
+
+What the options document is kept: a `Request` replaces the inferred input, and
+a 2xx response, such as `okapi.Response(BookOutput{Status: 201})`, replaces the
+inferred 200.
+
+Routes served by `okapi.Handle`, `okapi.H`, `okapi.HandleIO` or a typed route
+also document the `400` response a binding or validation failure gets, unless
+they declare their own. Its schema follows the error handler: `ErrorResponse`
+by default, Problem Details with `WithProblemDetailErrorHandler`, and no body
+with a custom `WithErrorHandler`, whose output is not known.
+
+### Examples
+
+```go
+okapi.Doc().
+    RequestBody(Book{}).
+    RequestExamples(map[string]any{
+        "paperback": Book{Name: "Dune", Price: 10},
+        "hardcover": Book{Name: "Dune", Price: 30},
+    }).
+    Response(201, Book{}).
+    ResponseExample(201, Book{Name: "Dune", Price: 10}).
+    Response(404, ErrorResponse{}).
+    ResponseExamples(404, map[string]any{"missing": ErrorResponse{Message: "no such book"}})
+```
+
+A single example is the media type's `example`; named ones are listed under
+`examples`. With both, the single one is listed as `default`.
+
 ### 4. Declarative Route Definition
 
 With `okapi.RouteDefinition`, documentation lives right next to the route. Common
@@ -305,7 +347,7 @@ routes := []okapi.RouteDefinition{
         Handler: getBookHandler,
         Tags:    []string{"Books"},
         Options: []okapi.RouteOption{
-            okapi.DocSummary("Get a book by ID"),
+            okapi.Summary("Get a book by ID"),
             okapi.DocPathParam("id", "int", "The ID of the book"),
             okapi.DocResponse(Book{}),                       // 200
             okapi.DocResponse(404, ErrorResponse{}),         // 404
@@ -351,13 +393,16 @@ registers a route matching every method.
 
 | Method                                           | Description                              |
 |--------------------------------------------------|------------------------------------------|
-| `DocSummary()` / `Doc().Summary()`               | Short endpoint summary                   |
-| `DocDescription()` / `Doc().Description()`       | Long endpoint description                |
-| `DocTags()` / `Doc().Tags()`                     | Group endpoints under tags               |
+| `Summary()` / `Doc().Summary()`               | Short endpoint summary                   |
+| `Description()` / `Doc().Description()`       | Long endpoint description                |
+| `Tags()` / `Doc().Tags()`                     | Group endpoints under tags               |
 | `DocBearerAuth()` / `Doc().BearerAuth()`         | Enable Bearer token authentication       |
 | `DocRequestBody()` / `Doc().RequestBody()`       | Document request body schema             |
 | `DocRequestContentType()` / `Doc().RequestContentType()` | Set the request body media types  |
 | `DocRequestExample()` / `Doc().RequestExample()` | Add an example of the request body       |
+| `DocRequestExamples()` / `Doc().RequestExamples()` | Add named examples of the request body |
+| `DocResponseExample()` / `Doc().ResponseExample()` | Add an example of a response           |
+| `DocResponseExamples()` / `Doc().ResponseExamples()` | Add named examples of a response     |
 | `DocResponse()` / `Doc().Response()`             | Document response schema or status codes |
 | `DocPathParam()` / `Doc().PathParam()`           | Document path parameters                 |
 | `DocQueryParam()` / `Doc().QueryParam()`         | Document query parameters                |
@@ -365,8 +410,8 @@ registers a route matching every method.
 | `DocResponseHeader()` / `Doc().ResponseHeader()` | Document a header on every response      |
 | `DocResponseHeaderFor()` / `Doc().ResponseHeaderFor()` | Document a header on one status    |
 | `DocResponseDescription()` / `Doc().ResponseDescription()` | Describe the response for a status |
-| `DocDeprecated()` / `Doc().Deprecated()`         | Mark route as deprecated                 |
-| `DocHide()`                                      | Leave the route out of the document      |
+| `Deprecated()` / `Doc().Deprecated()`         | Mark route as deprecated                 |
+| `Hide()` / `Doc().Hide()`                       | Leave the route out of the document      |
 
 ## Schema Generation Details
 
@@ -386,6 +431,19 @@ A few things worth knowing about how schemas are derived from your Go types:
 - **Recursive types are supported.** A type that refers to itself in a documented
   request or response is registered as a component and referenced, instead of
   being expanded forever.
+- **Generic types are named after their arguments.** `Page[models.Book]` is
+  registered as the `PageBook` component, without the package path.
+- **A type can describe its own schema** by implementing `okapi.SchemaProvider`,
+  for a decimal, a custom UUID or a `oneOf` union. Field tags still apply on top:
+
+  ```go
+  func (Decimal) OpenAPISchema() *openapi3.Schema {
+      return &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "decimal"}
+  }
+  ```
+- **Every operation has an `operationId`.** One is derived from the summary, or
+  else from the method and path (`get-books-id`), and made unique with a
+  numeric suffix. A declared `operationId` is kept as is.
 - **`Any` routes** are documented under `get`, `post`, `put`, `patch` and
   `delete`. A CORS preflight for such a route lists real method names in
   `Access-Control-Allow-Methods` rather than `*`.
@@ -478,11 +536,32 @@ o.WithOpenAPIDocs(okapi.OpenAPI{
 
 // A webhook is documentation-only: it is not added to the router.
 o.Webhook("newBook", http.MethodPost,
-    okapi.DocSummary("Notifies subscribers about a newly added book"),
+    okapi.Summary("Notifies subscribers about a newly added book"),
     okapi.DocRequestBody(Book{}),
     okapi.DocResponse(200, okapi.M{"received": true}),
 )
 ```
+
+## Validating and Exporting the Document
+
+The server validates its OpenAPI documents on startup and logs a warning for
+problems such as an undeclared path parameter or a duplicate `operationId`.
+To fail a build instead, call `ValidateOpenAPI` from a test:
+
+```go
+func TestOpenAPI(t *testing.T) {
+    if err := newApp().ValidateOpenAPI(); err != nil {
+        t.Fatal(err)
+    }
+}
+```
+
+`OpenAPISpec()` and `OpenAPISpec30()` build the 3.1 and 3.0 documents from the
+routes registered so far. To write the document without starting the server,
+for a client generator or to check it in, see the
+[CLI `openapi` command](cli.md#export-the-openapi-document); to catch unintended
+API changes in review, see
+[golden OpenAPI tests](testing.md#golden-openapi-document).
 
 ## Accessing Documentation
 

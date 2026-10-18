@@ -25,6 +25,7 @@
 package okapi
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -349,6 +350,31 @@ func (b *DocBuilder) RequestExample(v any) *DocBuilder {
 	return b
 }
 
+// RequestExamples adds named examples of the request body.
+//
+// Example:
+//
+//	okapi.Doc().RequestExamples(map[string]any{
+//	    "paperback": Book{Name: "Dune", Price: 10},
+//	    "hardcover": Book{Name: "Dune", Price: 30},
+//	})
+func (b *DocBuilder) RequestExamples(examples map[string]any) *DocBuilder {
+	b.options = append(b.options, DocRequestExamples(examples))
+	return b
+}
+
+// ResponseExample sets an example of the response documented for status.
+func (b *DocBuilder) ResponseExample(status int, v any) *DocBuilder {
+	b.options = append(b.options, DocResponseExample(status, v))
+	return b
+}
+
+// ResponseExamples adds named examples of the response documented for status.
+func (b *DocBuilder) ResponseExamples(status int, examples map[string]any) *DocBuilder {
+	b.options = append(b.options, DocResponseExamples(status, examples))
+	return b
+}
+
 // RequestContentType sets the media types the request body is documented
 // with, overriding the ones inferred from the request type.
 //
@@ -554,11 +580,17 @@ func DocSummary(summary string) RouteOption {
 func DocHide() RouteOption {
 	return Hide()
 }
+
+// DocOperationId sets the operationId of the route
+//
+// Deprecated: Use OperationId.
 func DocOperationId(operationId string) RouteOption {
 	return OperationId(operationId)
 }
 
 // DocDescription sets a description for the route
+//
+// Deprecated: Use Description.
 func DocDescription(description string) RouteOption {
 	return Description(description)
 }
@@ -761,11 +793,15 @@ func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) R
 }
 
 // DocTag adds a single tag to categorize the route
+//
+// Deprecated: Use Tag.
 func DocTag(tag string) RouteOption {
 	return Tag(tag)
 }
 
 // DocTags adds multiple tags to categorize the route
+//
+// Deprecated: Use Tags.
 func DocTags(tags ...string) RouteOption {
 	return Tags(tags...)
 }
@@ -905,6 +941,40 @@ func DocRequestExample(v any) RouteOption {
 	}
 }
 
+// DocRequestExamples adds named examples of the request body.
+func DocRequestExamples(examples map[string]any) RouteOption {
+	return func(r *Route) {
+		if r.requestExamples == nil {
+			r.requestExamples = make(map[string]any, len(examples))
+		}
+		for name, v := range examples {
+			r.requestExamples[name] = v
+		}
+	}
+}
+
+// DocResponseExample sets an example of the response documented for status.
+// It applies only to a response documented with a schema.
+func DocResponseExample(status int, v any) RouteOption {
+	return DocResponseExamples(status, map[string]any{"": v})
+}
+
+// DocResponseExamples adds named examples of the response documented for
+// status. They apply only to a response documented with a schema.
+func DocResponseExamples(status int, examples map[string]any) RouteOption {
+	return func(r *Route) {
+		if r.responseExamples == nil {
+			r.responseExamples = make(map[int]map[string]any)
+		}
+		if r.responseExamples[status] == nil {
+			r.responseExamples[status] = make(map[string]any, len(examples))
+		}
+		for name, v := range examples {
+			r.responseExamples[status][name] = v
+		}
+	}
+}
+
 // DocRequestContentType sets the media types the request body is documented
 // with, overriding the ones inferred from the request type. By default a body
 // is documented as application/json, or as a form when its fields carry form
@@ -1005,6 +1075,8 @@ func DocBasicAuth() RouteOption {
 }
 
 // DocDeprecated marks the route as deprecated
+//
+// Deprecated: Use Deprecated.
 func DocDeprecated() RouteOption {
 	return Deprecated()
 }
@@ -1028,6 +1100,11 @@ func withSecurity(security []map[string][]string) RouteOption {
 // document is the default served at /openapi.json; both remain reachable at
 // their version-pinned routes.
 func (o *Okapi) buildOpenAPISpec() {
+	o.openapiSpec, o.openapiSpec31 = o.buildSpecs()
+}
+
+// buildSpecs builds the OpenAPI 3.0 and 3.1 documents of the application.
+func (o *Okapi) buildSpecs() (spec30, spec31 *openapi3.T) {
 	spec := &openapi3.T{
 		OpenAPI: openApiVersion,
 		Info: &openapi3.Info{
@@ -1112,6 +1189,8 @@ func (o *Okapi) buildOpenAPISpec() {
 		}
 	}
 
+	setDefaultOperationIDs(spec)
+
 	// Point references to recursive types at their components
 	o.resolveRecursiveRefs(spec, schemaRegistry)
 
@@ -1120,8 +1199,92 @@ func (o *Okapi) buildOpenAPISpec() {
 	// The base shares its schemas with the routes, so both documents are
 	// derived from copies of it: changing the base in place would change what
 	// the next build starts from.
-	o.openapiSpec = o.deriveSpec30(spec)
-	o.openapiSpec31 = o.deriveSpec31(spec)
+	return o.deriveSpec30(spec), o.deriveSpec31(spec)
+}
+
+// OpenAPISpec builds and returns the application's OpenAPI 3.1 document, the
+// one served at /openapi.json, from the routes registered so far.
+func (o *Okapi) OpenAPISpec() *openapi3.T {
+	_, spec31 := o.buildSpecs()
+	return spec31
+}
+
+// OpenAPISpec30 builds and returns the application's OpenAPI 3.0 document,
+// the one served at /openapi-3.0.json, from the routes registered so far.
+func (o *Okapi) OpenAPISpec30() *openapi3.T {
+	spec30, _ := o.buildSpecs()
+	return spec30
+}
+
+// ValidateOpenAPI builds the application's OpenAPI documents and validates
+// them, reporting problems such as an undeclared path parameter or a
+// duplicate operationId. The server checks this on startup and logs a
+// warning; calling it from a test fails the build instead.
+func (o *Okapi) ValidateOpenAPI() error {
+	return validateSpecs(o.buildSpecs())
+}
+
+// validateSpecs validates the OpenAPI 3.0 and 3.1 documents.
+func validateSpecs(spec30, spec31 *openapi3.T) error {
+	if err := validateSpec(spec30); err != nil {
+		return fmt.Errorf("OpenAPI 3.0 document: %w", err)
+	}
+	if err := validateSpec(spec31); err != nil {
+		return fmt.Errorf("OpenAPI 3.1 document: %w", err)
+	}
+	return nil
+}
+
+// validateSpec validates spec. It is validated as served, reloaded from its
+// JSON form, so that component references are resolved.
+func validateSpec(spec *openapi3.T) error {
+	data, err := spec.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	doc, err := openapi3.NewLoader().LoadFromData(data)
+	if err != nil {
+		return err
+	}
+	return doc.Validate(context.Background())
+}
+
+// setDefaultOperationIDs gives every operation of spec without an operationId
+// one derived from its method and path, such as get-books-id, made unique
+// with a numeric suffix. Declared operationIds are left as they are.
+func setDefaultOperationIDs(spec *openapi3.T) {
+	type operation struct {
+		method, path string
+		op           *openapi3.Operation
+	}
+	var ops []operation
+	used := make(map[string]bool)
+	for _, path := range spec.Paths.InMatchingOrder() {
+		for method, op := range spec.Paths.Value(path).Operations() {
+			if op.OperationID != "" {
+				used[op.OperationID] = true
+			}
+			ops = append(ops, operation{method, path, op})
+		}
+	}
+	sort.SliceStable(ops, func(i, j int) bool {
+		if ops[i].path != ops[j].path {
+			return ops[i].path < ops[j].path
+		}
+		return ops[i].method < ops[j].method
+	})
+	for _, o := range ops {
+		if o.op.OperationID != "" {
+			continue
+		}
+		base := goutils.Slug(strings.ToLower(o.method) + " " + o.path)
+		id := base
+		for n := 2; used[id]; n++ {
+			id = fmt.Sprintf("%s-%d", base, n)
+		}
+		used[id] = true
+		o.op.OperationID = id
+	}
 }
 
 // buildOperation builds an OpenAPI operation from a route's documentation
@@ -1156,12 +1319,12 @@ func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[st
 			Required: !r.requestOptional,
 		}
 
-		// Add example if available
+		// Add examples if available
+		examples := r.requestExamples
 		if r.requestExample != nil {
-			for _, mediaType := range requestBody.Content {
-				mediaType.Example = r.requestExample
-			}
+			examples = withUnnamedExample(examples, r.requestExample)
 		}
+		setExamples(requestBody.Content, examples)
 
 		op.RequestBody = &openapi3.RequestBodyRef{Value: requestBody}
 	}
@@ -1173,10 +1336,15 @@ func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[st
 		if resp := r.responses[status]; resp != nil {
 			schemaRef := o.getOrCreateSchemaComponent(resp, schemaRegistry, spec.Components.Schemas)
 			apiResponse.Content = openapi3.NewContentWithJSONSchemaRef(schemaRef)
+			setExamples(apiResponse.Content, r.responseExamples[status])
 		}
 		op.Responses.Set(strconv.Itoa(status), &openapi3.ResponseRef{
 			Value: apiResponse,
 		})
+	}
+	// A binding failure in Handle or HandleIO answers 400
+	if r.bindsInput && op.Responses.Value("400") == nil {
+		op.Responses.Set("400", &openapi3.ResponseRef{Value: o.errorResponse(spec, http.StatusBadRequest, schemaRegistry)})
 	}
 	// Add default responses, unless documented by the route
 	if op.Responses.Value("500") == nil {
@@ -1187,6 +1355,62 @@ func (o *Okapi) buildOperation(spec *openapi3.T, r *Route, schemaRegistry map[st
 		})
 	}
 	return op
+}
+
+// errorResponse documents the response the application's error handler writes
+// for status. With a custom error handler, whose output is not known, it has
+// no content.
+func (o *Okapi) errorResponse(spec *openapi3.T, status int, registry map[string]*SchemaInfo) *openapi3.Response {
+	resp := &openapi3.Response{Description: ptr(http.StatusText(status))}
+	var body any
+	contentType := constJSON
+	switch o.errorFormat {
+	case errorFormatCustom:
+		return resp
+	case ErrorFormatProblemJSON:
+		body, contentType = ProblemDetail{}, constJSONProblem
+	case ErrorFormatProblemXML:
+		body, contentType = ProblemDetail{}, constXMLProblem
+	default:
+		body = ErrorResponse{}
+	}
+	schema := o.getOrCreateSchemaComponent(reflectToSchemaWithInfo(body).Schema, registry, spec.Components.Schemas)
+	resp.Content = openapi3.NewContentWithSchemaRef(schema, []string{contentType})
+	return resp
+}
+
+// withUnnamedExample returns examples with v as the unnamed example, under "".
+func withUnnamedExample(examples map[string]any, v any) map[string]any {
+	merged := make(map[string]any, len(examples)+1)
+	for name, example := range examples {
+		merged[name] = example
+	}
+	merged[""] = v
+	return merged
+}
+
+// setExamples documents examples on every media type of content. The unnamed
+// example, under "", is the media type's example; named ones are listed under
+// examples. With named ones, an unnamed example is listed as "default", as a
+// media type cannot have both.
+func setExamples(content openapi3.Content, examples map[string]any) {
+	if len(examples) == 0 {
+		return
+	}
+	unnamed, hasUnnamed := examples[""]
+	for _, mediaType := range content {
+		if hasUnnamed && len(examples) == 1 {
+			mediaType.Example = unnamed
+			continue
+		}
+		mediaType.Examples = make(openapi3.Examples, len(examples))
+		for name, v := range examples {
+			if name == "" {
+				name = "default"
+			}
+			mediaType.Examples[name] = &openapi3.ExampleRef{Value: openapi3.NewExample(v)}
+		}
+	}
 }
 
 // responseStatuses returns, in ascending order, the status codes the route
@@ -1822,9 +2046,78 @@ func reflectToSchemaWithInfo(v any) *SchemaInfo {
 	}
 }
 
+// SchemaProvider is implemented by types that describe their own OpenAPI
+// schema, such as a decimal or a custom UUID type, or a union documented with
+// oneOf. The schema it returns is used wherever the type appears, in place of
+// the one derived by reflection; field tags still apply on top of it.
+//
+// Example:
+//
+//	func (Decimal) OpenAPISchema() *openapi3.Schema {
+//	    return &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: "decimal"}
+//	}
+type SchemaProvider interface {
+	OpenAPISchema() *openapi3.Schema
+}
+
+var schemaProviderType = reflect.TypeOf((*SchemaProvider)(nil)).Elem()
+
+// providedSchema returns a copy of the schema type t describes through
+// SchemaProvider, with a value or pointer receiver, or nil if it does not.
+func providedSchema(t reflect.Type) *openapi3.Schema {
+	if t.Kind() == reflect.Interface || t.Kind() == reflect.Pointer {
+		return nil
+	}
+	var provider SchemaProvider
+	switch {
+	case t.Implements(schemaProviderType):
+		provider = reflect.New(t).Elem().Interface().(SchemaProvider)
+	case reflect.PointerTo(t).Implements(schemaProviderType):
+		provider = reflect.New(t).Interface().(SchemaProvider)
+	default:
+		return nil
+	}
+	schema := provider.OpenAPISchema()
+	if schema == nil {
+		return nil
+	}
+	// Field tags are applied to the result, so it must not be shared
+	clone := *schema
+	return &clone
+}
+
+// schemaTypeName returns the name a schema of type t is titled and registered
+// under. A generic instantiation such as ResponseDto[pkg.Book] is named after
+// its type and its arguments without their packages: ResponseDtoBook.
+func schemaTypeName(t reflect.Type) string {
+	name := t.Name()
+	open := strings.IndexByte(name, '[')
+	if open < 0 {
+		return name
+	}
+	// Drop the import path of each type argument
+	args := qualifiedTypeRe.ReplaceAllString(name[open:], "")
+	var b strings.Builder
+	b.WriteString(name[:open])
+	for _, part := range nonIdentRe.Split(args, -1) {
+		if part != "" {
+			b.WriteString(strings.ToUpper(part[:1]) + part[1:])
+		}
+	}
+	return b.String()
+}
+
+var (
+	qualifiedTypeRe = regexp.MustCompile(`[\w./-]*\.`)
+	nonIdentRe      = regexp.MustCompile(`[^A-Za-z0-9_]+`)
+)
+
 // typeToSchemaWithInfo converts a reflect.Type to an OpenAPI SchemaRef with proper naming.
 // inProgress is passed on to structToSchemaWithInfo.
 func typeToSchemaWithInfo(t reflect.Type, inProgress map[reflect.Type]*openapi3.Schema) *openapi3.SchemaRef {
+	if schema := providedSchema(t); schema != nil {
+		return openapi3.NewSchemaRef("", schema)
+	}
 	switch t.Kind() {
 	case reflect.String:
 		return openapi3.NewSchemaRef("", openapi3.NewStringSchema())
@@ -1946,7 +2239,7 @@ func structSchemaWithFields(t reflect.Type, inProgress map[reflect.Type]*openapi
 
 	schema := openapi3.NewObjectSchema()
 	if t.Name() != "" {
-		schema.Title = t.Name()
+		schema.Title = schemaTypeName(t)
 		// Anonymous structs cannot refer to themselves, so only named ones are tracked
 		inProgress[t] = schema
 		defer delete(inProgress, t)
@@ -2864,7 +3157,7 @@ func (r *Route) setRequestBody(v any) {
 // are documented as parameters.
 func formSchema(t reflect.Type, skipParams bool) (*openapi3.SchemaRef, []string) {
 	schema := openapi3.NewObjectSchema()
-	schema.Title = t.Name()
+	schema.Title = schemaTypeName(t)
 	hasFile := false
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)

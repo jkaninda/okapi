@@ -75,7 +75,7 @@ api.Head("/books", headBooks)
 api.Any("/webhook", handleWebhook) // matches every method
 ```
 
-Each method accepts the same `RouteOption` values as the top-level router (e.g. `DocSummary`, `DocResponse`, `UseMiddleware`).
+Each method accepts the same `RouteOption` values as the top-level router (e.g. `Summary`, `DocResponse`, `UseMiddleware`).
 
 Documentation-shaping settings — `Deprecated()`, `WithTags`, `WithTagInfo`,
 `WithBearerAuth`, `WithBasicAuth` and `WithSecurity` — are copied onto each route
@@ -264,14 +264,14 @@ func (c *BookController) Routes() []okapi.RouteDefinition {
             Path:        "/books",
             OperationId: "ListBooks",
             Handler:     c.list,
-            Options:     []okapi.RouteOption{okapi.DocSummary("List books")},
+            Options:     []okapi.RouteOption{okapi.Summary("List books")},
         },
         {
             Method:      http.MethodPost,
             Path:        "/books",
             Handler:     c.create,
             Middlewares: []okapi.Middleware{rateLimitMW},
-            Options:     []okapi.RouteOption{okapi.DocSummary("Create a book")},
+            Options:     []okapi.RouteOption{okapi.Summary("Create a book")},
         },
     }
 }

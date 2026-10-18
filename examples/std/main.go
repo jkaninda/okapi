@@ -77,14 +77,14 @@ func main() {
 	// It still gets routing, the middleware chain and CORS registration. The
 	// documentation options are the same ones a native route accepts.
 	o.HandleStd(http.MethodGet, "/greeting", greeting,
-		okapi.DocSummary("Greet the caller"),
-		okapi.DocTag("std"))
+		okapi.Summary("Greet the caller"),
+		okapi.Tag("std"))
 
 	// 3. Path parameters work as they do under http.ServeMux: Okapi copies what
 	// the router captured onto the request, so r.PathValue reads it.
 	o.HandleStd(http.MethodGet, "/users/{id}", getUser,
-		okapi.DocSummary("Fetch a user by id"),
-		okapi.DocTag("std"))
+		okapi.Summary("Fetch a user by id"),
+		okapi.Tag("std"))
 
 	// 4. Any http.Handler, registered with HandleHTTP. A catch-all segment
 	// ({any...}) hands the prefix and everything beneath it to one handler,
@@ -95,7 +95,7 @@ func main() {
 	}
 	o.HandleHTTP(http.MethodGet, "/assets/{any...}",
 		http.StripPrefix("/assets/", http.FileServer(http.FS(assets))),
-		okapi.DocHide())
+		okapi.Hide())
 
 	// 5. Groups expose the same two methods, so a standard handler inherits the
 	// group's prefix and middleware.
@@ -104,13 +104,13 @@ func main() {
 		c.Response().Header().Set("X-Group", "api")
 		return c.Next()
 	})
-	api.HandleStd(http.MethodGet, "/legacy", legacy, okapi.DocTag("std"))
+	api.HandleStd(http.MethodGet, "/legacy", legacy, okapi.Tag("std"))
 
 	// 6. Native handlers sit alongside them, and are where binding, validation
 	// and the error-returning signature become available.
 	o.Get("/users", func(c *okapi.Context) error {
 		return c.OK([]User{{ID: "42", Name: "Ada Lovelace"}})
-	}, okapi.DocSummary("List users"), okapi.DocTag("native"))
+	}, okapi.Summary("List users"), okapi.Tag("native"))
 
 	if err := o.Start(); err != nil {
 		log.Fatal(err)

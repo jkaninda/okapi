@@ -130,7 +130,7 @@ func main() {
         return c.OK(response)
     },
         // OpenAPI Documentation
-        okapi.DocSummary("Create a new Book"),
+        okapi.Summary("Create a new Book"),
         okapi.DocRequestBody(Book{}),
         okapi.DocResponse(Response{}),
         okapi.DocResponse(http.StatusBadRequest, ErrorResponse{}),

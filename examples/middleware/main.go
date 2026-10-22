@@ -131,7 +131,7 @@ func main() {
 
 	o.Get("/", func(c *okapi.Context) error {
 		return c.OK(okapi.M{"message": "Welcome to Okapi!"})
-	}, okapi.DocSummary("Home"))
+	}, okapi.Summary("Home"))
 
 	// Create a new group with a base path for API routes
 	api := o.Group("/api")
@@ -148,7 +148,7 @@ func main() {
 	adminApi := v1.Group("/admin", basicAuth.Middleware).WithSecurity(basicAuthSecurity) // This group will require basic authentication
 	adminApi.Put("/books/:id", adminUpdate, okapi.DocResponse(Book{}), okapi.DocRequestBody(Book{}))
 	adminApi.Post("/books", adminCreateBook,
-		okapi.DocSummary("create book"),
+		okapi.Summary("create book"),
 		okapi.DocResponse(Book{}),
 		okapi.DocRequestBody(Book{}))
 
@@ -157,8 +157,8 @@ func main() {
 	v1.Use(customMiddleware)
 
 	// Define routes for the v1 group
-	v1.Get("/books", getBooks, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
-	v1.Get("/books/:id", findById, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
+	v1.Get("/books", getBooks, okapi.Summary("Get all books"), okapi.DocResponse([]Book{}))
+	v1.Get("/books/:id", findById, okapi.Summary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
 
 	// *************** V2 Group with JWT Auth middleware ********************
 	v2 := api.Group("/v2")
@@ -200,7 +200,7 @@ func main() {
 		okapi.DocRequestBody(Book{}),
 		okapi.DocBearerAuth())
 	adminApiV2.Post("/books", adminCreateBook,
-		okapi.DocSummary("create a book"),
+		okapi.Summary("create a book"),
 		okapi.DocResponse(Book{}),
 		okapi.DocRequestBody(Book{}))
 
@@ -217,7 +217,7 @@ func main() {
 		return c.OK(okapi.M{"message": "Book deleted"})
 	})
 	adminApiV2.Get("/whoami", whoAmI,
-		okapi.DocSummary("Get current user information"),
+		okapi.Summary("Get current user information"),
 		okapi.DocResponse(okapi.M{
 			"email": "",
 			"role":  "",
@@ -261,8 +261,8 @@ func main() {
 			Response(LoginResponse{}).
 			Build(),
 	)
-	v2.Get("/books", getBooks, okapi.DocSummary("Get all books"), okapi.DocResponse([]Book{}))
-	v2.Get("/books/:id", findById, okapi.DocSummary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
+	v2.Get("/books", getBooks, okapi.Summary("Get all books"), okapi.DocResponse([]Book{}))
+	v2.Get("/books/:id", findById, okapi.Summary("Get book by Id"), okapi.DocResponse(Book{})).Name = "show_book"
 	// Start the server
 	err := o.Start()
 	if err != nil {

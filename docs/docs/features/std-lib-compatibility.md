@@ -189,15 +189,15 @@ generated OpenAPI document, and accept the same documentation options:
 
 ```go
 o.HandleStd("GET", "/std-documented", myHandler,
-    okapi.DocSummary("A standard handler"),
-    okapi.DocTag("std"))
+    okapi.Summary("A standard handler"),
+    okapi.Tag("std"))
 ```
 
 Because a standard handler has no typed input or output, Okapi cannot infer request
 or response schemas for it — the operation is documented with its summary, tags, and
 operation ID, but the body schemas are absent. If you want a fully described
 operation, either declare the schemas explicitly with the documentation options or
-convert the route to a native handler. Use `okapi.DocHide()` to keep an
+convert the route to a native handler. Use `okapi.Hide()` to keep an
 undocumented route out of the spec entirely.
 
 ## Error Handling Differences

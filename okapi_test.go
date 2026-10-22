@@ -117,10 +117,10 @@ func TestStart(t *testing.T) {
 	adminApi := api.Group("/admin", basicAuth.Middleware)
 	adminApi.Put("/books/:id", adminUpdate)
 	adminApi.Post("/books", adminStore,
-		DocSummary("Book Summary"),
+		Summary("Book Summary"),
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
-		DocTags("Book Tags"),
+		Tags("Book Tags"),
 	)
 
 	v1 := api.Group("/v1")
@@ -492,7 +492,7 @@ func (bc *BookController) Routes() []RouteDefinition {
 			Group:       coreGroup,
 			Middlewares: []Middleware{customMiddleware},
 			Options: []RouteOption{
-				DocSummary("Create Book"), // OpenAPI documentation
+				Summary("Create Book"), // OpenAPI documentation
 			},
 		},
 	}

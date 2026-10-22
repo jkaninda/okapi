@@ -102,6 +102,10 @@ const (
 	ErrorFormatProblemJSON ErrorFormat = "problem+json"
 	// ErrorFormatProblemXML uses RFC 7807 Problem Details (application/problem+xml)
 	ErrorFormatProblemXML ErrorFormat = "problem+xml"
+
+	// errorFormatCustom is the format of an error handler set with
+	// WithErrorHandler, which is not known
+	errorFormatCustom ErrorFormat = "custom"
 )
 
 // ErrorHandlerConfig configures the error handler behavior
@@ -222,6 +226,7 @@ func (p *ProblemDetail) WithTimestamp() *ProblemDetail {
 func WithErrorHandler(handler ErrorHandler) OptionFunc {
 	return func(o *Okapi) {
 		o.errorHandler = handler
+		o.errorFormat = errorFormatCustom
 	}
 }
 
@@ -229,6 +234,7 @@ func WithErrorHandler(handler ErrorHandler) OptionFunc {
 func WithDefaultErrorHandler() OptionFunc {
 	return func(o *Okapi) {
 		o.errorHandler = DefaultErrorHandler
+		o.errorFormat = ""
 	}
 }
 
@@ -236,6 +242,10 @@ func WithDefaultErrorHandler() OptionFunc {
 func WithProblemDetailErrorHandler(config *ErrorHandlerConfig) OptionFunc {
 	return func(o *Okapi) {
 		o.errorHandler = ProblemDetailErrorHandler(config)
+		o.errorFormat = ErrorFormatProblemJSON
+		if config != nil && config.Format == ErrorFormatProblemXML {
+			o.errorFormat = ErrorFormatProblemXML
+		}
 	}
 }
 

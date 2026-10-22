@@ -94,7 +94,7 @@ func (ec *ExampleController) Routes() []RouteDefinition {
 			Path:    "/hello",
 			Handler: ec.Hello,
 			Options: []RouteOption{
-				DocSummary("Helleo World Endpoint"),
+				Summary("Helleo World Endpoint"),
 			},
 		},
 	}

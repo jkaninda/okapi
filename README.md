@@ -335,7 +335,7 @@ func (s *BookHandler) Routes() []okapi.RouteDefinition {
             Middlewares: []okapi.Middleware{authMiddleware},
             Security:    bearerAuthSecurity,
             Options: []okapi.RouteOption{
-                okapi.DocSummary("Create a book"),
+                okapi.Summary("Create a book"),
                 okapi.DocRequestBody(&Book{}),
                 okapi.DocResponse(&Book{}),
             },
@@ -550,7 +550,7 @@ Okapi serves the same API description as both **OpenAPI 3.1 / JSON Schema 2020-1
 ```go
 // A webhook is documentation-only: it is not added to the router.
 o.Webhook("newPet", http.MethodPost,
-    okapi.DocSummary("Notifies subscribers about a newly added pet"),
+    okapi.Summary("Notifies subscribers about a newly added pet"),
     okapi.DocRequestBody(Pet{}),
     okapi.DocResponse(200, okapi.M{"received": true}),
 )
@@ -613,8 +613,8 @@ Simple and readable for most routes:
 
 ```go
 o.Get("/books", getBooksHandler,
-    okapi.DocSummary("List all available books"),
-    okapi.DocTags("Books"),
+    okapi.Summary("List all available books"),
+    okapi.Tags("Books"),
     okapi.DocQueryParam("author", "string", "Filter by author name", false),
     okapi.DocQueryParam("limit", "int", "Maximum results to return", false),
     okapi.DocResponseHeader("X-Client-Id", "string", "Client ID"),
@@ -712,7 +712,7 @@ routes := []okapi.RouteDefinition{
         Handler: getBookHandler,
         Tags:    []string{"Books"},
         Options: []okapi.RouteOption{
-            okapi.DocSummary("Get a book by ID"),
+            okapi.Summary("Get a book by ID"),
             okapi.DocPathParam("id", "int", "The ID of the book"),
             okapi.DocResponse(Book{}),                       // 200
             okapi.DocResponse(404, ErrorResponse{}),         // 404

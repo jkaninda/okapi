@@ -239,15 +239,15 @@ func TestOpenAPIRecursiveSchemaNameConflict(t *testing.T) {
 
 func TestOpenAPIAnyRoute(t *testing.T) {
 	o := newSpecTestApp("Any")
-	o.addRoute(njia.MethodAny, "/proxy", nil, anyHandler, DocOperationId("proxy"), DocResponse(nullable31Model{}))
-	o.addRoute(njia.MethodAny, "/forward", nil, anyHandler, DocSummary("Forward everything"))
+	o.addRoute(njia.MethodAny, "/proxy", nil, anyHandler, OperationId("proxy"), DocResponse(nullable31Model{}))
+	o.addRoute(njia.MethodAny, "/forward", nil, anyHandler, Summary("Forward everything"))
 	o.addRoute(njia.MethodAny, "/anonymous", nil, anyHandler)
 	// An explicitly registered method wins over the wildcard, whatever the order.
-	o.Get("/files", anyHandler, DocOperationId("readFile"))
-	o.addRoute(njia.MethodAny, "/files", nil, anyHandler, DocOperationId("files"))
-	o.addRoute(njia.MethodAny, "/items", nil, anyHandler, DocOperationId("items"))
-	o.Delete("/items", anyHandler, DocOperationId("deleteItem"))
-	o.Webhook("anyEvent", njia.MethodAny, DocOperationId("anyEvent"))
+	o.Get("/files", anyHandler, OperationId("readFile"))
+	o.addRoute(njia.MethodAny, "/files", nil, anyHandler, OperationId("files"))
+	o.addRoute(njia.MethodAny, "/items", nil, anyHandler, OperationId("items"))
+	o.Delete("/items", anyHandler, OperationId("deleteItem"))
+	o.Webhook("anyEvent", njia.MethodAny, OperationId("anyEvent"))
 	o.buildOpenAPISpec()
 
 	// The router accepts and serves the wildcard route.
@@ -267,7 +267,8 @@ func TestOpenAPIAnyRoute(t *testing.T) {
 				op := item.GetOperation(method)
 				require.NotNil(t, op, "%s %s", method, path)
 				if id == "" {
-					assert.Empty(t, op.OperationID)
+					// Without a declared operationId, one is derived from the method and path
+					assert.Equal(t, strings.ToLower(method)+"-anonymous", op.OperationID)
 				} else {
 					assert.Equal(t, id+"-"+strings.ToLower(method), op.OperationID)
 				}

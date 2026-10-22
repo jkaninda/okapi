@@ -207,7 +207,7 @@ func (g *Group) handle(method, path string, h HandlerFunc, opts ...RouteOption) 
 		opts = append(opts, DocBasicAuth())
 	}
 	if g.deprecated {
-		opts = append(opts, DocDeprecated())
+		opts = append(opts, Deprecated())
 	}
 	if len(g.security) > 0 {
 		opts = append(opts, withSecurity(g.security))
@@ -321,7 +321,7 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
 //	        Options: []okapi.RouteOption{
-//	            okapi.DocSummary("Example GET request"),
+//	            okapi.Summary("Example GET request"),
 //	        },
 //	    },
 //	    {
@@ -329,7 +329,7 @@ func (g *Group) UseMiddleware(mw func(http.Handler) http.Handler) {
 //	        Path:    "/example",
 //	        Handler: exampleHandler,
 //	        Options: []okapi.RouteOption{
-//	            okapi.DocSummary("Example POST request"),
+//	            okapi.Summary("Example POST request"),
 //	        },
 //	    },
 //	}

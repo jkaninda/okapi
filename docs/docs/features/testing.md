@@ -247,3 +247,22 @@ func TestRunServer(t *testing.T) {
 
 The helper compiles on Windows, where a process cannot signal itself, but panics
 with an explanation if it is called there.
+
+## Golden OpenAPI Document
+
+`okapitest.AssertOpenAPIGolden` compares the application's OpenAPI 3.1 document
+with a file checked into the repository, so a change to the documented API shows
+up in the pull request's diff instead of going unnoticed:
+
+```go
+func TestOpenAPI(t *testing.T) {
+    okapitest.AssertOpenAPIGolden(t, newApp(), "testdata/openapi.json")
+}
+```
+
+On a mismatch the test fails with the first differing lines. Run the tests with
+`OKAPI_UPDATE_GOLDEN=1` to write or update the golden file:
+
+```bash
+OKAPI_UPDATE_GOLDEN=1 go test ./...
+```

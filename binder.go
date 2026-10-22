@@ -510,7 +510,7 @@ func (c *Context) applyDefaultAndValidate(valField reflect.Value, field reflect.
 
 	// Only check required if no value was set and field is still zero after potential default application
 	if !wasSet && field.Tag.Get(tagRequired) == constTRUE && isEmptyValue(valField) {
-		return fmt.Errorf("field %s is required", field.Name)
+		return withField(field.Name, errRequired)
 	}
 
 	return nil
@@ -540,7 +540,7 @@ func (c *Context) bindFromFields(out any) error {
 			return false, nil
 		}
 		if err := setValueWithValidation(valField, value, field); err != nil {
-			return false, fmt.Errorf("bind error for field %s: %w", field.Name, err)
+			return false, withField(field.Name, err)
 		}
 		return true, nil
 	}
@@ -600,7 +600,7 @@ func (c *Context) bindFromFields(out any) error {
 
 		// Required check
 		if !wasSet && field.Tag.Get(tagRequired) == constTRUE && isEmptyValue(valField) {
-			return fmt.Errorf("field %s is required", field.Name)
+			return withField(field.Name, errRequired)
 		}
 	}
 
@@ -739,17 +739,20 @@ func validateStruct(v any) error {
 		}
 
 		if err := validateNestedStruct(field); err != nil {
-			return err
+			if sf.Anonymous {
+				return err
+			}
+			return withField(sf.Name, err)
 		}
 
 		if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
-			return fmt.Errorf("field %s is required", sf.Name)
+			return withField(sf.Name, errRequired)
 		}
 		if checkConditionalRequired(val, field, sf) {
-			return fmt.Errorf("field %s is required", sf.Name)
+			return withField(sf.Name, errRequired)
 		}
 		if err := checkFieldConstraints(field, sf); err != nil {
-			return fmt.Errorf("field %s: %w", sf.Name, err)
+			return withField(sf.Name, err)
 		}
 	}
 	return nil
@@ -766,7 +769,7 @@ func validateNestedStruct(field reflect.Value) error {
 		}
 		for j := 0; j < field.Len(); j++ {
 			if err := validateStruct(field.Index(j).Addr().Interface()); err != nil {
-				return err
+				return withField(fmt.Sprintf("[%d]", j), err)
 			}
 		}
 	}

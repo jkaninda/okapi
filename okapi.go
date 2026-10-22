@@ -2040,7 +2040,7 @@ func Handle[I any](h func(*Context, *I) error) HandlerFunc {
 	handler := func(c *Context) error {
 		var in I
 		if err := c.Bind(&in); err != nil {
-			return c.AbortBadRequest("Bad Request", err)
+			return c.abortBind(reflect.TypeFor[I]().String(), err)
 		}
 		return h(c, &in)
 	}
@@ -2099,7 +2099,7 @@ func HandleIO[I any, O any](h func(*Context, *I) (*O, error)) HandlerFunc {
 	handler := func(c *Context) error {
 		var in I
 		if err := c.Bind(&in); err != nil {
-			return c.AbortBadRequest("Bad Request", err)
+			return c.abortBind(reflect.TypeFor[I]().String(), err)
 		}
 
 		out, err := h(c, &in)

@@ -160,6 +160,39 @@ func (c *Context) bindRequest(out any) error {
 	return validateStruct(out)
 }
 
+// bindBody binds the request payload into the type of an input's Body field.
+// A field named Body inside the payload is plain data, so struct payloads skip
+// Bind's hasBodyField check; other types are decoded as a whole.
+func (c *Context) bindBody(out any) error {
+	elem := reflect.ValueOf(out).Elem()
+	if elem.Kind() == reflect.Pointer && elem.Type().Elem().Kind() == reflect.Struct {
+		inner := reflect.New(elem.Type().Elem())
+		if err := c.bindBody(inner.Interface()); err != nil {
+			return err
+		}
+		elem.Set(inner)
+		return nil
+	}
+	if elem.Kind() == reflect.Struct {
+		return c.bindRequest(out)
+	}
+
+	switch contentType := c.ContentType(); {
+	case strings.Contains(contentType, constJSON):
+		return bodyDecodeError("JSON", c.BindJSON(out))
+	case strings.Contains(contentType, constXML):
+		return bodyDecodeError("XML", c.BindXML(out))
+	case strings.Contains(contentType, constYAML),
+		strings.Contains(contentType, constYamlX),
+		strings.Contains(contentType, constYamlText):
+		return bodyDecodeError("YAML", c.BindYAML(out))
+	case strings.Contains(contentType, constFormURLEncoded),
+		strings.Contains(contentType, constFormData):
+		return fmt.Errorf("form data needs a struct body, not %s", elem.Type())
+	}
+	return nil
+}
+
 // bodyDecodeError wraps an error from decoding the request body. io.EOF means
 // the body was empty, which is not an error: there was nothing to decode.
 func bodyDecodeError(format string, err error) error {

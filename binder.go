@@ -540,7 +540,7 @@ func (c *Context) bindFromFields(out any) error {
 			return false, nil
 		}
 		if err := setValueWithValidation(valField, value, field); err != nil {
-			return false, withField(field.Name, err)
+			return false, err
 		}
 		return true, nil
 	}
@@ -611,7 +611,7 @@ func setValueWithValidation(field reflect.Value, value string, sf reflect.Struct
 	if field.CanSet() {
 		if value != "" {
 			if err := setWithType(field, value); err != nil {
-				return fmt.Errorf("cannot set field %s: %w", sf.Name, err)
+				return withField(sf.Name, err)
 			}
 			return nil
 		}

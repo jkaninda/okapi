@@ -1394,6 +1394,7 @@ func (o *Okapi) addRoute(method, path string, tags []string, h HandlerFunc, opts
 		opt(route)
 	}
 	o.routes = append(o.routes, route)
+	o.checkRouteInput(route)
 	if method == http.MethodOptions {
 		o.registerUserOptions(normalizedPath, o.routeHandler(route))
 		return route
@@ -2126,7 +2127,12 @@ func registerBindingHandler[I any](h HandlerFunc) {
 	if t.Kind() == reflect.Struct && t.NumField() == 0 {
 		return
 	}
-	bindingHandlers.Store(reflect.ValueOf(h).Pointer(), struct{}{})
+	var input reflect.Type
+	// Pointer instantiations share one GC shape, and so one code pointer.
+	if reflect.TypeFor[I]().Kind() != reflect.Pointer {
+		input = t
+	}
+	bindingHandlers.Store(reflect.ValueOf(h).Pointer(), input)
 }
 
 // isBindingHandler reports whether h was returned by Handle or HandleIO.
@@ -2136,6 +2142,16 @@ func isBindingHandler(h HandlerFunc) bool {
 	}
 	_, ok := bindingHandlers.Load(reflect.ValueOf(h).Pointer())
 	return ok
+}
+
+// bindingInput returns the input type h binds, if h was returned by Handle or HandleIO.
+func bindingInput(h HandlerFunc) (reflect.Type, bool) {
+	if h == nil {
+		return nil, false
+	}
+	v, _ := bindingHandlers.Load(reflect.ValueOf(h).Pointer())
+	t, ok := v.(reflect.Type)
+	return t, ok
 }
 
 var (

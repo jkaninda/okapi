@@ -116,14 +116,13 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 	// Body binding (special case)
 	if sf.Name == bodyField {
 		bodyPtr := reflect.New(sf.Type)
-		if err := c.Bind(bodyPtr.Interface()); err != nil {
+		if err := c.bindBody(bodyPtr.Interface()); err != nil {
 			return fmt.Errorf("failed to bind body: %w", err)
 		}
 		field.Set(bodyPtr.Elem())
 
-		// Validate nested struct fields
-		if err := c.validateStruct(bodyPtr.Elem(), sf); err != nil {
-			return err
+		if bodyPtr.Elem().Kind() == reflect.Struct {
+			return c.validateStruct(bodyPtr.Elem(), sf)
 		}
 		return nil
 	}

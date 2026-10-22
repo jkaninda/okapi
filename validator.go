@@ -117,13 +117,9 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 	if sf.Name == bodyField {
 		bodyPtr := reflect.New(sf.Type)
 		if err := c.bindBody(bodyPtr.Interface()); err != nil {
-			return fmt.Errorf("failed to bind body: %w", err)
+			return withField(sf.Name, err)
 		}
 		field.Set(bodyPtr.Elem())
-
-		if bodyPtr.Elem().Kind() == reflect.Struct {
-			return c.validateStruct(bodyPtr.Elem(), sf)
-		}
 		return nil
 	}
 
@@ -142,11 +138,11 @@ func (c *Context) extractAndSetField(field reflect.Value, sf reflect.StructField
 	if field.CanSet() {
 		if field.Kind() == reflect.Slice && len(rawSlice) > 0 {
 			if err := setSliceWithType(field, rawSlice); err != nil {
-				return fmt.Errorf("cannot set field %s: %w", sf.Name, err)
+				return withField(sf.Name, err)
 			}
 		} else if raw != "" {
 			if err := setWithType(field, raw); err != nil {
-				return fmt.Errorf("cannot set field %s: %w", sf.Name, err)
+				return withField(sf.Name, err)
 			}
 		}
 	}
@@ -393,36 +389,14 @@ func checkConditionalRequired(structVal, field reflect.Value, sf reflect.StructF
 // enum, const, multipleOf, format, pattern, and slice/map validations.
 func (c *Context) validateField(structVal, field reflect.Value, sf reflect.StructField) error {
 	if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
-		return fmt.Errorf("field %s is required", sf.Name)
+		return withField(sf.Name, errRequired)
 	}
 	if checkConditionalRequired(structVal, field, sf) {
-		return fmt.Errorf("field %s is required", sf.Name)
+		return withField(sf.Name, errRequired)
 	}
 	if err := checkFieldConstraints(field, sf); err != nil {
-		return fmt.Errorf("field %s: %w", sf.Name, err)
+		return withField(sf.Name, err)
 	}
-	return nil
-}
-
-// validateStruct validates nested struct fields using their struct tags.
-func (c *Context) validateStruct(v reflect.Value, parentField reflect.StructField) error {
-	t := v.Type()
-
-	for i := 0; i < v.NumField(); i++ {
-		field := v.Field(i)
-		sf := t.Field(i)
-
-		if sf.Tag.Get(tagRequired) == constTRUE && isEmptyValue(field) {
-			return fmt.Errorf("field %s.%s is required", parentField.Name, sf.Name)
-		}
-		if checkConditionalRequired(v, field, sf) {
-			return fmt.Errorf("field %s.%s is required", parentField.Name, sf.Name)
-		}
-		if err := checkFieldConstraints(field, sf); err != nil {
-			return fmt.Errorf("field %s.%s: %w", parentField.Name, sf.Name, err)
-		}
-	}
-
 	return nil
 }
 

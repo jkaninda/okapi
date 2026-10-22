@@ -25,7 +25,10 @@
 package okapi
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -55,7 +58,7 @@ func TestBind_BodyWithOwnBodyField(t *testing.T) {
 	if in.Body.Subject != "Hi" || in.Body.Body != "Hello" {
 		t.Errorf("got %+v", in.Body)
 	}
-	if _, err := bindInput[input](t, constJSON, `{"subject":"Hi"}`); err == nil || !strings.Contains(err.Error(), "Body is required") {
+	if _, err := bindInput[input](t, constJSON, `{"subject":"Hi"}`); err == nil || !strings.Contains(err.Error(), "field Body.Body is required") {
 		t.Errorf("missing inner body: err = %v", err)
 	}
 }
@@ -118,5 +121,72 @@ func TestBind_StructBodies(t *testing.T) {
 	p, err := bindInput[ptrIn](t, constJSON, `{"name":"Jane"}`)
 	if err != nil || p.Body == nil || p.Body.Name != nameJane {
 		t.Errorf("pointer to struct: %+v %v", p.Body, err)
+	}
+}
+
+func TestBind_ErrorsNameTheFieldPath(t *testing.T) {
+	type line struct {
+		SKU string `json:"sku" required:"true"`
+	}
+	type order struct {
+		Lines []line `json:"lines"`
+		Qty   int    `json:"qty" max:"5"`
+	}
+	type input struct {
+		Page int `query:"page"`
+		Body order
+	}
+	tests := []struct {
+		name, query, body, want string
+	}{
+		{"nested slice element", "", `{"lines":[{"sku":"a"},{}]}`, "field Body.Lines[1].SKU is required"},
+		{"body constraint", "", `{"qty":9}`, "field Body.Qty: value 9 must be <= 5"},
+		{"decode error", "", `{"qty":"x"}`, "field Body: invalid JSON body"},
+		{"query value", "?page=x", `{}`, "field Page: invalid integer value 'x'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := NewTestContext(http.MethodPost, "/test"+tt.query, strings.NewReader(tt.body))
+			ctx.Request().Header.Set("Content-Type", constJSON)
+			var in input
+			err := ctx.Bind(&in)
+			if err == nil || !strings.HasPrefix(err.Error(), tt.want) {
+				t.Errorf("err = %v, want prefix %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestHandle_BindErrorNamesInputType(t *testing.T) {
+	type CreateInput struct {
+		Body struct {
+			Name string `json:"name" required:"true"`
+		}
+	}
+	var got error
+	o := New(WithErrorHandler(func(c *Context, code int, msg string, err error) error {
+		got = err
+		return DefaultErrorHandler(c, code, msg, err)
+	}))
+	o.Post("/items", H(func(c *Context, in *CreateInput) error { return c.OK(in) }))
+
+	req := httptest.NewRequest(http.MethodPost, "/items", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", constJSON)
+	rec := httptest.NewRecorder()
+	o.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var be *BindError
+	if !errors.As(got, &be) || !strings.HasSuffix(be.Input, ".CreateInput") {
+		t.Fatalf("error handler got %#v, want a BindError naming CreateInput", got)
+	}
+	var resp ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Details != "field Body.Name is required" {
+		t.Errorf("details = %q", resp.Details)
 	}
 }

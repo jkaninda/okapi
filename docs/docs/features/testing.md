@@ -238,13 +238,6 @@ okapitest.Request(t).
     ExpectStatusCreated()
 ```
 
-### Deprecated Helpers
-
-`okapitest.AssertHTTPStatus(t, method, url, headers, body, contentType, expected)`
-and `okapitest.AssertHTTPResponse(t, method, url, headers, body, contentType, expectedStatus, expectedBody)`
-are kept for compatibility and are deprecated in favour of the request builder.
-`AssertHTTPResponse` skips the body check when `expectedBody` is empty.
-
 ## Testing with Custom Headers
 
 ```go

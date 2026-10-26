@@ -1,5 +1,121 @@
 # Changes
 
+## v1.2.0 - 2026-10-26
+
+### Breaking Changes
+
+- **Deprecated functions and methods have been removed.** Each had a replacement, listed
+  below; code still calling one of them no longer compiles.
+
+  | Removed                                                   | Use instead                                         |
+  |-----------------------------------------------------------|-----------------------------------------------------|
+  | `Context.Params()`                                        | `Context.Param(name)` / `Context.PathParam(name)`   |
+  | `Context.SendSSEvent(id, eventType, data)`                | `Context.SSESendEvent(id, eventType, data)`         |
+  | `WithMuxRouter(router)`                                   | Nothing: Okapi manages its own router               |
+  | `Okapi.GetContext()`                                      | The `*Context` passed to the handler                |
+  | `Okapi.Shutdown(server, ctx...)`                          | `Okapi.Stop()` / `Okapi.StopWithContext(ctx)`       |
+  | `Okapi.SPA(prefix, dir, cfg...)`                          | `Okapi.Web(prefix, dir, cfg...)`                    |
+  | `Okapi.SPAFS(prefix, fsys, cfg...)`                       | `Okapi.WebFS(prefix, fsys, cfg...)`                 |
+  | `DocErrorResponse(status, v)`, `Doc().ErrorResponse(...)` | `DocResponse(status, v)`, `Doc().Response(...)`     |
+  | `DocOperationId(id)`                                      | `OperationId(id)`                                   |
+  | `DocDescription(text)`                                    | `Description(text)`                                 |
+  | `DocTag(tag)`, `DocTags(tags...)`                         | `Tag(tag)`, `Tags(tags...)`                         |
+  | `DocDeprecated()`                                         | `Deprecated()`                                      |
+  | `okapitest.AssertHTTPStatus(...)`                         | `okapitest.Request(t)...ExpectStatus(code)`         |
+  | `okapitest.AssertHTTPResponse(...)`                       | `okapitest.Request(t)...ExpectStatus(code).ExpectBody(body)` |
+
+- `DocSummary` and `DocHide` are kept and are no longer deprecated.
+- The deprecated types and fields `SPAConfig`, `BasicAuthMiddleware`, `JWTAuth.SecretKey`,
+  `JWTAuth.Algo` and `JWTAuth.ValidateRole` remain, still deprecated.
+- **`NoRoute` and `NoMethod` handlers run after the global middleware**, as routes do, so
+  404 and 405 responses are now access-logged and carry CORS headers. A global middleware
+  that rejects a request (authentication, say) now answers before the 404 handler: an
+  unauthenticated request to an unknown path gets that middleware's response instead of 404.
+- **`BindQuery` and `BindForm` match fields by their `query` / `form` tag**, falling back to
+  the JSON name as before. A field whose tag differs from its JSON name now binds from the
+  tag name.
+- **Every OpenAPI operation has an `operationId`.** Operations without one, and without a
+  summary to derive it from, get one from their method and path (`get-books-id`), made
+  unique with a numeric suffix. Declared ids are unchanged.
+- **`Context.SetMaxMultipartMemory` applies to the current request only.** It used to
+  change the limit for the whole application; use `WithMaxMultipartMemory` for that.
+
+### Features
+
+- **Typed routes.** `okapi.Get`, `Post`, `Put`, `Patch` and `Delete[I, O]` register a typed
+  handler on an `*Okapi` or a `*Group` (both implement the new `RouteRegistrar`), bind and
+  validate `I`, write `O`, and document both. Request and 2xx response documentation passed
+  as options takes precedence over the inferred one.
+- **The `400` of a binding failure is documented.** Routes served by `Handle`, `H`,
+  `HandleIO` or a typed route document it, unless they declare their own, with the schema
+  of the configured error handler: `ErrorResponse`, Problem Details, or no body for a
+  custom handler.
+- **Bind errors name the field and the input type.** Messages carry the full field path
+  (`field Body.Lines[1].SKU is required`), a mistyped value is reported instead of bound as
+  its zero value, and `Handle`, `H` and `HandleIO` answer with an `*okapi.BindError` whose
+  `Input` holds the handler's input type for logs and custom error handlers.
+- **Route inputs that can never bind are reported at registration.** A required path field
+  missing from the route, a parameter whose type cannot be parsed from a string, or a `Body`
+  no decoder can fill is logged as an error when the route is registered.
+- **Any `Body` payload type binds.** A `Body` may be a slice, map, string or pointer to a
+  struct, decoded from JSON, XML or YAML; payload types may have their own `Body` field.
+  Elements of a slice of structs are validated.
+- **OpenAPI documentation options:**
+  - `DocRequestExamples`, `DocResponseExample` and `DocResponseExamples` (and `Doc()`
+    methods) for single and named examples; `DocRequestExample` now takes effect.
+  - `DocRequestContentType` overrides the inferred request media types.
+  - `DocResponseHeaderFor` documents a header on one status; `DocResponseDescription`
+    describes a response, or documents one without a body, such as a `204`.
+  - `okapi.SchemaProvider` lets a type describe its own schema (decimals, custom IDs,
+    `oneOf` unions).
+- **OpenAPI validation and export.** The documents are validated on startup and problems are
+  logged as a warning; `Okapi.ValidateOpenAPI()` fails a test instead, and
+  `Okapi.OpenAPISpec()` / `OpenAPISpec30()` build the documents. `okapicli`'s
+  `WithOpenAPICommand` adds an `openapi` command that writes the document as JSON or YAML,
+  and `okapitest.AssertOpenAPIGolden` compares it with a golden file
+  (`OKAPI_UPDATE_GOLDEN=1` updates it).
+
+### Fixes
+
+- **Request documentation** now matches what the binder reads:
+  - Cookie parameters are documented, and response cookies no longer appear as request
+    parameters.
+  - Parameter schemas follow the field's Go type (`[]string`, `*int`, `uint`, `time.Time`)
+    and keep their constraint tags (`enum`, `min`, `max`, `pattern`, `format`, `default`,
+    `example`); `validate:"required"` marks a parameter required.
+  - Path parameters read from a struct keep their description and constraints, and are
+    merged with previously declared ones instead of replacing them.
+  - Request types with `form` fields are documented as `multipart/form-data` or URL-encoded
+    forms, with files as `string`/`binary`; a pointer `Body` is an optional body.
+  - Slices of pointers, such as `[]*Book`, no longer document empty items.
+- **Response documentation:**
+  - A response struct's `Body` is documented under its `Status`, not always `200`.
+  - A declared `500` is no longer replaced by the default one.
+  - Headers from a response struct apply to its status only, and are valid OpenAPI (the
+    header name is no longer repeated inside the header object).
+  - A response struct with only `Status` and headers is documented.
+- **OpenAPI configuration:**
+  - `WithOpenAPIDocs` now applies `ExternalDocs` and `ComponentSchemas`.
+  - A document using both bearer and basic auth declares both automatic schemes.
+  - A license, contact or server that is not configured is left out instead of emitted
+    empty and invalid.
+  - `Extensions` on `License`, `Contact`, `Server` and `ExternalDocs` no longer panic.
+  - Generic types get readable component names: `Page[models.Book]` is `PageBook`.
+- **Binding:**
+  - `BindQuery` and `BindForm` bind scalar fields; only `[]string` fields bound before.
+    Slice fields take every value, split on commas, and `default` tags apply.
+  - `ShouldBind` handles the `Body` field style, as `Bind` does.
+- **`Context.Copy()`** keeps the application, so `Logger()`, `MaxMultipartMemory()` and
+  `RealIP` work on the copy; both getters also fall back to defaults on a context without an
+  application.
+- **`NoRoute` and `NoMethod`** take effect as soon as they are set, also when serving Okapi
+  as an `http.Handler` without starting it.
+- **`ValidateAddr` accepts hostnames**, so `Start` no longer panics on `"localhost:8080"`.
+- **`okapicli`:**
+  - `CLI.Get` returns flag values; it always returned `nil`.
+  - `FromStruct` writes parsed `time.Duration` values back on the top-level CLI.
+  - The `openapi` command reports a failed close of the output file.
+
 ## v1.1.0 - 2026-10-17
 
 ### Security

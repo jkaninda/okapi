@@ -248,26 +248,12 @@ func TestOpenAPISpecAccessors(t *testing.T) {
 	assert.NotNil(t, o.OpenAPISpec().Paths.Value("/books"))
 }
 
-func TestDeprecatedDocAliases(t *testing.T) {
-	o := newSpecTestApp("Deprecated aliases")
-	// The deprecated aliases are under test
-	//nolint:staticcheck
-	o.Get("/books", anyHandler,
-		DocSummary("List books"),
-		DocDescription("Lists every book"),
-		DocOperationId("listBooks"),
-		DocTag("books"),
-		DocTags("catalog"),
-		DocDeprecated(),
-	)
-	o.Get("/hidden", anyHandler, DocHide()) //nolint:staticcheck
+func TestDocSummaryAndDocHide(t *testing.T) {
+	o := newSpecTestApp("Doc aliases")
+	o.Get("/books", anyHandler, DocSummary("List books"))
+	o.Get("/hidden", anyHandler, DocHide())
 	o.buildOpenAPISpec()
 
-	op := o.openapiSpec.Paths.Value("/books").Get
-	assert.Equal(t, "List books", op.Summary)
-	assert.Equal(t, "Lists every book", op.Description)
-	assert.Equal(t, "listBooks", op.OperationID)
-	assert.Equal(t, []string{"books", "catalog"}, op.Tags)
-	assert.True(t, op.Deprecated)
+	assert.Equal(t, "List books", o.openapiSpec.Paths.Value("/books").Get.Summary)
 	assert.Nil(t, o.openapiSpec.Paths.Value("/hidden"))
 }

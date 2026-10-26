@@ -184,12 +184,20 @@ type fieldInfo struct {
 
 // ToOpenAPI converts License to openapi3.License.
 // It transforms the custom License type to the format expected by the openapi3 package.
+// An empty License returns nil: the license is optional, but a license
+// object requires a name.
 func (l License) ToOpenAPI() *openapi3.License {
+	if l.Name == "" && l.URL == "" && len(l.Extensions) == 0 {
+		return nil
+	}
 	license := &openapi3.License{
 		Name: l.Name,
 		URL:  l.URL,
 	}
 	// Copy any extensions to the target license object
+	if len(l.Extensions) > 0 {
+		license.Extensions = make(map[string]any, len(l.Extensions))
+	}
 	for k, v := range l.Extensions {
 		license.Extensions[k] = v
 	}
@@ -201,11 +209,17 @@ func (l License) ToOpenAPI() *openapi3.License {
 func (s Servers) ToOpenAPI() openapi3.Servers {
 	servers := make(openapi3.Servers, 0, len(s))
 	for _, srv := range s {
+		// A server needs a URL. Without any, the document has no servers,
+		// which OpenAPI reads as the server at "/".
+		if srv.URL == "" {
+			continue
+		}
 		server := &openapi3.Server{
 			URL:         srv.URL,
 			Description: srv.Description,
 		}
 		if len(srv.Extensions) > 0 {
+			server.Extensions = make(map[string]any, len(srv.Extensions))
 			for k, v := range srv.Extensions {
 				server.Extensions[k] = v
 			}
@@ -277,6 +291,9 @@ func (e *ExternalDocs) ToOpenAPI() *openapi3.ExternalDocs {
 		Description: e.Description,
 		URL:         e.URL,
 	}
+	if len(e.Extensions) > 0 {
+		doc.Extensions = make(map[string]any, len(e.Extensions))
+	}
 	for k, v := range e.Extensions {
 		doc.Extensions[k] = v
 	}
@@ -308,11 +325,18 @@ func (flows *OAuthFlows) ToOpenAPI() *openapi3.OAuthFlows {
 
 // ToOpenAPI converts Contact to openapi3.Contact.
 // It transforms the custom Contact type to the format expected by the openapi3 package.
+// An empty Contact returns nil, so the document has no empty contact object.
 func (c Contact) ToOpenAPI() *openapi3.Contact {
+	if c.Name == "" && c.URL == "" && c.Email == "" && len(c.Extensions) == 0 {
+		return nil
+	}
 	contact := &openapi3.Contact{
 		Name:  c.Name,
 		URL:   c.URL,
 		Email: c.Email,
+	}
+	if len(c.Extensions) > 0 {
+		contact.Extensions = make(map[string]any, len(c.Extensions))
 	}
 	for k, v := range c.Extensions {
 		contact.Extensions[k] = v
@@ -398,19 +422,6 @@ func (b *DocBuilder) RequestContentType(contentTypes ...string) *DocBuilder {
 //	DocResponse(Response{})               // Response: assumes status 200
 func (b *DocBuilder) Response(statusOrValue any, vOptional ...any) *DocBuilder {
 	b.options = append(b.options, DocResponse(statusOrValue, vOptional...))
-	return b
-}
-
-// ErrorResponse defines an error response schema for a specific HTTP status code
-// in the route's OpenAPI documentation.
-// Deprecated: This function is deprecated in favor of Response(status, v).
-//
-// Parameters:
-//   - status: the HTTP status code (e.g., 400, 404, 500).
-//   - v: a Go value (e.g., a struct instance) whose type will be used to generate
-//     the OpenAPI schema for the error response.
-func (b *DocBuilder) ErrorResponse(status int, v any) *DocBuilder {
-	b.options = append(b.options, DocResponse(status, v))
 	return b
 }
 
@@ -579,20 +590,6 @@ func DocSummary(summary string) RouteOption {
 // DocHide marks the route to be excluded from OpenAPI documentation.
 func DocHide() RouteOption {
 	return Hide()
-}
-
-// DocOperationId sets the operationId of the route
-//
-// Deprecated: Use OperationId.
-func DocOperationId(operationId string) RouteOption {
-	return OperationId(operationId)
-}
-
-// DocDescription sets a description for the route
-//
-// Deprecated: Use Description.
-func DocDescription(description string) RouteOption {
-	return Description(description)
 }
 
 // Hide marks the route to be excluded from OpenAPI documentation.
@@ -792,20 +789,6 @@ func DocHeaderWithDefault(name, typ, desc string, required bool, defvalue any) R
 	}
 }
 
-// DocTag adds a single tag to categorize the route
-//
-// Deprecated: Use Tag.
-func DocTag(tag string) RouteOption {
-	return Tag(tag)
-}
-
-// DocTags adds multiple tags to categorize the route
-//
-// Deprecated: Use Tags.
-func DocTags(tags ...string) RouteOption {
-	return Tags(tags...)
-}
-
 // DocResponseHeader adds a response header to the route documentation
 // name: header name
 // typ: header value type (e.g., "string", "int")
@@ -899,27 +882,6 @@ func DocResponse(statusOrValue any, vOptional ...any) RouteOption {
 			}
 			doc.responses[200] = reflectToSchemaWithInfo(val).Schema
 		}
-	}
-}
-
-// DocErrorResponse defines an error response schema for a specific HTTP status code
-// in the route's OpenAPI documentation.
-// Deprecated: This function is deprecated in favor of DocResponse(status, v).
-//
-// Parameters:
-//   - status: the HTTP status code (e.g., 400, 404, 500).
-//   - v: a Go value (e.g., a struct instance) whose type will be used to generate
-//     the OpenAPI schema for the error response.
-//
-// Returns:
-//   - A RouteOption function that adds the error schema to the route's documentation.
-func DocErrorResponse(status int, v any) RouteOption {
-	return func(doc *Route) {
-		if v == nil {
-			return
-		}
-		// Generate a schema from the provided Go value and assign it to the error response
-		doc.responses[status] = reflectToSchemaWithInfo(v).Schema
 	}
 }
 
@@ -1072,13 +1034,6 @@ func DocBasicAuth() RouteOption {
 	return func(doc *Route) {
 		doc.basicAuth = true
 	}
-}
-
-// DocDeprecated marks the route as deprecated
-//
-// Deprecated: Use Deprecated.
-func DocDeprecated() RouteOption {
-	return Deprecated()
 }
 
 // Deprecated marks the route as deprecated

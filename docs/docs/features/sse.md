@@ -152,9 +152,6 @@ o.Get("/messages", func(c *okapi.Context) error {
 })
 ```
 
-`SendSSEvent(id, eventType, data)` is the older name of `SSESendEvent` and is
-deprecated; use `SSESendEvent` in new code.
-
 Every message gets an `id:` line: when you do not supply one (`SSESendData`,
 `SSEvent`, a `Message` with an empty `ID`, …), a random 32-character hex ID is
 generated. The first send also sets `Content-Type: text/event-stream`,
@@ -556,7 +553,6 @@ All return `error` except `IsSSE`.
 - `SSESendBinary(data []byte)` - Send binary data as base64
 - `SSEvent(eventType string, data any)` - Send event with custom type
 - `SSESendEvent(id, eventType string, data any)` - Send event with ID and type
-- `SendSSEvent(id, eventType string, data any)` - Deprecated alias of `SSESendEvent`
 - `SSEStream(ctx, messageChan)` - Stream from channel
 - `SSEStreamWithOptions(ctx, messageChan, opts)` - Stream with advanced options
 - `SendSSECustom(data, serializer)` - Send with custom serializer

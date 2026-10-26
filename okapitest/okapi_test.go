@@ -527,38 +527,6 @@ func TestRequestBuilder_Timeout(t *testing.T) {
 	}
 }
 
-// Legacy function tests
-func TestAssertHTTPStatus(t *testing.T) {
-	server := setupTestServer()
-	defer server.Close()
-
-	AssertHTTPStatus(
-		t,
-		http.MethodGet,
-		server.URL+"/hello",
-		nil,
-		nil,
-		"",
-		http.StatusOK,
-	)
-}
-
-func TestAssertHTTPResponse(t *testing.T) {
-	server := setupTestServer()
-	defer server.Close()
-
-	AssertHTTPResponse(
-		t,
-		http.MethodGet,
-		server.URL+"/hello",
-		nil,
-		nil,
-		"",
-		http.StatusOK,
-		"Hello, World!",
-	)
-}
-
 func TestExtractJSONPath(t *testing.T) {
 	data := map[string]any{
 		"user": map[string]any{

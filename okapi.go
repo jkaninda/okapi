@@ -325,21 +325,6 @@ func (r *Route) Use(m ...Middleware) {
 
 // ****** OKAPI OPTIONS ******
 
-// WithMuxRouter sets the router for the Okapi instance.
-//
-// Deprecated: injecting a custom router is no longer supported; Okapi manages
-// its own router internally, and the parameter type has moved from
-// github.com/jkaninda/njia/muxcompat to the native github.com/jkaninda/njia
-// along with the rest of the routing layer. This option will be removed in a
-// future release.
-func WithMuxRouter(router *njia.Router) OptionFunc {
-	return func(o *Okapi) {
-		if router != nil {
-			o.router.njia = router
-		}
-	}
-}
-
 // WithServer sets the HTTP server for the Okapi instance
 func WithServer(server *http.Server) OptionFunc {
 	return func(o *Okapi) {
@@ -1194,39 +1179,6 @@ func (o *Okapi) resolveContext(ctx context.Context) context.Context {
 	return context.Background()
 }
 
-// Shutdown performs graceful shutdown of the provided server using a background context
-// Deprecated, please use StopCtx
-func (o *Okapi) Shutdown(server *http.Server, ctx ...context.Context) error {
-	if server == nil {
-		return nil
-	}
-
-	var shutdownCtx context.Context
-	if len(ctx) > 0 && ctx[0] != nil {
-		shutdownCtx = ctx[0]
-	} else {
-		shutdownCtx = o.resolveContext(context.TODO())
-	}
-
-	return server.Shutdown(shutdownCtx)
-}
-
-// GetContext returns the application-level Context.
-//
-// This is NOT the context of the request being handled. It is a single
-// instance created with the application, shared by every goroutine: its
-// request is an empty *http.Request and anything stored on it with Set is
-// visible process-wide, concurrently. Since the store is also where forwarded
-// JWT claims land, using this where a request Context was meant leaks identity
-// between users.
-//
-// Handlers already receive their own request-scoped *Context; use that.
-//
-// Deprecated: use the *Context passed to the handler. This accessor exists for
-// application-level setup and will be removed.
-func (o *Okapi) GetContext() *Context {
-	return o.context
-}
 func (o *Okapi) SetContext(ctx *Context) {
 	o.context = ctx
 }

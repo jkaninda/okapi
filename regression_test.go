@@ -30,6 +30,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +70,7 @@ func TestBindQueryAndFormScalarFields(t *testing.T) {
 func TestOpenAPIDocsCopiesExternalDocsAndComponentSchemas(t *testing.T) {
 	o := New().WithOpenAPIDocs(OpenAPI{
 		Title:        "Books",
-		ExternalDocs: &ExternalDocs{URL: "https://example.com/docs", Description: "Guide"},
+		ExternalDocs: &ExternalDocs{URL: "https://example.com/docs", Description: "Guide", Extensions: map[string]any{"x-audience": "public"}},
 		ComponentSchemas: map[string]*SchemaInfo{
 			"Money": {Schema: reflectToSchemaWithInfo(responseDocBook{}).Schema},
 		},
@@ -77,6 +78,7 @@ func TestOpenAPIDocsCopiesExternalDocsAndComponentSchemas(t *testing.T) {
 	spec := o.OpenAPISpec30()
 	require.NotNil(t, spec.ExternalDocs)
 	assert.Equal(t, "https://example.com/docs", spec.ExternalDocs.URL)
+	assert.Equal(t, "public", spec.ExternalDocs.Extensions["x-audience"])
 	assert.Contains(t, spec.Components.Schemas, "Money")
 }
 
@@ -204,4 +206,38 @@ func TestNoRouteAndNoMethodRunGlobalMiddleware(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 	assert.Equal(t, "custom 405", rec.Body.String())
 	assert.Equal(t, "yes", rec.Header().Get("X-Global"))
+}
+
+func TestOpenAPIWithoutLicenseOrContactIsValid(t *testing.T) {
+	o := New().WithOpenAPIDocs(OpenAPI{Title: "Books", Version: "1.0.0"})
+	o.Get("/books", anyHandler)
+	require.NoError(t, o.ValidateOpenAPI())
+	spec := o.OpenAPISpec30()
+	assert.Nil(t, spec.Info.License, "no empty license object")
+	assert.Nil(t, spec.Info.Contact, "no empty contact object")
+}
+
+func TestOpenAPILicenseAndContactExtensions(t *testing.T) {
+	o := New().WithOpenAPIDocs(OpenAPI{
+		Title:   "Books",
+		License: License{Name: "MIT", Extensions: map[string]any{"x-spdx": "MIT"}},
+		Contact: Contact{Email: "team@example.com", Extensions: map[string]any{"x-team": "books"}},
+	})
+	var spec *openapi3.T
+	require.NotPanics(t, func() { spec = o.OpenAPISpec30() })
+	assert.Equal(t, "MIT", spec.Info.License.Name)
+	assert.Equal(t, "MIT", spec.Info.License.Extensions["x-spdx"])
+	assert.Equal(t, "books", spec.Info.Contact.Extensions["x-team"])
+}
+
+func TestOpenAPIServersWithoutURLAreOmitted(t *testing.T) {
+	o := New().WithOpenAPIDocs()
+	assert.Empty(t, o.OpenAPISpec30().Servers, "the default server has no URL")
+
+	o = New().WithOpenAPIDocs(OpenAPI{Servers: Servers{{URL: "https://api.example.com", Extensions: map[string]any{"x-region": "eu"}}}})
+	var spec *openapi3.T
+	require.NotPanics(t, func() { spec = o.OpenAPISpec30() })
+	require.Len(t, spec.Servers, 1)
+	assert.Equal(t, "eu", spec.Servers[0].Extensions["x-region"])
+	assert.NoError(t, o.ValidateOpenAPI())
 }

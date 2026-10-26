@@ -312,13 +312,6 @@ func (c *Context) Path() string {
 	return c.request.URL.Path
 }
 
-// Params returns all URL path parameters as a map.
-//
-// Deprecated: use PathParam to retrieve individual path parameters instead.
-func (c *Context) Params() map[string]string {
-	return njia.ParamMap(c.request)
-}
-
 // Query retrieves a URL query parameter value.
 // Returns empty string if parameter doesn't exist.
 func (c *Context) Query(key string) string {
@@ -582,12 +575,6 @@ func (c *Context) sendSSE(id, eventType string, message any) error {
 // SSEvent writes SSE response with optional ID.
 func (c *Context) SSEvent(eventType string, data any) error {
 	return c.sendSSE("", eventType, data)
-}
-
-// SendSSEvent writes SSE response with an ID.
-// Deprecated: use SSESendEvent instead.
-func (c *Context) SendSSEvent(id, eventType string, data any) error {
-	return c.sendSSE(id, eventType, data)
 }
 
 // SSESendEvent writes SSE response with an ID.

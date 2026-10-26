@@ -193,8 +193,9 @@ func normalizeRoutePath(path string) string {
 }
 
 // ValidateAddr checks if the entrypoint address is valid.
-// A valid entrypoint address should be in the format ":<port>" or "<IP>:<port>",
-// where <IP> is a valid IP address and <port> is a valid port number (1-65535).
+// A valid entrypoint address should be in the format ":<port>" or "<host>:<port>",
+// where <host> is an IP address or a hostname such as localhost, and <port> is
+// a valid port number (1-65535).
 func ValidateAddr(addr string) bool {
 	// Split the addr into IP and port parts
 	host, portStr, err := net.SplitHostPort(addr)
@@ -203,12 +204,9 @@ func ValidateAddr(addr string) bool {
 	}
 
 	// If the host is empty, it means the addr is in the format ":<port>"
-	// Otherwise, validate the IP address
-	if host != "" {
-		ip := net.ParseIP(host)
-		if ip == nil {
-			return false
-		}
+	// Otherwise, it must be an IP address or a hostname
+	if host != "" && net.ParseIP(host) == nil && !isHostname(host) {
+		return false
 	}
 
 	// Convert the port string to an integer
@@ -222,6 +220,32 @@ func ValidateAddr(addr string) bool {
 		return false
 	}
 	return true
+}
+
+// isHostname reports whether host is a valid DNS hostname (RFC 1123): dot
+// separated labels of letters, digits and inner hyphens, each 1 to 63
+// characters, 253 at most in all.
+func isHostname(host string) bool {
+	host = strings.TrimSuffix(host, ".")
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !isHostnameRune(r) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isHostnameRune reports whether r may appear in a hostname label.
+func isHostnameRune(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-'
 }
 
 func joinPaths(basePath, path string) string {

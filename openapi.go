@@ -1124,24 +1124,25 @@ func (o *Okapi) buildSpecs() (spec30, spec31 *openapi3.T) {
 		},
 		ExternalDocs: o.openAPI.ExternalDocs.ToOpenAPI(),
 	}
+	// Without declared schemes, the ones routes use are added; a document
+	// using both bearer and basic auth gets both
+	if len(o.openAPI.SecuritySchemes) == 0 && (o.hasBearerAuth() || o.hasBasicAuth()) {
+		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{}
+	}
 	if len(o.openAPI.SecuritySchemes) == 0 && o.hasBearerAuth() {
-		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
-			"BearerAuth": &openapi3.SecuritySchemeRef{
-				Value: &openapi3.SecurityScheme{
-					Type:         securitySchemeTypeHTTP,
-					Scheme:       "bearer",
-					BearerFormat: "JWT",
-				},
+		spec.Components.SecuritySchemes["BearerAuth"] = &openapi3.SecuritySchemeRef{
+			Value: &openapi3.SecurityScheme{
+				Type:         securitySchemeTypeHTTP,
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
 			},
 		}
 	}
 	if len(o.openAPI.SecuritySchemes) == 0 && o.hasBasicAuth() {
-		spec.Components.SecuritySchemes = openapi3.SecuritySchemes{
-			"BasicAuth": &openapi3.SecuritySchemeRef{
-				Value: &openapi3.SecurityScheme{
-					Type:   securitySchemeTypeHTTP,
-					Scheme: "basic",
-				},
+		spec.Components.SecuritySchemes["BasicAuth"] = &openapi3.SecuritySchemeRef{
+			Value: &openapi3.SecurityScheme{
+				Type:   securitySchemeTypeHTTP,
+				Scheme: "basic",
 			},
 		}
 	}

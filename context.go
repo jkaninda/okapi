@@ -69,6 +69,9 @@ type (
 		index int
 		// aborted is set once an Abort helper has answered the request, so Next runs no further handler.
 		aborted bool
+		// maxMultipartMemory overrides the application's limit for this
+		// request when set with SetMaxMultipartMemory
+		maxMultipartMemory int64
 	}
 	Store struct {
 		mu   sync.RWMutex
@@ -135,7 +138,7 @@ func (c *Context) ResponseWriter() http.ResponseWriter {
 
 // Logger returns the logger instance associated with the Okapi context.
 func (c *Context) Logger() *slog.Logger {
-	if c.okapi.logger == nil {
+	if c.okapi == nil || c.okapi.logger == nil {
 		return slog.Default()
 	}
 	return c.okapi.logger
@@ -252,17 +255,24 @@ func (c *Context) GetInt64(key string) int64 {
 // Copy creates a shallow copy of the context with a new data map.
 func (c *Context) Copy() *Context {
 	newCtx := &Context{
-		request:  c.request,      // Copy request reference
-		response: c.response,     // Copy response reference
-		store:    newStoreData(), // Initialize new data map
-		handlers: c.handlers,     // Share handler chain
-		index:    c.index,        // Copy current position
-		aborted:  c.aborted,
+		okapi:              c.okapi,        // Keep the application's settings
+		request:            c.request,      // Copy request reference
+		response:           c.response,     // Copy response reference
+		store:              newStoreData(), // Initialize new data map
+		errorHandler:       c.errorHandler,
+		bodyLimited:        c.bodyLimited,
+		cappedBody:         c.cappedBody,
+		handlers:           c.handlers, // Share handler chain
+		index:              c.index,    // Copy current position
+		aborted:            c.aborted,
+		maxMultipartMemory: c.maxMultipartMemory,
 	}
 	// Copy all key-value pairs to the new context
+	c.store.mu.RLock()
 	for k, v := range c.store.data {
 		newCtx.store.data[k] = v
 	}
+	c.store.mu.RUnlock()
 	return newCtx
 }
 
@@ -865,13 +875,21 @@ func (c *Context) ServeFileInline(path, filename string) {
 
 // MaxMultipartMemory returns the maximum memory for multipart form
 func (c *Context) MaxMultipartMemory() int64 {
-	return c.okapi.maxMultipartMemory
+	if c.maxMultipartMemory > 0 {
+		return c.maxMultipartMemory
+	}
+	if c.okapi != nil && c.okapi.maxMultipartMemory > 0 {
+		return c.okapi.maxMultipartMemory
+	}
+	return defaultMaxMemory
 }
 
-// SetMaxMultipartMemory sets the maximum memory for multipart form (default: 32 MB)
+// SetMaxMultipartMemory sets the maximum memory for multipart forms parsed
+// for this request (default: the application's, 32 MB unless set with
+// WithMaxMultipartMemory). Other requests are not affected.
 func (c *Context) SetMaxMultipartMemory(max int64) {
 	if max > 0 {
-		c.okapi.maxMultipartMemory = max
+		c.maxMultipartMemory = max
 	}
 }
 

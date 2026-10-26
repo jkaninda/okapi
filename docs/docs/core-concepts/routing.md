@@ -100,10 +100,11 @@ o.NoMethod(func(c *okapi.Context) error {
 })
 ```
 
-Both are installed when the server starts (`Start`, `StartOn`, `StartServer`),
-as is `WithStrictSlash`; serving `o` as an `http.Handler` yourself leaves the
-default responses in place. They are called directly, without the global
-middleware chain, so they are not access-logged and get no CORS headers.
+Both take effect as soon as they are set, including when you serve `o` as an
+`http.Handler` yourself. The global middleware runs before them, as it does for
+routes, so these responses are access-logged and get CORS headers.
+`WithStrictSlash` is applied when the server starts (`Start`, `StartOn`,
+`StartServer`).
 
 ## Enabling and Disabling Routes
 

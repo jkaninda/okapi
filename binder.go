@@ -42,7 +42,7 @@ import (
 
 // ShouldBind is a convenience method that binds request data to a struct and returns a boolean indicating success.
 func (c *Context) ShouldBind(v any) (bool, error) {
-	if err := c.bindRequest(v); err != nil {
+	if err := c.Bind(v); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -177,20 +177,25 @@ func (c *Context) bindBody(out any) error {
 		return c.bindRequest(out)
 	}
 
+	var err error
 	switch contentType := c.ContentType(); {
 	case strings.Contains(contentType, constJSON):
-		return bodyDecodeError("JSON", c.BindJSON(out))
+		err = bodyDecodeError("JSON", c.BindJSON(out))
 	case strings.Contains(contentType, constXML):
-		return bodyDecodeError("XML", c.BindXML(out))
+		err = bodyDecodeError("XML", c.BindXML(out))
 	case strings.Contains(contentType, constYAML),
 		strings.Contains(contentType, constYamlX),
 		strings.Contains(contentType, constYamlText):
-		return bodyDecodeError("YAML", c.BindYAML(out))
+		err = bodyDecodeError("YAML", c.BindYAML(out))
 	case strings.Contains(contentType, constFormURLEncoded),
 		strings.Contains(contentType, constFormData):
 		return fmt.Errorf("form data needs a struct body, not %s", elem.Type())
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	// Validate the elements of a slice payload, as struct payloads are
+	return validateNestedStruct(elem)
 }
 
 // bodyDecodeError wraps an error from decoding the request body. io.EOF means
@@ -661,11 +666,7 @@ func (c *Context) parseForm() error {
 // oversized upload is rejected instead of being buffered or spilled to disk.
 func (c *Context) parseMultipartForm() error {
 	c.capBody()
-	maxMemory := int64(defaultMaxMemory)
-	if c.okapi != nil && c.okapi.maxMultipartMemory > 0 {
-		maxMemory = c.okapi.maxMultipartMemory
-	}
-	return c.request.ParseMultipartForm(maxMemory)
+	return c.request.ParseMultipartForm(c.MaxMultipartMemory())
 }
 
 func (c *Context) BindJSON(v any) error {
@@ -694,29 +695,102 @@ func (c *Context) BindProtoBuf(v proto.Message) error {
 	return proto.Unmarshal(body, v)
 }
 
+// BindQuery binds the query string, and the form body if any, to the struct v
+// points to, then validates it. A field is matched by its query tag, or else
+// by its JSON name.
 func (c *Context) BindQuery(v any) error {
 	if err := c.parseForm(); err != nil {
 		return fmt.Errorf("invalid query data: %w", err)
 	}
-	return formToStruct(c.request.Form, v)
+	return valuesToStruct(c.request.Form, v, tagQuery)
 }
 
+// BindForm binds the form body, and the query string, to the struct v points
+// to, then validates it. A field is matched by its form tag, or else by its
+// JSON name.
 func (c *Context) BindForm(v any) error {
 	if err := c.parseForm(); err != nil {
 		return fmt.Errorf("invalid form data: %w", err)
 	}
-	return formToStruct(c.request.Form, v)
+	return valuesToStruct(c.request.Form, v, tagForm)
 }
 
-func formToStruct(data url.Values, v any) error {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal form data: %w", err)
+// valuesToStruct sets the fields of the struct v points to from data, then
+// validates it. A field is matched by its tag, or else by its JSON name,
+// ignoring case as encoding/json does. A slice field takes every value, split
+// on commas; another field takes the first. A field without a value gets its
+// default tag.
+func valuesToStruct(data url.Values, v any, tag string) error {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() || rv.Elem().Kind() != reflect.Struct {
+		return errors.New("bind target must be a non-nil pointer to a struct")
 	}
-	if err := json.Unmarshal(jsonData, v); err != nil {
-		return fmt.Errorf("failed to unmarshal form data: %w", err)
+	elem := rv.Elem()
+	t := elem.Type()
+	for i := 0; i < t.NumField(); i++ {
+		sf := t.Field(i)
+		fv := elem.Field(i)
+		if !sf.IsExported() || !fv.CanSet() {
+			continue
+		}
+		values, err := lookupValues(data, sf, tag)
+		if err != nil {
+			continue
+		}
+		if len(values) == 0 {
+			if def := sf.Tag.Get(tagDefault); def != "" && fv.IsZero() {
+				if err := setWithType(fv, def); err != nil {
+					return withField(sf.Name, err)
+				}
+			}
+			continue
+		}
+		if fv.Kind() == reflect.Slice && fv.Type().Elem().Kind() != reflect.Uint8 {
+			var all []string
+			for _, value := range values {
+				all = append(all, strings.Split(value, ",")...)
+			}
+			if err := setSliceWithType(fv, all); err != nil {
+				return withField(sf.Name, err)
+			}
+			continue
+		}
+		if values[0] == "" {
+			continue
+		}
+		if err := setWithType(fv, values[0]); err != nil {
+			return withField(sf.Name, err)
+		}
 	}
 	return validateStruct(v)
+}
+
+// errNotBound reports a field that is not bound from url.Values.
+var errNotBound = errors.New("field is not bound")
+
+// lookupValues returns the values data holds for field sf: under its tag, or
+// else under its JSON name, ignoring case.
+func lookupValues(data url.Values, sf reflect.StructField, tag string) ([]string, error) {
+	if raw := sf.Tag.Get(tag); raw != "" {
+		name := parseTagName(raw)
+		if name == "" {
+			return nil, errNotBound
+		}
+		return data[name], nil
+	}
+	name := getJSONFieldName(sf)
+	if name == "-" {
+		return nil, errNotBound
+	}
+	if values, ok := data[name]; ok {
+		return values, nil
+	}
+	for key, values := range data {
+		if strings.EqualFold(key, name) {
+			return values, nil
+		}
+	}
+	return nil, nil
 }
 
 func validateStruct(v any) error {
@@ -764,11 +838,24 @@ func validateNestedStruct(field reflect.Value) error {
 	case reflect.Struct:
 		return validateStruct(field.Addr().Interface())
 	case reflect.Slice:
-		if field.Type().Elem().Kind() != reflect.Struct {
+		elemType := field.Type().Elem()
+		isPointer := elemType.Kind() == reflect.Pointer
+		if isPointer {
+			elemType = elemType.Elem()
+		}
+		if elemType.Kind() != reflect.Struct {
 			return nil
 		}
 		for j := 0; j < field.Len(); j++ {
-			if err := validateStruct(field.Index(j).Addr().Interface()); err != nil {
+			item := field.Index(j)
+			if isPointer {
+				if item.IsNil() {
+					continue
+				}
+			} else {
+				item = item.Addr()
+			}
+			if err := validateStruct(item.Interface()); err != nil {
 				return withField(fmt.Sprintf("[%d]", j), err)
 			}
 		}

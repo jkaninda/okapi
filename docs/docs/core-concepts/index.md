@@ -76,9 +76,9 @@ All three block until the server stops. `StartServer` sets the server's
 other fields, timeouts included, are used as you set them.
 
 Before listening, the address is checked with `okapi.ValidateAddr`, and an
-invalid one **panics**. The host must be empty or an IP literal — `":8080"` and
-`"127.0.0.1:8080"` are valid, `"localhost:8080"` is not — and the port must be
-between 1 and 65535. Call `ValidateAddr(addr) bool` yourself to check a
+invalid one **panics**. The host must be empty, an IP literal or a hostname —
+`":8080"`, `"127.0.0.1:8080"`, `"[::1]:8080"` and `"localhost:8080"` are all
+valid — and the port must be between 1 and 65535. Call `ValidateAddr(addr) bool` yourself to check a
 configured address up front.
 
 `Stop()` and `StopWithContext(ctx)` shut the server down gracefully; see

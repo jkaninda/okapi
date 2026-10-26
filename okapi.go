@@ -762,6 +762,18 @@ func (o *Okapi) WithOpenAPIDocs(cfg ...OpenAPI) *Okapi {
 		if config.Favicon != "" {
 			o.openAPI.Favicon = config.Favicon
 		}
+		if config.ExternalDocs != nil {
+			o.openAPI.ExternalDocs = config.ExternalDocs
+		}
+		if len(config.ComponentSchemas) > 0 && o.openAPI.ComponentSchemas == nil {
+			o.openAPI.ComponentSchemas = make(map[string]*SchemaInfo, len(config.ComponentSchemas))
+		}
+		for name, schema := range config.ComponentSchemas {
+			if schema.TypeName == "" {
+				schema.TypeName = name
+			}
+			o.openAPI.ComponentSchemas[name] = schema
+		}
 
 	}
 
@@ -1736,11 +1748,14 @@ func (o *Okapi) applyCommon() {
 //
 // Example:
 //
-//	o.NoRoute(func(c okapi.Context) error {
+//	o.NoRoute(func(c *okapi.Context) error {
 //		return c.AbortNotFound("Custom 404 - Not found")
 //	})
+//
+// Global middlewares run before it, as they do for routes.
 func (o *Okapi) NoRoute(h HandlerFunc) {
 	o.noRoute = h
+	o.applyCommon()
 }
 
 // NoMethod sets a custom handler to be executed when the HTTP method is not allowed.
@@ -1750,11 +1765,14 @@ func (o *Okapi) NoRoute(h HandlerFunc) {
 //
 // Example:
 //
-//	o.NoMethod(func(c okapi.Context) error {
+//	o.NoMethod(func(c *okapi.Context) error {
 //	 return c.AbortMethodNotAllowed("Custom 405 - Method Not Allowed")
 //	})
+//
+// Global middlewares run before it, as they do for routes.
 func (o *Okapi) NoMethod(h HandlerFunc) {
 	o.noMethod = h
+	o.applyCommon()
 }
 
 // handleAccessLog logs the access details of the request
@@ -1846,10 +1864,17 @@ func (o *Okapi) handleChainError(c *Context, err error) {
 	}
 }
 
+// wrapHandleFunc adapts h to an http.Handler that runs it after the global
+// middlewares, as routes are run, for the 404 and 405 handlers.
 func (o *Okapi) wrapHandleFunc(h HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := NewContext(o, w, r)
-		if err := h(ctx); err != nil {
+		global := o.globalMiddlewares()
+		ctx.handlers = make([]HandlerFunc, 0, len(global)+1)
+		ctx.handlers = append(ctx.handlers, global...)
+		ctx.handlers = append(ctx.handlers, h)
+		ctx.index = -1
+		if err := ctx.Next(); err != nil {
 			o.handleChainError(ctx, err)
 		}
 	})

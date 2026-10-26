@@ -55,8 +55,10 @@ o := okapi.New().WithOpenAPIDocs(
 ```
 
 `okapi.OpenAPI` also takes `Summary`, `Description`, `TermsOfService`,
-`Servers`, `License`, `SecuritySchemes`, `UI`, `StrictDocUI` and `Favicon` (the
-URL of the icon the documentation UIs use).
+`Servers`, `License`, `SecuritySchemes`, `UI`, `StrictDocUI`, `Favicon` (the
+URL of the icon the documentation UIs use), `ExternalDocs` (a link to further
+documentation) and `ComponentSchemas` (reusable schemas, as
+[`RegisterSchemas`](#reusable-component-schemas) registers).
 
 ### Disabling documentation
 
@@ -148,9 +150,9 @@ api.Get("/", apiHandler)
 
 `okapi.DocBearerAuth()` (or `Doc().BearerAuth()`) and `okapi.DocBasicAuth()`
 require the schemes named `BearerAuth` and `BasicAuth`. When `SecuritySchemes`
-is empty, Okapi declares the scheme for you (a JWT bearer token, or HTTP basic);
-otherwise, or when a document uses both, declare the schemes with those exact
-names yourself.
+is empty, Okapi declares the schemes the routes use for you (a JWT bearer
+token, HTTP basic, or both); otherwise declare them with those exact names
+yourself.
 
 ```go
 o.Get("/admin", adminHandler, okapi.DocBasicAuth())

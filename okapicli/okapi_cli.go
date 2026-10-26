@@ -53,7 +53,6 @@ type CLI struct {
 	o       *okapi.Okapi
 	name    string
 	flagSet *pflag.FlagSet
-	flags   map[string]interface{}
 	// structPtr holds a pointer to the struct being populated from CLI flags, used for writing back parsed values after resolution
 	structPtr interface{}
 	// envMappings maps CLI flag names to environment variable names for easy lookup during env var application
@@ -109,7 +108,6 @@ func New(o *okapi.Okapi, name ...string) *CLI {
 		o:           o,
 		name:        appName,
 		flagSet:     pflag.NewFlagSet(appName, pflag.ExitOnError),
-		flags:       make(map[string]interface{}),
 		envMappings: make(map[string]string),
 		commands:    make(map[string]*Command),
 	}
@@ -213,7 +211,12 @@ func (c *CLI) populateStruct() error {
 				fieldVal.SetString(v)
 			}
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			if v, err := c.flagSet.GetInt(cliName); err == nil {
+			// time.Duration is an int64 registered as a duration flag
+			if field.Type == reflect.TypeOf(time.Duration(0)) {
+				if v, err := c.flagSet.GetDuration(cliName); err == nil {
+					fieldVal.SetInt(int64(v))
+				}
+			} else if v, err := c.flagSet.GetInt(cliName); err == nil {
 				fieldVal.SetInt(int64(v))
 			}
 		case reflect.Bool:
@@ -230,21 +233,27 @@ func (c *CLI) populateStruct() error {
 	return nil
 }
 
-// Get retrieves a flag value by name
+// Get retrieves a flag value by name: a string, int, bool, float64 or
+// time.Duration, as the flag was declared, or nil when there is no such flag.
 func (c *CLI) Get(name string) interface{} {
-	if val, ok := c.flags[name]; ok {
-		switch v := val.(type) {
-		case *string:
-			return *v
-		case *int:
-			return *v
-		case *bool:
-			return *v
-		case *float64:
-			return *v
-		}
+	flag := c.flagSet.Lookup(name)
+	if flag == nil {
+		return nil
 	}
-	return nil
+	switch flag.Value.Type() {
+	case "string":
+		return c.GetString(name)
+	case "int":
+		return c.GetInt(name)
+	case "bool":
+		return c.GetBool(name)
+	case "float64":
+		return c.GetFloat(name)
+	case "duration":
+		return c.GetDuration(name)
+	default:
+		return flag.Value.String()
+	}
 }
 
 // GetString retrieves a string flag value

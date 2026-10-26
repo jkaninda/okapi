@@ -88,6 +88,9 @@ argument behaves the same.
 
 Pass `""` as `short` for a flag without a shorthand. A getter called with an
 unknown name, or with a name of another type, returns the zero value.
+`Get(name)` returns any flag's value as an `any` holding its declared type
+(`string`, `int`, `bool`, `float64` or `time.Duration`), or `nil` for an unknown
+name.
 
 ```go
 cli := okapicli.New(app, "myapp").
@@ -201,9 +204,8 @@ Port:
 ```
 
 After parsing, the final values are written back into the struct, so `cfg.Port` and
-`cli.GetInt("port")` agree. One exception: on the top-level CLI, a `time.Duration`
-field gets its flag but its parsed value is not written back — read it with
-`cli.GetDuration(name)`. Commands (below) write durations back as well.
+`cli.GetInt("port")` agree. `time.Duration` fields are written back too, on the
+CLI and on commands (below).
 
 ---
 

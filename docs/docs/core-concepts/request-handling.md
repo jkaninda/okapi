@@ -110,11 +110,11 @@ o := okapi.New(
 // or, chained: o.WithMaxMultipartMemory(16 << 20)
 ```
 
-Inside a handler, `c.MaxMultipartMemory()` returns the current value.
-`c.SetMaxMultipartMemory(n)` also exists, but it changes the setting of the
-**whole application**, not just the current request, so configure the limit at
-startup instead. Passed to the option, zero or less means the 32 MB default; the
-setter ignores such values.
+Inside a handler, `c.MaxMultipartMemory()` returns the limit that applies to the
+current request. `c.SetMaxMultipartMemory(n)` changes it for that request only,
+before the form is parsed; other requests keep the application's limit. Passed
+to the option, zero or less means the 32 MB default; the setter ignores such
+values.
 
 ## Client IP Address
 
@@ -231,7 +231,9 @@ The `Body` field may be any type a decoder can fill, not only a struct:
   the tags of nested structs and of struct elements of slices.
 - **A slice, map, string or other value** is decoded as a whole from a JSON, XML
   or YAML body. A form body is rejected (`form data needs a struct body, not
-  []main.Book`), and validation tags on the elements are not checked.
+  []main.Book`). The elements of a slice of structs (or of pointers to structs)
+  are validated with their tags; an error names the element, as in
+  `Body[1].Name`.
 
 An empty body is not an error in itself: a slice, map or string `Body` keeps its
 zero value, while a struct payload is still validated, so its `required` fields
@@ -263,11 +265,11 @@ type SendInput struct {
 |------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `c.Bind(&v)`                             | Binds from every source according to the content type and the struct tags, supports both binding styles, applies defaults and validates. This is what `okapi.Handle` and friends use.                      |
 | `c.B(&v)`                                | Same as `Bind`, with the error prefixed by `binding error: `.                                                                                                                                              |
-| `c.ShouldBind(&v)`                       | Returns `(bool, error)`. Flat binding only: a `Body` field is **not** treated as the payload, so use `Bind` for Body Field Binding.                                                                         |
+| `c.ShouldBind(&v)`                       | Same as `Bind`, returning `(bool, error)`: `true` when binding and validation succeeded.                                                                                                                    |
 | `c.BindJSON(&v)`, `c.BindXML(&v)`, `c.BindYAML(&v)` | Decode the body only, ignoring the content type, source tags and validation tags. An empty body returns `io.EOF`.                                                                               |
 | `c.BindProtoBuf(msg)`                    | Unmarshals the body into a `proto.Message`.                                                                                                                                                                |
 | `c.BindMultipart(&v)`                    | Parses a `multipart/form-data` body and binds form fields, files and the param, path, query and header tags of a flat struct, then validates.                                                              |
-| `c.BindForm(&v)`, `c.BindQuery(&v)`      | Both read the merged query string and url-encoded body, match keys to `json` tags and validate. Every value arrives as a list, so only `[]string` fields can receive one; a scalar field fails to bind. Prefer `Bind` with `form` or `query` tags. |
+| `c.BindForm(&v)`, `c.BindQuery(&v)`      | Both read the merged query string and url-encoded body into a flat struct, then validate. A field is matched by its `form` (for `BindForm`) or `query` (for `BindQuery`) tag, or else by its `json` name; slice fields take every value, also split on commas, and `default` tags apply. |
 
 All of them read the body through the [request body cap](#request-body-size).
 
@@ -357,8 +359,9 @@ o.Get("/me", func(c *okapi.Context) error {
 The store lives as long as the request. `c.Copy()` returns a new `*Context` with
 its **own** store, initialised with the current entries, and the same request and
 response writer; changes made to one store afterwards are not seen by the other.
-The copy still writes to the original response, so do not use it to answer the
-request once the handler has returned.
+It keeps the application's settings (logger, error handler, multipart limit,
+trusted proxies). The copy still writes to the original response, so do not use
+it to answer the request once the handler has returned.
 
 ## Context Lifecycle
 

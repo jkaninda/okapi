@@ -154,20 +154,6 @@ func (o *Okapi) WebFS(prefix string, fsys fs.FS, cfg ...WebConfig) {
 	o.webHandler(prefix, http.FS(fsys), c)
 }
 
-// SPA serves a single-page application from a directory on disk.
-//
-// Deprecated: use Web instead.
-func (o *Okapi) SPA(prefix, dir string, cfg ...WebConfig) {
-	o.Web(prefix, dir, cfg...)
-}
-
-// SPAFS serves a single-page application from an fs.FS.
-//
-// Deprecated: use WebFS instead.
-func (o *Okapi) SPAFS(prefix string, fsys fs.FS, cfg ...WebConfig) {
-	o.WebFS(prefix, fsys, cfg...)
-}
-
 // webHandler registers the index-fallback handler under prefix.
 func (o *Okapi) webHandler(prefix string, root http.FileSystem, c WebConfig) {
 	if prefix == "" {

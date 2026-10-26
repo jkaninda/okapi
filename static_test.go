@@ -82,7 +82,7 @@ func TestWebRoutesFlowThroughAccessLog(t *testing.T) {
 func TestSPAServesRealFile(t *testing.T) {
 	dir := writeSPAFixture(t)
 	o := New()
-	o.SPA("/", dir)
+	o.Web("/", dir)
 
 	rec := serveSPARequest(o, "/assets/app.js")
 	if rec.Code != http.StatusOK {
@@ -96,7 +96,7 @@ func TestSPAServesRealFile(t *testing.T) {
 func TestSPAFallsBackToIndex(t *testing.T) {
 	dir := writeSPAFixture(t)
 	o := New()
-	o.SPA("/", dir)
+	o.Web("/", dir)
 
 	for _, p := range []string{"/", "/login", "/users/42/profile"} {
 		rec := serveSPARequest(o, p)
@@ -116,7 +116,7 @@ func TestSPAAutoExcludesRegisteredRoutes(t *testing.T) {
 	dir := writeSPAFixture(t)
 	o := New()
 	o.Get("/api/v1/users", func(c *Context) error { return c.OK(M{"ok": true}) })
-	o.SPA("/", dir)
+	o.Web("/", dir)
 
 	if rec := serveSPARequest(o, "/api/v1/users"); rec.Code != http.StatusOK {
 		t.Fatalf("registered route status = %d, want 200", rec.Code)
@@ -131,7 +131,7 @@ func TestSPAAutoExcludesRegisteredRoutes(t *testing.T) {
 func TestSPAExcludeOption(t *testing.T) {
 	dir := writeSPAFixture(t)
 	o := New()
-	o.SPA("/", dir, SPAConfig{Exclude: []string{"/metrics"}})
+	o.Web("/", dir, SPAConfig{Exclude: []string{"/metrics"}})
 
 	rec := serveSPARequest(o, "/metrics")
 	if rec.Code != http.StatusNotFound {
@@ -146,7 +146,7 @@ func TestSPAExcludeOption(t *testing.T) {
 func TestSPAFSFromFilesystem(t *testing.T) {
 	dir := writeSPAFixture(t)
 	o := New()
-	o.SPAFS("/", os.DirFS(dir))
+	o.WebFS("/", os.DirFS(dir))
 
 	if rec := serveSPARequest(o, "/assets/app.js"); rec.Code != http.StatusOK {
 		t.Fatalf("fs asset status = %d, want 200", rec.Code)
@@ -160,7 +160,7 @@ func TestSPAFSFromFilesystem(t *testing.T) {
 func TestSPACustomIndexAndCache(t *testing.T) {
 	dir := writeSPAFixture(t)
 	o := New()
-	o.SPA("/", dir, SPAConfig{MaxAge: time.Hour})
+	o.Web("/", dir, SPAConfig{MaxAge: time.Hour})
 
 	// Index is no-cache.
 	if cc := serveSPARequest(o, "/route").Header().Get("Cache-Control"); cc != "no-cache" {
@@ -266,7 +266,7 @@ func TestSPA(t *testing.T) {
 	ts.Get("/health", func(c *Context) error {
 		return c.OK(M{"status": "ok"})
 	})
-	ts.SPA("/", dir, SPAConfig{MaxAge: time.Hour})
+	ts.Web("/", dir, SPAConfig{MaxAge: time.Hour})
 
 	okapitest.GET(t, ts.BaseURL+"/docs").
 		ExpectStatusOK()

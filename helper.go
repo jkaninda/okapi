@@ -36,6 +36,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jkaninda/njia"
 )
 
 func secondsToDuration(sec int) time.Duration {
@@ -95,7 +97,7 @@ func buildDebugFields(c *Context) []any {
 		fields = append(fields, "response_headers", sanitizeHeaders(c.response.Header()))
 	}
 
-	if params := c.Params(); len(params) > 0 {
+	if params := njia.ParamMap(c.request); len(params) > 0 {
 		fields = append(fields, "path_params", params)
 	}
 

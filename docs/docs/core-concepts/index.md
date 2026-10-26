@@ -56,7 +56,6 @@ method on `*Okapi`. Timeouts are in seconds.
 | `WithDebug()`                  | Adds protocol, headers, query and path parameters to access logs and prints the route table on startup.   |
 | `WithAccessLogDisabled()`      | Turn off access logging. The method is `DisableAccessLog()`.                                              |
 | `WithoutBanner()`              | Do not print the server info banner on startup.                                                           |
-| `WithMuxRouter(router)`        | Deprecated and option only: Okapi manages its own router.                                                 |
 
 Options for the OpenAPI document, request body limits, templates and error
 handlers are covered on the [OpenAPI](../features/openapi.md),

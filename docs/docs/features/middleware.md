@@ -308,10 +308,8 @@ func whoAmIHandler(c *okapi.Context) error {
 }
 ```
 
-Read them from the `*okapi.Context` the handler was given. `Okapi.GetContext()`
-returns the single application-level `Context`, whose store is shared by every
-goroutine — forwarded claims land there too, so using it in place of the request
-context leaks identity between users. It is deprecated for that reason.
+Read them from the `*okapi.Context` the handler was given: its store belongs to
+that request alone.
 
 ### Custom Claim Validation
 

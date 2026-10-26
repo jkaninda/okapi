@@ -41,7 +41,6 @@ import (
 	"github.com/jkaninda/okapi/okapitest"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/jkaninda/njia"
 )
 
 type Book struct {
@@ -161,7 +160,7 @@ func TestStart(t *testing.T) {
 			data := M{"name": "Okapi", "License": "MIT", "event": "SSE example"}
 			event := "message"
 
-			err := c.SendSSEvent(strconv.Itoa(i), event, data)
+			err := c.SSESendEvent(strconv.Itoa(i), event, data)
 			if err != nil {
 				return c.AbortWithError(http.StatusInternalServerError, err)
 			}
@@ -309,12 +308,10 @@ func TestCustomConfig(t *testing.T) {
 	}
 	addr := freeAddr(t)
 	baseURL := "http://" + addr
-	router := njia.New()
 	o := New()
 	o.With(WithAddr(addr),
 		WithStrictSlash(true),
-		WithOpenAPIDisabled(),
-		WithMuxRouter(router)).WithDebug().
+		WithOpenAPIDisabled()).WithDebug().
 		WithOpenAPIDisabled()
 
 	o.Get("/", func(c *Context) error { return c.OK(Book{}) }).Deprecated()

@@ -76,7 +76,7 @@ func TestOpenAPI(t *testing.T) {
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
 		Tags("Book Tags"),
-		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
+		DocResponse(http.StatusBadRequest, M{"": ""}),
 	)
 	v1.Put("/books", anyHandler,
 		Summary("Book Summary"),
@@ -86,7 +86,7 @@ func TestOpenAPI(t *testing.T) {
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
 		Tags("Book Tags"),
-		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
+		DocResponse(http.StatusBadRequest, M{"": ""}),
 	)
 	v1.Get("/books", anyHandler,
 		Summary("Books Summary"),
@@ -94,7 +94,7 @@ func TestOpenAPI(t *testing.T) {
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
 		Tags("Book Tags"),
-		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
+		DocResponse(http.StatusBadRequest, M{"": ""}),
 		Deprecated(),
 	)
 	v1.Delete("/books/{id}", anyHandler,
@@ -103,7 +103,7 @@ func TestOpenAPI(t *testing.T) {
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
 		Tags("Book Tags"),
-		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
+		DocResponse(http.StatusBadRequest, M{"": ""}),
 		Deprecated(),
 	)
 
@@ -113,7 +113,7 @@ func TestOpenAPI(t *testing.T) {
 		DocResponse(Book{}),
 		DocRequestBody(Book{}),
 		Tags("Book Tags"),
-		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
+		DocResponse(http.StatusBadRequest, M{"": ""}),
 		Deprecated(),
 	)
 	// V2
@@ -126,7 +126,7 @@ func TestOpenAPI(t *testing.T) {
 		DocResponse(201, Book{}),
 		DocRequestBody(Book{}),
 		Tags("Book Tags"),
-		DocErrorResponse(http.StatusBadRequest, M{"": ""}),
+		DocResponse(http.StatusBadRequest, M{"": ""}),
 	)
 	v2.Put("/books", anyHandler,
 		Doc().Summary("Book Summary").
@@ -143,7 +143,7 @@ func TestOpenAPI(t *testing.T) {
 			ResponseHeader("X-RateLimit-Limit", "int", "The number of requests allowed per minute").
 			Response(200, Book{}).
 			Tags("Book Tags").
-			ErrorResponse(http.StatusBadRequest, M{"": ""}).Build(),
+			Response(http.StatusBadRequest, M{"": ""}).Build(),
 	).Hide()
 	v2.Delete("/books/:id", anyHandler,
 		Doc().Summary("Delete Book").

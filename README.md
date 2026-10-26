@@ -457,8 +457,7 @@ func main() {
 }
 ```
 
-> `SPA` / `SPAFS` / `SPAConfig` remain as deprecated aliases of
-> `Web` / `WebFS` / `WebConfig`.
+> `SPAConfig` remains as a deprecated alias of `WebConfig`.
 
 See the [SPA guide](https://okapi.jkaninda.dev/features/spa/) and the
 [`examples/web`](examples/web) example for the full configuration.
@@ -824,8 +823,8 @@ app.Register(okapi.RouteDefinition{
      Request: &UserRequest{},
      Response:    &User{},
      Options: []okapi.RouteOption{
-	    okapi.DocErrorResponse(401, &ErrorUnauthorized{}),
-	    okapi.DocErrorResponse(404, &ErrorNotFound{}),
+	    okapi.DocResponse(401, &ErrorUnauthorized{}),
+	    okapi.DocResponse(404, &ErrorNotFound{}),
 	},
 })
 ```

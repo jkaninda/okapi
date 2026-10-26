@@ -77,7 +77,7 @@ func main() {
 		return c.OK(users)
 	},
 		okapi.DocResponse(Users{}),
-		okapi.DocErrorResponse(400, ErrorResponse{}),
+		okapi.DocResponse(400, ErrorResponse{}),
 	)
 	// Get user
 	v1.Get("/users/:id", show,

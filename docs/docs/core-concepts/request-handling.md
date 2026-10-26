@@ -20,9 +20,7 @@ o.Get("/books/:id", func(c *okapi.Context) error {
 
 `c.Param` is an alias of `c.PathParam`. Path parameters are always strings at
 runtime; a type hint such as `{id:int}` only affects the OpenAPI document.
-`c.Path()` returns the raw request path (e.g. `/books/42`). `c.Params()`, which
-returns every path parameter as a `map[string]string`, is deprecated in favour of
-`c.Param`.
+`c.Path()` returns the raw request path (e.g. `/books/42`).
 
 ## Query Parameters
 
@@ -394,7 +392,6 @@ http.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
 })
 ```
 
-`(*Okapi).SetContext` replaces the application-level context returned by the
-deprecated `(*Okapi).GetContext`. That context is shared by every request, so
-values stored on it are visible process-wide; use the `*Context` passed to the
-handler instead.
+`(*Okapi).SetContext` replaces the application-level context. That context is
+shared by every request, so values stored on it are visible process-wide; use
+the `*Context` passed to the handler instead.

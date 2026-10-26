@@ -19,8 +19,8 @@ Two entry points are provided, both taking an optional `WebConfig`:
 
 Register the handler **after** your API routes so the API keeps precedence.
 
-> The `SPA` / `SPAFS` / `SPAConfig` names are deprecated aliases of
-> `Web` / `WebFS` / `WebConfig` and continue to work unchanged.
+> `SPAConfig` is a deprecated alias of `WebConfig`. The `SPA` and `SPAFS`
+> methods have been removed; use `Web` and `WebFS`.
 
 ## Serve from disk
 

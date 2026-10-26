@@ -36,11 +36,34 @@ func TestGetBooksHandler(t *testing.T) {
 | `okapi.NewTestServer(t)`           | An `okapi.New()` instance behind an `httptest.Server`, closed on cleanup |
 | `okapi.DefaultTestServer(t)`       | The same, from `okapi.Default()` — documentation routes included        |
 | `okapi.NewTestServerWithOkapi(t, o)` | Wraps an instance you configured yourself                            |
-| `okapi.NewTestServerOn(t, port)`   | Starts a real listener on `port` (for tests that need a fixed address)  |
+| `okapi.NewTestServerOn(t, port)`   | Starts a real listener on `port` (for tests that need a fixed address); a port `<= 0` picks a free one |
 
 All of them return a `*okapi.TestServer`, which embeds `*okapi.Okapi` — so you
 register routes and middleware on it exactly as on an application — and exposes
 `BaseURL`.
+
+The constructors take an `okapi.TestingT` rather than `*testing.T`: any value with
+`Helper()`, `Cleanup(func())`, `Errorf(...)` and `Fatalf(...)` will do, so
+`*testing.T` and `*testing.B` both work.
+
+To run an application you built yourself on a real port, use `StartForTest`. It
+starts the server in the background, waits for it to accept connections (failing
+the test after two seconds), stops it on cleanup, and returns the base URL:
+
+```go
+func TestApp(t *testing.T) {
+    app := okapi.New(okapi.WithPort(8089))
+    app.Get("/health", HealthHandler)
+
+    baseURL := app.StartForTest(t)
+
+    okapitest.GET(t, baseURL+"/health").ExpectStatusOK()
+}
+```
+
+When you start the server yourself, `app.WaitForServer(timeout)` blocks until the
+server's address accepts TCP connections and returns that address (such as
+`":8089"`), or `""` if the timeout expires first.
 
 For a handler test that needs no server at all, `okapi.NewTestContext(method, url, body)`
 returns a `*okapi.Context` and the `*httptest.ResponseRecorder` behind it.
@@ -93,7 +116,11 @@ func TestBooksAPI(t *testing.T) {
 }
 ```
 
-Headers set on `client.Headers` are merged into every request the client builds.
+`okapitest.NewClient(t, baseURL)` returns a `*okapitest.TestClient`. Its methods —
+`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` and `OPTIONS` — take a path that is
+appended to `BaseURL`, and return the same `*RequestBuilder` as the standalone
+helpers. Headers set on `client.Headers` are merged into every request the client
+builds.
 
 ### 2. Using Standalone Request Helpers
 
@@ -137,7 +164,21 @@ func TestCreateBookHandler(t *testing.T) {
 `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` and `OPTIONS` all take
 `(t, url)`. `okapitest.Request(t)` returns a bare builder when you want to set the
 method and URL yourself, and `okapitest.FromRecorder(t, rec)` asserts against a
-response you already recorded.
+response you already recorded — for example one written through
+`okapi.NewTestContext`:
+
+```go
+func TestHealthHandler(t *testing.T) {
+    ctx, rec := okapi.NewTestContext(http.MethodGet, "/health", nil)
+    if err := HealthHandler(ctx); err != nil {
+        t.Fatal(err)
+    }
+
+    okapitest.FromRecorder(t, rec).
+        ExpectStatusOK().
+        ExpectBodyContains("ok")
+}
+```
 
 ## Available Assertions
 
@@ -158,6 +199,7 @@ response you already recorded.
 // Body assertions
 .ExpectBody(expected string)          // exact body match
 .ExpectBodyContains(substr string)
+.ExpectContains(substr string)        // alias of ExpectBodyContains
 .ExpectBodyNotContains(substr string)
 .ExpectEmptyBody()
 .ExpectJSON(expected any)             // compares decoded JSON
@@ -181,7 +223,10 @@ To inspect the response yourself, use `.ParseJSON(&target)` inside the chain, or
 ## Request Building
 
 ```go
-okapitest.POST(t, url).
+okapitest.Request(t).
+    Method(http.MethodPost).
+    URL(baseURL).
+    Path("/books").           // appends a path segment to the URL
     Header("X-Trace-Id", "abc").
     Headers(map[string]string{"X-A": "1", "X-B": "2"}).
     QueryParam("dry_run", "true").
@@ -192,6 +237,13 @@ okapitest.POST(t, url).
     Timeout(5 * time.Second).
     ExpectStatusCreated()
 ```
+
+### Deprecated Helpers
+
+`okapitest.AssertHTTPStatus(t, method, url, headers, body, contentType, expected)`
+and `okapitest.AssertHTTPResponse(t, method, url, headers, body, contentType, expectedStatus, expectedBody)`
+are kept for compatibility and are deprecated in favour of the request builder.
+`AssertHTTPResponse` skips the body check when `expectedBody` is empty.
 
 ## Testing with Custom Headers
 
@@ -260,8 +312,11 @@ func TestOpenAPI(t *testing.T) {
 }
 ```
 
+The second argument is an `okapitest.OpenAPIProvider` — any value with an
+`OpenAPISpec() *openapi3.T` method. `*okapi.Okapi` implements it.
+
 On a mismatch the test fails with the first differing lines. Run the tests with
-`OKAPI_UPDATE_GOLDEN=1` to write or update the golden file:
+`OKAPI_UPDATE_GOLDEN=1` (the `okapitest.UpdateGoldenEnv` constant) to write or update the golden file:
 
 ```bash
 OKAPI_UPDATE_GOLDEN=1 go test ./...

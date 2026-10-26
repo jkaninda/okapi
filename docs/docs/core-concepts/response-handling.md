@@ -24,6 +24,30 @@ o.Get("/books/:id", func(c *okapi.Context) error {
 
 ## Response Methods
 
+Every response writer on `*okapi.Context` at a glance:
+
+| Method | Status | Content-Type | Body |
+|--------|--------|--------------|------|
+| `JSON(code, v)` | `code` | `application/json` | `v` encoded as JSON |
+| `OK(v)` | 200 | `application/json` | `v` encoded as JSON |
+| `Created(v)` | 201 | `application/json` | `v` encoded as JSON |
+| `NoContent()` | 204 | `text/plain` | empty |
+| `XML(code, v)` | `code` | `application/xml` | `v` encoded as XML |
+| `YAML(code, v)` | `code` | `application/yaml` | `v` encoded as YAML |
+| `Text(code, v)` / `String(code, v)` | `code` | `text/plain` | `fmt.Fprint(v)` |
+| `Data(code, contentType, b)` | `code` | `contentType` | the raw bytes `b` |
+| `HTML(code, file, data)` | `code` | `text/html` | template file executed with `data` |
+| `HTMLView(code, tmpl, data)` | `code` | `text/html` | template string executed with `data` |
+| `Render(code, name, data)` | `code` | `text/html` | named template from the attached renderer |
+| `Respond(v)` / `Return(v)` | from `v` | from `Accept` | see [Response Struct Binding](#response-struct-binding) |
+| `Redirect(code, location)` | `code` | — | sets `Location` |
+| `WriteStatus(code)` | `code` | — | none |
+
+Only the first write of a request counts. Once a status has been written — by any
+of the methods above, `WriteStatus` included — a later `JSON`, `XML`, `Text`,
+`Data`, `Render`, … call is skipped (and logged at debug level) instead of
+appending a second body.
+
 ### JSON Responses
 
 Send JSON data with a specific status code:
@@ -80,6 +104,31 @@ o.Get("/books", func(c *okapi.Context) error {
 })
 ```
 
+`c.YAML(code, v)` works the same way and writes `application/yaml`.
+
+### Status-Only Responses and Redirects
+
+`c.WriteStatus(code)` writes the status line with no body and returns nothing.
+Set any headers before calling it:
+
+```go
+o.Head("/health", func(c *okapi.Context) error {
+    c.SetHeader("X-Status", "up")
+    c.WriteStatus(http.StatusOK)
+    return nil
+})
+```
+
+`c.Redirect(code, location)` sets the `Location` header, writes `code` and a
+short `Redirecting to …` body. It also returns nothing:
+
+```go
+o.Get("/old", func(c *okapi.Context) error {
+    c.Redirect(http.StatusMovedPermanently, "/new")
+    return nil
+})
+```
+
 ### File Responses
 
 Serve files for download. The file-serving helpers write to the response
@@ -92,6 +141,14 @@ o.Get("/download", func(c *okapi.Context) error {
 })
 ```
 
+| Method | Serves |
+|--------|--------|
+| `ServeFile(path)` | the file at `path` |
+| `ServeFileAttachment(path, filename)` | the file at `path` with `Content-Disposition: attachment; filename="…"` (a download) |
+| `ServeFileInline(path, filename)` | the file at `path` with `Content-Disposition: inline; filename="…"` |
+| `ServeFileFrom(root, name)` | `name` resolved inside the directory `root` |
+| `ServeFileFromFS(name, fsys)` | `name` resolved inside an `http.FileSystem` |
+
 `ServeFile`, `ServeFileAttachment` and `ServeFileInline` use the path as given.
 `http.ServeFile`'s `".."` precaution only inspects `r.URL.Path`, so it does not
 protect a path your handler assembled. For a name that comes from the request,
@@ -103,6 +160,24 @@ o.Get("/files/{name}", func(c *okapi.Context) error {
     return nil
 })
 ```
+
+`c.ServeFileFromFS(name, fsys)` does the same against any `http.FileSystem`, such
+as an embedded one. A name containing a `..` element, or an empty name, answers
+`404`:
+
+```go
+//go:embed assets
+var assets embed.FS
+
+o.Get("/assets/{name}", func(c *okapi.Context) error {
+    c.ServeFileFromFS("assets/"+c.Param("name"), http.FS(assets))
+    return nil
+})
+```
+
+`ServeFileFrom` and `ServeFileFromFS` go through `http.FileServer`, so a name that
+resolves to a directory gets that directory's `index.html` or, without one, a
+directory listing. Use `o.Static` / `o.StaticFS` when listings must stay hidden.
 
 ## Convenience Methods
 
@@ -172,7 +247,7 @@ o.Get("/books/:id", func(c *okapi.Context) error {
 
 ## Response Struct Binding
 
-When using `c.Respond()` / `c.Return()`, Okapi automatically serializes the response struct into the HTTP response.
+When using `c.Respond()` — or `c.Return()`, an alias for it — Okapi automatically serializes the response struct into the HTTP response.
 
 It inspects the struct to determine:
 
@@ -233,8 +308,20 @@ o.Get("/books/:id", func(c *okapi.Context) error {
   is none. Keep this in mind before adding an extra field to a response struct.
 - Unexported fields are skipped.
 
-The body is encoded from the `Accept` header: XML, YAML, plain text and HTML are
-honoured, and anything else — including a missing `Accept` — is encoded as JSON.
+The body is encoded from the `Accept` header, checked in this order:
+
+| `Accept` contains | Body written with |
+|-------------------|-------------------|
+| `application/xml` | `c.XML` |
+| `application/yaml`, `text/yaml` or `application/x-yaml` | `c.YAML` |
+| `application/json` | `c.JSON` |
+| `text/plain` or `text/html` | `c.String` — the body printed with `fmt.Fprint`, as `text/plain` |
+| anything else, or no `Accept` | `c.JSON` |
+
+The match is a plain substring test, so quality values (`;q=`) are ignored, and
+`text/html` does not render a template.
+
+A nil value, a nil pointer or a non-struct passed to `Respond` answers `500`.
 
 ### Setting Headers Manually
 

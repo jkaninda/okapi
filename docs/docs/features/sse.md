@@ -152,6 +152,15 @@ o.Get("/messages", func(c *okapi.Context) error {
 })
 ```
 
+`SendSSEvent(id, eventType, data)` is the older name of `SSESendEvent` and is
+deprecated; use `SSESendEvent` in new code.
+
+Every message gets an `id:` line: when you do not supply one (`SSESendData`,
+`SSEvent`, a `Message` with an empty `ID`, …), a random 32-character hex ID is
+generated. The first send also sets `Content-Type: text/event-stream`,
+`Connection: keep-alive` and, unless you set it yourself beforehand,
+`Cache-Control: no-cache`.
+
 Newlines are stripped from the `id` and `event` fields before they are written, so
 a value derived from user input — a reflected `Last-Event-ID`, say — cannot forge
 extra fields or whole events. In the data payload, a lone `\r` is treated as a
@@ -257,6 +266,45 @@ o.Get("/images", func(c *okapi.Context) error {
     }
 
     return nil
+})
+```
+
+### 4. Sending a Message Directly
+
+For full control over a single event — a `retry:` hint, a per-message
+serializer — build an `okapi.Message` and call `Send` on the response. It returns
+the ID that was written (generated when `ID` is empty) and flushes the event:
+
+```go
+o.Get("/job", func(c *okapi.Context) error {
+    msg := okapi.Message{
+        Event: "status",
+        Data:  okapi.M{"state": "running"},
+        Retry: 5000, // client reconnect delay, in milliseconds
+    }
+    id, err := msg.Send(c.Response())
+    if err != nil {
+        return err
+    }
+    c.Logger().Info("sent event", "id", id)
+    return nil
+})
+```
+
+`msg.Close(w)` only flushes the writer; it does not end the stream.
+
+### 5. Detecting an SSE Request
+
+`c.IsSSE()` reports whether the request is a `GET` whose `Accept` header is
+exactly `text/event-stream`, which lets one route serve both a stream and a
+regular response:
+
+```go
+o.Get("/status", func(c *okapi.Context) error {
+    if c.IsSSE() {
+        return c.SSESendJSON(okapi.M{"status": "ok"})
+    }
+    return c.OK(okapi.M{"status": "ok"})
 })
 ```
 
@@ -500,15 +548,23 @@ own.
 
 ### Methods
 
+All return `error` except `IsSSE`.
+
 - `SSESendData(data any)` - Send data with automatic serialization
 - `SSESendJSON(data any)` - Send JSON data explicitly
 - `SSESendText(text string)` - Send plain text
 - `SSESendBinary(data []byte)` - Send binary data as base64
 - `SSEvent(eventType string, data any)` - Send event with custom type
 - `SSESendEvent(id, eventType string, data any)` - Send event with ID and type
+- `SendSSEvent(id, eventType string, data any)` - Deprecated alias of `SSESendEvent`
 - `SSEStream(ctx, messageChan)` - Stream from channel
 - `SSEStreamWithOptions(ctx, messageChan, opts)` - Stream with advanced options
 - `SendSSECustom(data, serializer)` - Send with custom serializer
+- `IsSSE() bool` - Report whether the request is a `GET` with `Accept: text/event-stream`
+
+Automatic serialization (no serializer set) writes a `string` or `[]byte` as is,
+reads an `io.Reader` to the end, and encodes anything else as JSON. Multi-line
+data is split into one `data:` line per line.
 
 ### Message
 
@@ -517,9 +573,12 @@ type Message struct {
     ID         string
     Event      string
     Data       any
-    Retry      uint
-    Serializer Serializer
+    Retry      uint       // reconnect delay in ms; 0 omits the retry: line
+    Serializer Serializer // nil uses automatic serialization
 }
+
+func (m *Message) Send(w http.ResponseWriter) (string, error) // writes and flushes, returns the ID
+func (m *Message) Close(w http.ResponseWriter) error          // flushes w
 ```
 
 ### StreamOptions
@@ -532,9 +591,21 @@ type StreamOptions struct {
 }
 ```
 
-Bundled serializers: `okapi.JSONSerializer{}` (the default),
-`okapi.TextSerializer{}` and `okapi.Base64Serializer{}`. Implement
-`okapi.Serializer` for your own.
+Bundled serializers: `okapi.JSONSerializer{}`, `okapi.TextSerializer{}` and
+`okapi.Base64Serializer{}` (which accepts only `[]byte`). Implement
+`okapi.Serializer` for your own. Without a serializer, data is serialized
+automatically as described under [Methods](#methods); unlike
+`JSONSerializer`, that writes a string as plain text rather than a quoted JSON
+string.
+
+```go
+type Serializer interface {
+    Serialize(data any) (string, error)
+}
+```
+
+`okapi.SendFunc` (`func(data any, eventType string) (string, error)`) is an
+exported function type that no Okapi API currently accepts or returns.
 
 ## More Examples
 

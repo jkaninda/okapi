@@ -33,6 +33,20 @@ the generated OpenAPI document. When CORS is enabled, a plain `OPTIONS` request
 still reaches it — only requests carrying `Access-Control-Request-Method` are
 treated as preflights.
 
+### Typed Routes
+
+The generic functions `okapi.Get`, `Post`, `Put`, `Patch` and `Delete` register a
+typed handler `func(*okapi.Context, *I) (*O, error)` and document `I` and `O` in
+the OpenAPI document. Their first argument is a `RouteRegistrar`, the interface
+implemented by both `*Okapi` and `*Group`:
+
+```go
+okapi.Get(o, "/books/{id}", getBook)  // o is an *okapi.Okapi
+okapi.Post(api, "/books", createBook) // api is an *okapi.Group
+```
+
+See [Typed routes](../features/openapi.md#typed-routes).
+
 ## Path Syntax
 
 Okapi supports flexible and expressive route path patterns, including named parameters and wildcards:
@@ -66,6 +80,30 @@ o.Get("/files/*path", func(c *okapi.Context) error {
     return c.OK(okapi.M{"path": c.Param("any")})
 })
 ```
+
+A request for `/books/` does not match `/books`. To redirect between the two
+forms with `301`, enable `okapi.WithStrictSlash(true)` — see
+[Server Options](index.md#server-options).
+
+## Custom 404 and 405 Handlers
+
+`NoRoute` sets the handler for requests that match no route, and `NoMethod` the
+one for a path that exists but not for the request's method:
+
+```go
+o.NoRoute(func(c *okapi.Context) error {
+    return c.AbortNotFound("Custom 404 - Not found")
+})
+
+o.NoMethod(func(c *okapi.Context) error {
+    return c.AbortMethodNotAllowed("Custom 405 - Method not allowed")
+})
+```
+
+Both are installed when the server starts (`Start`, `StartOn`, `StartServer`),
+as is `WithStrictSlash`; serving `o` as an `http.Handler` yourself leaves the
+default responses in place. They are called directly, without the global
+middleware chain, so they are not access-logged and get no CORS headers.
 
 ## Enabling and Disabling Routes
 

@@ -27,7 +27,6 @@ package okapicli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,17 +80,15 @@ func (c *CLI) writeOpenAPI(output, format, version string) error {
 		return err
 	}
 
-	var w io.Writer = os.Stdout
-	if output != "" {
-		f, err := os.Create(output)
-		if err != nil {
-			return fmt.Errorf("failed to create %s: %w", output, err)
-		}
-		defer f.Close()
-		w = f
+	if output == "" {
+		_, err = os.Stdout.Write(data)
+		return err
 	}
-	_, err = w.Write(data)
-	return err
+	// WriteFile reports a failed close, which can lose buffered data
+	if err := os.WriteFile(output, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", output, err)
+	}
+	return nil
 }
 
 // marshalSpec encodes spec as indented JSON or as YAML.

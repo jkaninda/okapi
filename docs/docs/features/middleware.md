@@ -26,9 +26,16 @@ o.Use(auth.Middleware)
 o.Get("/admin", adminHandler).Use(auth.Middleware)
 ```
 
+A request without valid credentials gets `401` with a
+`WWW-Authenticate: Basic realm="..."` header (realm `Okapi` when `Realm` is
+empty). On success, the username is stored in the context under `ContextKey`.
+
 An empty `Username` or `Password` is treated as a misconfiguration, not as "no
 credentials required": every request is rejected with `401` and the problem is
 logged. Load the credentials before installing the middleware.
+
+`okapi.BasicAuthMiddleware` is the deprecated former name of `BasicAuth`. Its
+`Middleware` method ignores `Realm`, so use `BasicAuth` instead.
 
 ### Request Body Limit
 
@@ -97,9 +104,9 @@ Okapi includes powerful JWT middleware to secure your routes with JSON Web Token
 ### Features
 
 * **HS256** symmetric signing via `SigningSecret`
-* **RS256** and other asymmetric algorithms via `RsaKey`
+* **RS256** with a fixed RSA public key via `RsaKey`
 * **Remote JWKS** discovery via `JwksUrl` (e.g., OIDC or Auth0), cached per URL
-* **Local JWKS** via `JwksFile`
+* **Local JWKS** via `JwksFile`, loaded with `okapi.LoadJWKSFromFile`
 * **Claims validation** with `ClaimsExpression` or `ValidateClaims`
 * **OpenAPI integration** with `.WithBearerAuth()`
 * **Selective claim forwarding** using `ForwardClaims`
@@ -123,6 +130,10 @@ with the variable unset therefore does not configure HMAC with an empty key —
 which anyone could forge — it leaves the middleware with no key at all, and every
 request is rejected with `401`. `OnUnauthorized`, if you set one, runs for that
 case too, exactly as for any other rejected token.
+
+Only one key source is used. When several are set, the first in this order wins:
+`JwksUrl`, `SigningSecret`, `JwksFile`, `RsaKey`. Accepted algorithms default to
+`RS256`, `HS256` and `ES256`; restrict them with `Algorithms`.
 
 ### Claim Validation Defaults
 
@@ -171,6 +182,27 @@ most 1 MiB. Key material is validated: RSA moduli under 2048 bits, degenerate
 exponents, EC points that are not on their named curve, and keys whose `use`/`alg`
 is inconsistent with signature verification are rejected.
 
+### Local JWKS
+
+`JwksFile` takes a static key set, an `*okapi.Jwks` holding `Jwk` entries (RSA
+or EC public keys). `okapi.LoadJWKSFromFile` reads one from a file path, or from
+the base64-encoded JSON itself, which suits an environment variable:
+
+```go
+jwks, err := okapi.LoadJWKSFromFile("jwks.json") // or a base64-encoded JWKS
+if err != nil {
+    log.Fatal(err)
+}
+
+jwtAuth := okapi.JWTAuth{
+    JwksFile:   jwks,
+    ContextKey: "user",
+}
+```
+
+As with `JwksUrl`, the token's `kid` header selects the key, so tokens without a
+`kid` are rejected, and the same key checks apply.
+
 ### Generating Tokens
 
 `okapi.GenerateJwtToken(secret, claims, ttl)` signs an HS256 token, adding `exp`
@@ -190,11 +222,16 @@ Use `ClaimsExpression` to validate claims using simple expressions:
 
 #### Supported Functions
 
-* `Equals(field, value)`
-* `Prefix(field, prefix)`
-* `Contains(field, val1, val2, ...)` — the claim equals one of the values, or, for an array claim, has an element equal to one of them
-* `OneOf(field, val1, val2, ...)`
+* `Equals(field, value)` — the claim equals the value
+* `Prefix(field, prefix)` — the claim starts with the prefix
+* `Contains(field, val1, val2, ...)` — the claim equals one of the values
+* `OneOf(field, val1, val2, ...)` — the claim equals one of the values (same test as `Contains`)
 * `Substring(field, val1, val2, ...)` — the claim contains one of the values as a substring
+
+Every argument is enclosed in backticks; single or double quotes do not parse.
+`field` is a claim name, with dots for nested claims (`user.role`). For an
+array claim, any element may match. Numbers and booleans are compared in their
+text form, so `` Equals(`email_verified`, `true`) `` matches the JSON `true`.
 
 `Substring` carries the behaviour `Contains` used to have for a single value. It
 is a deliberately weak test and is not suitable for authorization
@@ -207,6 +244,7 @@ for. Prefer `Equals`, `OneOf` or `Contains`.
 * `!` — NOT
 * `&&` — AND (evaluated before OR)
 * `||` — OR
+* `( ... )` — grouping
 
 ```go
 jwtAuth := okapi.JWTAuth{
@@ -217,9 +255,31 @@ jwtAuth := okapi.JWTAuth{
 }
 ```
 
-An expression that does not parse — including one with trailing input that
-Okapi cannot make sense of — **denies** the request. Every part of the expression
-is evaluated, so `Equals(...) && OneOf(...)` really checks both halves.
+An expression that evaluates to false denies the request with `403`. One that
+does not parse — including one with trailing input that Okapi cannot make sense
+of — denies it with `401`, as does a claim the expression names but the token
+lacks. A missing claim fails the whole expression, even on one side of `||`.
+`&&` and `||` short-circuit, left to right.
+
+The parser is exported, so an expression can be checked at startup or evaluated
+in your own code, such as a `ValidateClaims` function. `ParseExpression` returns
+an `okapi.Expression`, whose `Evaluate` takes `jwt.MapClaims`:
+
+```go
+expr, err := okapi.ParseExpression("OneOf(`role`, `admin`, `owner`) && !Prefix(`sub`, `svc-`)")
+if err != nil {
+    log.Fatal(err)
+}
+
+ok, err := expr.Evaluate(jwt.MapClaims{"role": "admin", "sub": "42"}) // true, nil
+```
+
+The same expressions can be built in Go with `okapi.Equals`, `Prefix`, `Contains`,
+`OneOf`, `Substring`, `And`, `Or` and `Not`:
+
+```go
+expr := okapi.And(okapi.Equals("email_verified", "true"), okapi.Not(okapi.Prefix("sub", "svc-")))
+```
 
 ### Forwarding Claims to Context
 
@@ -313,7 +373,10 @@ registered through `Group.Register`.
 
 ## Custom Middleware
 
-Create your own middleware functions. Call `c.Next()` to pass control to the next middleware or handler:
+Create your own middleware functions. A middleware has the same signature as a
+handler, `func(*okapi.Context) error`; `okapi.Middleware` and
+`okapi.MiddlewareFunc` are both aliases of `okapi.HandlerFunc`. Call `c.Next()`
+to pass control to the next middleware or handler:
 
 ```go
 func customMiddleware(c *okapi.Context) error {

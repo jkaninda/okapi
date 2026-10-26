@@ -66,29 +66,126 @@ underlying error, so `details` repeats the message.
 
 ## Available Error Methods
 
-Okapi provides convenience methods for common HTTP error codes:
+Every standard 4xx and 5xx status has two helpers on `*Context`, which behave
+differently:
 
-| Method                               | Status Code | Use Case                              |
-|--------------------------------------|-------------|---------------------------------------|
-| `AbortBadRequest(msg, err...)`       | 400         | Validation errors, malformed requests |
-| `AbortUnauthorized(msg, err...)`     | 401         | Missing or invalid authentication     |
-| `AbortForbidden(msg, err...)`        | 403         | Insufficient permissions              |
-| `AbortNotFound(msg, err...)`         | 404         | Resource not found                    |
-| `AbortConflict(msg, err...)`         | 409         | Resource conflicts                    |
-| `AbortValidationError(msg, err...)`  | 422         | Unprocessable entity                  |
-| `AbortTooManyRequests(msg, err...)`  | 429         | Rate limiting                          |
-| `AbortInternalServerError(msg, err...)` | 500      | Unexpected server errors              |
-| And more                             |             |                                       |
+| Family | Signature | Body | Marks the request aborted |
+|--------|-----------|------|---------------------------|
+| `Abort*` | `AbortNotFound(msg string, err ...error) error` | Built by the configured `ErrorHandler` (`ErrorResponse`, Problem Details or your own) | Yes |
+| `Error*` | `ErrorNotFound(body any) error` | The value you pass, written with `c.JSON` as is | No |
 
-There is an `Abort*` helper for every standard 4xx and 5xx status, and an
-`Error*` counterpart (`ErrorBadRequest`, `ErrorNotFound`, …) that writes the value
-you pass as the body, bypassing the `ErrorHandler`.
+Use `Abort*` for errors, so they all share one format. Use `Error*` when you need
+to send a specific body for an error status; it bypasses the `ErrorHandler`.
 
-For other status codes, use the generic method — the message is the status text:
+For `Abort*` helpers, an empty `msg` falls back to a default message for the status, and when `err`
+is omitted the message is used as the underlying error.
+
+**4xx client errors**
+
+| Status | Abort helper | Error helper |
+|--------|--------------|--------------|
+| 400 | `AbortBadRequest` | `ErrorBadRequest` |
+| 401 | `AbortUnauthorized` | `ErrorUnauthorized` |
+| 402 | `AbortPaymentRequired` | `ErrorPaymentRequired` |
+| 403 | `AbortForbidden` | `ErrorForbidden` |
+| 404 | `AbortNotFound` | `ErrorNotFound` |
+| 405 | `AbortMethodNotAllowed` | `ErrorMethodNotAllowed` |
+| 406 | `AbortNotAcceptable` | `ErrorNotAcceptable` |
+| 407 | `AbortProxyAuthRequired` | `ErrorProxyAuthRequired` |
+| 408 | `AbortRequestTimeout` | `ErrorRequestTimeout` |
+| 409 | `AbortConflict` | `ErrorConflict` |
+| 410 | `AbortGone` | `ErrorGone` |
+| 411 | `AbortLengthRequired` | `ErrorLengthRequired` |
+| 412 | `AbortPreconditionFailed` | `ErrorPreconditionFailed` |
+| 413 | `AbortRequestEntityTooLarge` | `ErrorRequestEntityTooLarge` |
+| 414 | `AbortRequestURITooLong` | `ErrorRequestURITooLong` |
+| 415 | `AbortUnsupportedMediaType` | `ErrorUnsupportedMediaType` |
+| 416 | `AbortRequestedRangeNotSatisfiable` | `ErrorRequestedRangeNotSatisfiable` |
+| 417 | `AbortExpectationFailed` | `ErrorExpectationFailed` |
+| 418 | `AbortTeapot` | `ErrorTeapot` |
+| 421 | `AbortMisdirectedRequest` | `ErrorMisdirectedRequest` |
+| 422 | `AbortValidationError` | `ErrorUnprocessableEntity` |
+| 423 | `AbortLocked` | `ErrorLocked` |
+| 424 | `AbortFailedDependency` | `ErrorFailedDependency` |
+| 425 | `AbortTooEarly` | `ErrorTooEarly` |
+| 426 | `AbortUpgradeRequired` | `ErrorUpgradeRequired` |
+| 428 | `AbortPreconditionRequired` | `ErrorPreconditionRequired` |
+| 429 | `AbortTooManyRequests` | `ErrorTooManyRequests` |
+| 431 | `AbortRequestHeaderFieldsTooLarge` | `ErrorRequestHeaderFieldsTooLarge` |
+| 451 | `AbortUnavailableForLegalReasons` | `ErrorUnavailableForLegalReasons` |
+
+**5xx server errors**
+
+| Status | Abort helper | Error helper |
+|--------|--------------|--------------|
+| 500 | `AbortInternalServerError`, `Abort(err)` | `ErrorInternalServerError` |
+| 501 | `AbortNotImplemented` | `ErrorNotImplemented` |
+| 502 | `AbortBadGateway` | `ErrorBadGateway` |
+| 503 | `AbortServiceUnavailable` | `ErrorServiceUnavailable` |
+| 504 | `AbortGatewayTimeout` | `ErrorGatewayTimeout` |
+| 505 | `AbortHTTPVersionNotSupported` | `ErrorHTTPVersionNotSupported` |
+| 506 | `AbortVariantAlsoNegotiates` | `ErrorVariantAlsoNegotiates` |
+| 507 | `AbortInsufficientStorage` | `ErrorInsufficientStorage` |
+| 508 | `AbortLoopDetected` | `ErrorLoopDetected` |
+| 510 | `AbortNotExtended` | `ErrorNotExtended` |
+| 511 | `AbortNetworkAuthenticationRequired` | `ErrorNetworkAuthenticationRequired` |
+
+`AbortNotModified()` and `ErrorNotModified()` send a bodiless `304`, and
+`c.Error(code, message)` writes `message` as a plain-text body.
 
 ```go
-return c.AbortWithError(http.StatusTeapot, err)
+// Through the ErrorHandler, request marked aborted
+return c.AbortConflict("Book already exists")
+
+// Your own body, as JSON
+return c.ErrorConflict(map[string]string{"error": "book already exists"})
 ```
+
+### Generic Abort Helpers
+
+| Method | Response |
+|--------|----------|
+| `AbortWithError(code int, err error)` | Through the `ErrorHandler`, with the status text as the message |
+| `AbortWithStatus(code int, message string)` | Always an `ErrorResponse`: `message` is the status text and your `message` goes into `details`. Ignores the `ErrorHandler` |
+| `AbortWithJSON(code int, body any)` | `body` as JSON. Ignores the `ErrorHandler` |
+| `AbortWithProblemDetail(problem *ProblemDetail)` | `problem` as `application/problem+json`. See [Writing a Problem Detail Directly](#writing-a-problem-detail-directly) |
+
+All of them mark the request aborted. `AbortWithError` is useful when the status
+is only known at runtime, for example one relayed from an upstream service:
+
+```go
+return c.AbortWithError(resp.StatusCode, err)
+```
+
+### Aborting from Middleware
+
+Once an `Abort*` helper has answered, `c.Next()` runs no further handler and
+returns `nil`, so a middleware that aborts cannot accidentally reach the handler
+it refused. `c.IsAborted()` reports whether that has happened:
+
+```go
+o.Use(func(c *okapi.Context) error {
+    if c.Header("X-API-Key") == "" {
+        return c.AbortUnauthorized("Missing API key")
+    }
+    return c.Next()
+})
+
+o.Use(func(c *okapi.Context) error {
+    err := c.Next()
+    if c.IsAborted() {
+        c.Logger().Info("request aborted", "path", c.Path())
+    }
+    return err
+})
+```
+
+`Error*` helpers and other writers such as `c.JSON` do not mark the request aborted.
+
+### Status Code Utilities
+
+`okapi.IsClientError(code)`, `okapi.IsServerError(code)` and `okapi.IsError(code)`
+report whether a status code is 4xx, 5xx, or either.
 
 ### Field-Level Validation Errors
 
@@ -154,6 +251,27 @@ an error — so guard against it before calling `err.Error()`.
 
 A handler can also be installed for a single request with
 `c.SetErrorHandler(handler)`, which takes precedence over the application-wide one.
+Any `ErrorHandler` works, including the built-in ones:
+
+```go
+o.Get("/legacy", func(c *okapi.Context) error {
+    c.SetErrorHandler(okapi.DefaultErrorHandler)
+    return c.AbortNotFound("Gone for good")
+})
+```
+
+To go back to the built-in `ErrorResponse` format after installing another
+handler, use `okapi.WithDefaultErrorHandler()` or `o.WithDefaultErrorHandler()`.
+
+:::note OpenAPI documentation
+
+Okapi documents the error responses it adds to routes (such as the `400` for a
+binding failure) with the schema of the configured handler: `ErrorResponse` or
+`ProblemDetail`. It cannot know what a custom `WithErrorHandler` writes, so those
+responses are documented without a body. A handler set with `c.SetErrorHandler`
+is not reflected in the docs. See [Typed routes](./openapi.md#typed-routes).
+
+:::
 
 ## RFC 7807 Problem Details
 
@@ -165,6 +283,9 @@ For APIs requiring standards-compliant error responses, Okapi supports [RFC 7807
 o := okapi.Default()
 o.WithSimpleProblemDetailErrorHandler()
 ```
+
+Each `o.With*ErrorHandler` method also exists as an option, for example
+`okapi.New(okapi.WithSimpleProblemDetailErrorHandler())`.
 
 This is `WithProblemDetailErrorHandler(nil)`, whose defaults are
 `Format: ErrorFormatProblemJSON`, `TypePrefix: "about:blank"`,
@@ -185,8 +306,8 @@ Response (`Content-Type: application/problem+json`) for
 ```
 
 `detail` is the **message** you passed to the `Abort*` helper. The underlying
-error's text is used only when no message was given — that is, when the message
-would just repeat the status text.
+error's text is used only when the message equals the status text, as with
+`AbortWithError`.
 
 ### Advanced Configuration
 
@@ -227,9 +348,11 @@ Point it at a single document describing your error format, or install a custom
 
 ### Configuration Options
 
+`ErrorHandlerConfig` fields:
+
 | Option             | Description                                         |
 |--------------------|-----------------------------------------------------|
-| `Format`           | Response format (see below)                         |
+| `Format`           | An `ErrorFormat`: XML or JSON (see below)           |
 | `TypePrefix`       | The value written to the `type` member              |
 | `IncludeInstance`  | Include the request path in responses               |
 | `IncludeTimestamp` | Add a `timestamp` member to each error              |
@@ -241,7 +364,14 @@ Point it at a single document describing your error format, or install a custom
 |--------------------------|----------------------------|--------------------------------|
 | `ErrorFormatProblemJSON` | `application/problem+json` | RFC 7807 JSON format (default) |
 | `ErrorFormatProblemXML`  | `application/problem+xml`  | RFC 7807 XML format            |
-| `ErrorFormatDefault`     | `application/json`         | Okapi's own `ErrorResponse` shape |
+
+Any other value, including `ErrorFormatDefault` or an empty `Format`, produces
+JSON Problem Details too. For Okapi's own `ErrorResponse` shape, use the default
+handler instead (`WithDefaultErrorHandler`).
+
+`ProblemDetailErrorHandler(config)` returns the handler itself, so it can also be
+installed per request with `c.SetErrorHandler` or wrapped in your own
+`ErrorHandler`.
 
 Example with XML format:
 
@@ -279,3 +409,33 @@ return c.AbortWithProblemDetail(&okapi.ProblemDetail{
     Instance: c.Path(),
 })
 ```
+
+`NewProblemDetail(code, typeURI, detail)` fills `Title` with the status text and
+`Status` with `code`; chain `WithInstance`, `WithExtension` and `WithTimestamp`
+to complete it:
+
+```go
+problem := okapi.NewProblemDetail(http.StatusTooManyRequests,
+    "https://api.example.com/errors/rate-limited", "Slow down").
+    WithInstance(c.Path()).
+    WithTimestamp().
+    WithExtension("retry_after", 30)
+return c.AbortWithProblemDetail(problem)
+```
+
+```json
+{
+  "type": "https://api.example.com/errors/rate-limited",
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Slow down",
+  "instance": "/books",
+  "timestamp": "2026-02-09T21:42:49+01:00",
+  "retry_after": 30
+}
+```
+
+Extensions are marshalled as top-level members next to the standard ones, not
+under a nested key; an extension with the same name as a standard member
+replaces it. `WithTimestamp` adds a `timestamp` extension in RFC 3339 format.
+`AbortWithProblemDetail` always writes JSON, regardless of the handler's `Format`.

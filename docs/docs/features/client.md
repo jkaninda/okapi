@@ -7,7 +7,7 @@ sidebar_position: 14
 
 The `okapi/client` package is a small fluent HTTP client:
 
-- Accepts `context.Context` at the terminal call
+- Accepts a `context.Context` per request (`WithContext`)
 - Supports middleware / interceptors
 - Built-in retry policy with exponential backoff
 - Zero dependency on the okapi server package — usable against any REST API
@@ -67,11 +67,13 @@ err := resp.Decode(&user)
 ## Client Options
 
 Options passed to `client.New` apply to every request issued by the client.
+Each is a `client.Option`; they are applied in order, so a later option overrides
+an earlier one. A `*client.Client` is safe for concurrent use.
 
 | Option                     | Purpose                                              |
 |----------------------------|------------------------------------------------------|
 | `WithHTTPClient(*http.Client)` | Provide a pre-configured `http.Client` (TLS, transport) |
-| `WithTimeout(d)`           | Default per-request timeout                          |
+| `WithTimeout(d)`           | Default per-request timeout (30s when not set; `0` leaves the `http.Client`'s own timeout) |
 | `WithHeader(k, v)`         | Add one default header                               |
 | `WithHeaders(map)`         | Merge multiple default headers                       |
 | `WithBearerToken(token)`   | Set `Authorization: Bearer <token>`                  |
@@ -80,9 +82,12 @@ Options passed to `client.New` apply to every request issued by the client.
 | `WithMiddleware(mw...)`    | Append middleware to the chain                       |
 | `WithRetry(policy)`        | Default retry policy                                 |
 
-`c.BaseURL()` returns the base URL, `c.Request(method, path)` builds a request for
-any method, and `c.Do(ctx, req)` sends an `*http.Request` you built yourself
-through the client's middleware and retry chain.
+`c.Get`, `c.Post`, `c.Put`, `c.Patch`, `c.Delete`, `c.Head` and `c.Options` start a
+builder for `baseURL + path` (an absolute `http://` or `https://` path is used as
+is, and the base URL may be empty). `c.BaseURL()` returns the base URL,
+`c.Request(method, path)` builds a request for any method, and `c.Do(ctx, req)`
+sends an `*http.Request` you built yourself through the client's middleware and
+retry chain.
 
 ## Request Builder
 
@@ -98,8 +103,9 @@ resp, err := c.Post("/items").
     Do()
 ```
 
-`Headers(map)` and `QueryParams(map)` set several at once, and `Path(p)` replaces
-the path on a builder.
+`Headers(map)` and `QueryParams(map)` set several at once, and `Path(p)` appends a
+path segment to the builder's URL (`c.Get("/users").Path("42")` requests
+`/users/42`). Calling `QueryParam` twice with the same key sends both values.
 
 ### Terminal Methods
 
@@ -120,6 +126,11 @@ the path on a builder.
 | `Multipart(func(*multipart.Writer) error)` | `multipart/form-data; boundary=…` |
 | `RawBody([]byte)`           | none (set with `Header`)                |
 | `Body(io.Reader)`           | none (set with `Header`)                |
+
+`JSONBody` sends a `string` or `[]byte` verbatim instead of marshalling it. A
+`Content-Type` you set with `Header` wins over the encoder's. If an encoder fails
+(marshalling, or the `Multipart` callback returning an error), `Do` returns that
+error without sending the request.
 
 ### Auth Helpers
 
@@ -183,6 +194,24 @@ Client middlewares are outermost; per-request middlewares run next; the retry mi
 | `UserAgentMiddleware(ua)`   | Forces `User-Agent` on every request      |
 | `RequestIDMiddleware()`     | Sets `X-Request-Id` (random hex) if absent |
 
+`RoundTripFunc` implements `http.RoundTripper` through its `RoundTrip` method, so
+a plain function can serve as an `http.Client` transport — handy for stubbing the
+network in tests:
+
+```go
+stub := client.RoundTripFunc(func(req *http.Request) (*http.Response, error) {
+    return &http.Response{
+        StatusCode: http.StatusOK,
+        Header:     http.Header{"Content-Type": {"application/json"}},
+        Body:       io.NopCloser(strings.NewReader(`{"id":42}`)),
+        Request:    req,
+    }, nil
+})
+c := client.New("https://api.example.com",
+    client.WithHTTPClient(&http.Client{Transport: stub}),
+)
+```
+
 Custom middleware example:
 
 ```go
@@ -209,6 +238,7 @@ Defaults when fields are zero:
 
 - `MaxAttempts <= 1` → no retries
 - `RetryOnStatus` nil → retries on `408`, `429`, `500`, `502`, `503`, `504`
+- `BaseDelay` zero → attempts follow each other without delay
 - `MaxDelay` zero → backoff doubles indefinitely
 - `ShouldRetry` nil → transport errors (network failures) also retry while attempts remain
 - `RetryNonIdempotent` false → only idempotent requests are retried (see below)
@@ -268,6 +298,8 @@ if err := resp.Error(); err != nil {
 }
 ```
 
-`HTTPError` carries `StatusCode`, `Status`, `Method`, `URL`, `Body` and `Header`.
+`HTTPError` carries `StatusCode`, `Status`, `Method`, `URL`, `Body` and `Header`;
+its message is `"<method> <url>: <status>"`, followed by `": <body>"` when the body
+is not empty.
 
 `Do` (and its alias `Send`) never returns `HTTPError` — a non-2xx response is a valid response. Opt in via `resp.Error()` (or `Decode`, which does it for you).

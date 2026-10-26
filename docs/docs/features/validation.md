@@ -196,9 +196,14 @@ o.Post("/users", func(c *okapi.Context) error {
 })
 ```
 
+`c.Bind()` returns the binding or validation error as is. The other binders
+(`ShouldBind`, `BindJSON`, `BindForm`, …) are listed under
+[Binding Methods](../core-concepts/request-handling.md#binding-methods); note that
+`BindJSON`, `BindXML` and `BindYAML` do not validate.
+
 ### Method 2: Using `okapi.Handle()` (Input Validation)
 
-Use `okapi.Handle()` when you want automatic input binding and validation with a typed handler signature. It binds into the input type and answers `400` with the binding error when that fails:
+Use `okapi.Handle()` when you want automatic input binding and validation with a typed handler signature. It binds into the input type and answers `400` with a [`BindError`](#binderror) when that fails:
 
 ```go
 type Book struct {
@@ -278,6 +283,83 @@ o.Get("/books", okapi.HandleO(func(c *okapi.Context) (*BooksResponse, error) {
 ```
 
 > **Note:** The output struct must follow the body style convention — the payload lives in a field named `Body`, whatever its `json` tag says. The response content type is based on the `Accept` header requested by the client, defaulting to `application/json`.
+
+## Binding Errors
+
+A request that fails to bind or validate is reported with the **full path of the
+field**, built from Go field names (not JSON names), with slice elements shown as
+`[i]`:
+
+| Failure                              | Example message                                                       |
+|--------------------------------------|-----------------------------------------------------------------------|
+| Missing required field               | `field Body.Lines[1].SKU is required`                                 |
+| Constraint not met                   | `field Body.Qty: value 9 must be <= 5`                                |
+| Source value of the wrong type       | `field Page: invalid integer value 'x': strconv.ParseInt: …`          |
+| Malformed body, Body Field Binding   | `field Body: invalid JSON body: …`                                    |
+| Malformed body, flat binding         | `invalid JSON body: …`                                                |
+
+XML, YAML and protobuf bodies are reported the same way. A mistyped value is
+reported instead of being bound as its zero value, and an empty body is not an
+error in itself.
+
+### `BindError`
+
+When `okapi.Handle`, `okapi.H` or `okapi.HandleIO` cannot bind a request, they
+answer `400 Bad Request` with an `*okapi.BindError`:
+
+```go
+type BindError struct {
+    Input string // the handler's input type, e.g. "main.CreateBookInput"
+    Err   error  // the field-level error
+}
+```
+
+`Error()` returns only `Err`'s message, which is what the client sees in
+`details`, so Go type names never reach the response:
+
+```json
+{"code": 400, "message": "Bad Request", "details": "field Body.Name is required", "timestamp": "…"}
+```
+
+`Input` is meant for logs and custom error handlers; Okapi also logs it at debug
+level, together with the method and path. Use `errors.As` to reach it:
+
+```go
+o := okapi.New(okapi.WithErrorHandler(func(c *okapi.Context, code int, msg string, err error) error {
+    var be *okapi.BindError
+    if errors.As(err, &be) {
+        c.Logger().Warn("invalid input", "input", be.Input, "error", be.Err)
+    }
+    return okapi.DefaultErrorHandler(c, code, msg, err)
+}))
+```
+
+`c.Bind()` called in your own handler returns the plain error, not a `BindError`.
+
+### Route Input Checks
+
+Some input types can never bind, whatever the request. When a route is
+registered with `okapi.Handle`, `okapi.H` or `okapi.HandleIO`, Okapi inspects the
+input type and logs each such field as an **error on the application logger**, at
+registration time, so the mistake shows when the server starts instead of as a
+`400` on every request. The route is still registered; nothing panics or fails.
+
+```text
+level=ERROR msg="route input can never bind" method=GET path=/items input=main.GetInput problem="field ID: required path parameter \"id\" is not in the route" component=okapi
+```
+
+The problems reported are:
+
+| Problem                                                        | Example                                                            |
+|----------------------------------------------------------------|--------------------------------------------------------------------|
+| A `required:"true"` `path`/`param` field missing from the route | `field ID: required path parameter "id" is not in the route`       |
+| A `path`, `param`, `query`, `header` or `cookie` field whose type cannot be parsed from a string | `field Since: time.Time cannot be parsed from a query value` |
+| A `Body` type no decoder can fill (func, channel, complex, non-empty interface) | `field Body: func() cannot be decoded from a request body` |
+
+Parsable types are strings, booleans, integers, unsigned integers, floats,
+pointers to these, and slices of strings, booleans or signed integers. A path
+parameter that is not marked `required` is not reported, so one input type can be
+shared by a create route and its `/{id}` update route.
 
 ## Input Sources
 

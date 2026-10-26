@@ -54,6 +54,21 @@ o := okapi.New().WithOpenAPIDocs(
 )
 ```
 
+`okapi.OpenAPI` also takes `Summary`, `Description`, `TermsOfService`,
+`Servers`, `License`, `SecuritySchemes`, `UI`, `StrictDocUI` and `Favicon` (the
+URL of the icon the documentation UIs use).
+
+### Disabling documentation
+
+`WithOpenAPIDisabled` turns documentation off, for example on an instance
+created with `okapi.Default()`. The documentation and spec routes then answer
+`404`:
+
+```go
+o := okapi.Default().WithOpenAPIDisabled()
+// or: okapi.New(okapi.WithOpenAPIDisabled())
+```
+
 ## Security Schemes
 
 Define authentication mechanisms for your API:
@@ -89,11 +104,27 @@ o.WithOpenAPIDocs(okapi.OpenAPI{
                 },
             },
         },
+        {
+            Name: "X-API-Key", // for apiKey, also the header/query/cookie name
+            Type: "apiKey",
+            In:   "header",
+        },
     },
 })
 ```
 
+Each `okapi.SecurityScheme` is published under its `Name`. It has `Type`
+(`http`, `apiKey`, `oauth2`), `Scheme` and `BearerFormat` for
+`http`, `In` (`header`, `query`, `cookie`) for `apiKey`, `Flows` for `oauth2`,
+and `Description`. `okapi.OAuthFlows` holds an `*okapi.OAuthFlow` for each of
+`Implicit`, `Password`, `ClientCredentials` and `AuthorizationCode`; a flow has
+`AuthorizationURL`, `TokenURL`, `RefreshURL` and `Scopes`.
+
 ## Applying Security to Routes
+
+A security requirement maps scheme names to the scopes the route needs. It is a
+`map[string][]string`, also available as `okapi.SecurityRequirement`. A scheme
+not declared in `SecuritySchemes` is dropped from the route, with a warning.
 
 ### Single Route
 
@@ -103,6 +134,7 @@ var bearerAuthSecurity = []map[string][]string{
 }
 
 o.Get("/books", getBooksHandler).WithSecurity(bearerAuthSecurity...)
+o.Post("/books", createBookHandler).WithSecurity(okapi.SecurityRequirement{"OAuth2": {"write"}})
 ```
 
 ### Route Group
@@ -110,6 +142,18 @@ o.Get("/books", getBooksHandler).WithSecurity(bearerAuthSecurity...)
 ```go
 api := o.Group("/api", jwtMiddleware).WithSecurity(bearerAuthSecurity)
 api.Get("/", apiHandler)
+```
+
+### `DocBearerAuth` and `DocBasicAuth`
+
+`okapi.DocBearerAuth()` (or `Doc().BearerAuth()`) and `okapi.DocBasicAuth()`
+require the schemes named `BearerAuth` and `BasicAuth`. When `SecuritySchemes`
+is empty, Okapi declares the scheme for you (a JWT bearer token, or HTTP basic);
+otherwise, or when a document uses both, declare the schemes with those exact
+names yourself.
+
+```go
+o.Get("/admin", adminHandler, okapi.DocBasicAuth())
 ```
 
 ## Documenting Routes
@@ -155,6 +199,9 @@ o.Post("/books", createBookHandler,
         Build(),
 )
 ```
+
+`Build()` merges the chain into a single `RouteOption`; `AsOption()` is the same
+thing under another name.
 
 ### 3. Body Field Style
 
@@ -305,6 +352,27 @@ okapi.Doc().
 A single example is the media type's `example`; named ones are listed under
 `examples`. With both, the single one is listed as `default`.
 
+### Parameter defaults and enums
+
+`DocPathParamWithDefault`, `DocQueryParamWithDefault` and `DocHeaderWithDefault`
+(and the builder's `PathParamWithDefault`, `QueryParamWithDefault` and
+`HeaderWithDefault`) take a last argument that sets the parameter's `default`.
+With the type `"enum"` and a slice, it lists the allowed values instead. An
+`*openapi3.SchemaRef` replaces the schema altogether, and the type is ignored:
+
+```go
+o.Get("/books", listBooksHandler,
+    okapi.DocQueryParamWithDefault("limit", "int", "Page size", false, 20),
+    okapi.DocQueryParamWithDefault("sort", "enum", "Sort order", false, []string{"asc", "desc"}),
+    okapi.DocHeaderWithDefault("X-Region", "string", "Region", false,
+        openapi3.NewSchemaRef("", openapi3.NewStringSchema().WithPattern("^[a-z]{2}$"))),
+)
+```
+
+The type names a parameter can take are `string`, `int` / `integer`, `int64`,
+`float` / `float32`, `float64` / `double`, `bool` / `boolean`, `uuid`, `date`
+and `date-time` / `datetime`; anything else is documented as a string.
+
 ### 4. Declarative Route Definition
 
 With `okapi.RouteDefinition`, documentation lives right next to the route. Common
@@ -391,27 +459,37 @@ registers a route matching every method.
 
 ## Available Documentation Options
 
-| Method                                           | Description                              |
-|--------------------------------------------------|------------------------------------------|
-| `Summary()` / `Doc().Summary()`               | Short endpoint summary                   |
-| `Description()` / `Doc().Description()`       | Long endpoint description                |
-| `Tags()` / `Doc().Tags()`                     | Group endpoints under tags               |
-| `DocBearerAuth()` / `Doc().BearerAuth()`         | Enable Bearer token authentication       |
-| `DocRequestBody()` / `Doc().RequestBody()`       | Document request body schema             |
-| `DocRequestContentType()` / `Doc().RequestContentType()` | Set the request body media types  |
-| `DocRequestExample()` / `Doc().RequestExample()` | Add an example of the request body       |
-| `DocRequestExamples()` / `Doc().RequestExamples()` | Add named examples of the request body |
-| `DocResponseExample()` / `Doc().ResponseExample()` | Add an example of a response           |
-| `DocResponseExamples()` / `Doc().ResponseExamples()` | Add named examples of a response     |
-| `DocResponse()` / `Doc().Response()`             | Document response schema or status codes |
-| `DocPathParam()` / `Doc().PathParam()`           | Document path parameters                 |
-| `DocQueryParam()` / `Doc().QueryParam()`         | Document query parameters                |
-| `DocHeader()` / `Doc().Header()`                 | Document request headers                 |
-| `DocResponseHeader()` / `Doc().ResponseHeader()` | Document a header on every response      |
-| `DocResponseHeaderFor()` / `Doc().ResponseHeaderFor()` | Document a header on one status    |
-| `DocResponseDescription()` / `Doc().ResponseDescription()` | Describe the response for a status |
-| `Deprecated()` / `Doc().Deprecated()`         | Mark route as deprecated                 |
-| `Hide()` / `Doc().Hide()`                       | Leave the route out of the document      |
+| Option                                                         | Description                                    |
+|----------------------------------------------------------------|------------------------------------------------|
+| `Summary()` / `Doc().Summary()`                                | Short endpoint summary                         |
+| `Description()` / `Doc().Description()`                        | Long endpoint description                      |
+| `OperationId()` / `Doc().OperationId()`                        | Set the `operationId`                          |
+| `Tag()`                                                        | Add one tag                                    |
+| `Tags()` / `Doc().Tags()`                                      | Group endpoints under tags                     |
+| `Deprecated()` / `Doc().Deprecated()`                          | Mark route as deprecated                       |
+| `Hide()` / `Doc().Hide()`                                      | Leave the route out of the document            |
+| `DocBearerAuth()` / `Doc().BearerAuth()`                       | Require the `BearerAuth` scheme                |
+| `DocBasicAuth()`                                               | Require the `BasicAuth` scheme                 |
+| `Request()`                                                    | Document params and body from a struct         |
+| `Response()`                                                   | Document a response from a struct              |
+| `WithIO()`                                                     | `Request()` and `Response()` in one call       |
+| `DocRequestBody()` / `Doc().RequestBody()`                     | Document request body schema                   |
+| `DocRequestContentType()` / `Doc().RequestContentType()`       | Set the request body media types               |
+| `DocRequestExample()` / `Doc().RequestExample()`               | Add an example of the request body             |
+| `DocRequestExamples()` / `Doc().RequestExamples()`             | Add named examples of the request body         |
+| `DocResponse()` / `Doc().Response()`                           | Document response schema or status codes       |
+| `DocResponseExample()` / `Doc().ResponseExample()`             | Add an example of a response                   |
+| `DocResponseExamples()` / `Doc().ResponseExamples()`           | Add named examples of a response               |
+| `DocResponseDescription()` / `Doc().ResponseDescription()`     | Describe the response for a status             |
+| `DocResponseHeader()` / `Doc().ResponseHeader()`               | Document a header on every response            |
+| `DocResponseHeaderFor()` / `Doc().ResponseHeaderFor()`         | Document a header on one status                |
+| `DocPathParam()` / `Doc().PathParam()`                         | Document path parameters                       |
+| `DocPathParamWithDefault()` / `Doc().PathParamWithDefault()`   | Path parameter with a default, enum or schema  |
+| `DocQueryParam()` / `Doc().QueryParam()`                       | Document query parameters                      |
+| `DocQueryParamWithDefault()` / `Doc().QueryParamWithDefault()` | Query parameter with a default, enum or schema |
+| `DocHeader()` / `Doc().Header()`                               | Document request headers                       |
+| `DocHeaderWithDefault()` / `Doc().HeaderWithDefault()`         | Request header with a default, enum or schema  |
+| `Doc().Build()` / `Doc().AsOption()`                           | Turn the builder into a `RouteOption`          |
 
 ## Schema Generation Details
 
@@ -448,9 +526,32 @@ A few things worth knowing about how schemas are derived from your Go types:
   `delete`. A CORS preflight for such a route lists real method names in
   `Access-Control-Allow-Methods` rather than `*`.
 
+## Reusable Component Schemas
+
+`RegisterSchemas` adds schemas to `components.schemas` under the given names.
+Each `okapi.SchemaInfo` carries the `Schema` (an `*openapi3.SchemaRef`) and an
+optional `TypeName`, which defaults to the name. Registering a name twice
+returns an error.
+
+```go
+err := o.RegisterSchemas(map[string]*okapi.SchemaInfo{
+    "Money": {Schema: openapi3.NewSchemaRef("", openapi3.NewObjectSchema().
+        WithProperty("amount", openapi3.NewFloat64Schema()).
+        WithProperty("currency", openapi3.NewStringSchema()))},
+})
+```
+
+A generated object schema that matches a registered one is replaced by a
+`$ref` to it. To reference one explicitly, use
+`&openapi3.SchemaRef{Ref: "#/components/schemas/Money"}`, for example as the
+last argument of `DocQueryParamWithDefault`. Register schemas before the server
+starts, since the document is built then.
+
 ## Choosing the Documentation UI
 
 Okapi ships with three interactive UIs: **Swagger UI** (default), **ReDoc**, and **Scalar**.
+They are values of the `okapi.DocUI` type: `okapi.SwaggerUI` (`"swagger"`),
+`okapi.RedocUI` (`"redoc"`) and `okapi.ScalarUI` (`"scalar"`).
 The UI rendered at `/docs` is selectable with the `UI` field on `okapi.OpenAPI`:
 
 ```go
@@ -460,10 +561,11 @@ o.WithOpenAPIDocs(okapi.OpenAPI{
 })
 ```
 
-…or with the chainable `WithDocUI` method:
+…or with `WithDocUI`, as a chainable method or an option:
 
 ```go
 o := okapi.New().WithOpenAPIDocs().WithDocUI(okapi.ScalarUI)
+// or: okapi.New(okapi.WithDocUI(okapi.RedocUI)).WithOpenAPIDocs()
 ```
 
 An unset or unrecognised value falls back to Swagger UI.

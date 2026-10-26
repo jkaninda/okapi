@@ -35,6 +35,9 @@ Named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to t
   - Cookies
   - Path parameters
 - Strongly typed request handling with built-in validation
+- Typed routes: `okapi.Post(o, "/books", createBook)` binds the input, writes the
+  output, and documents both
+- Bind errors name the full field path and the expected type
 - Request bodies are capped (8 MB by default, adjustable with `WithMaxRequestBody`)
 
 ### 🔐 Security & Middleware
@@ -52,6 +55,10 @@ Named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to t
 - Automatic OpenAPI generation: **3.1 by default**, with the same description also served as **3.0**
 - Three interactive UIs bundled: **Swagger UI** (default), **ReDoc**, and **Scalar**
 - Documentation is generated from your route definitions, so it stays in sync with your code
+- Parameters, form and file uploads, response headers, examples and the `400`
+  a binding failure gets are documented from your types
+- The document is validated on startup, can be exported from the CLI, and can be
+  checked against a golden file in tests
 
 ### ⚡ Dynamic Route Management
 
@@ -64,11 +71,14 @@ Named after the okapi (/oʊˈkɑːpiː/), a rare and graceful mammal native to t
 
 ### 🛠 Modern Developer Experience
 
-- Clear and consistent error handling
+- Clear and consistent error handling, with RFC 7807 Problem Details support
 - Structured logging support
 - Easy testing and maintainable architecture
 - Static file serving and single-page-application hosting
 - Templating engine support (HTML-escaping by default)
+- Server-Sent Events and WebSocket support
+- A CLI helper for flags, config files and subcommands
+- An HTTP client for calling other services
 
 Built for **real-world applications**, Okapi scales from quick prototypes to production-grade services with a focus on speed, clarity, and maintainability.
 

@@ -87,11 +87,86 @@ func main() {
 When no extensions are passed, `.html` and `.tmpl` are used. The function returns
 an error when the directory contains no templates.
 
+The scan covers the directory itself and its **immediate** subdirectories only
+(`views/*.html` and `views/*/*.html`); files nested deeper are not loaded. Since
+templates are named by base name, two files with the same name in different
+subdirectories collide, and the one parsed last wins.
+
 You can also load templates from a glob pattern instead of a directory:
 
 ```go
 tmpl, err := okapi.NewTemplateFromFiles("public/views/*.html")
 ```
+
+### Configuring with `TemplateConfig`
+
+`NewTemplateWithConfig` loads templates from a `TemplateConfig`, and is the way
+to register template functions:
+
+```go
+tmpl, err := okapi.NewTemplateWithConfig(okapi.TemplateConfig{
+    BaseDir: "public/views",
+    Pattern: "*.html",
+    Funcs:   template.FuncMap{"upper": strings.ToUpper},
+})
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Pattern` | `string` | Glob pattern selecting the template files, e.g. `"*.html"` |
+| `FS` | `fs.FS` | Filesystem to read from (e.g. an `embed.FS`). When set, `Pattern` is matched inside it and `BaseDir` is ignored |
+| `Funcs` | `template.FuncMap` | Functions available to every template, registered before parsing |
+| `BaseDir` | `string` | Directory `Pattern` is joined to when `FS` is nil. When both are empty, `Pattern` is used on its own |
+
+Patterns use Go's glob syntax, where `**` matches a single path segment like `*`,
+not any depth. An error is returned when the pattern matches no templates.
+
+### Adding Templates Later
+
+An `*okapi.Template` accepts more templates after it is created:
+
+```go
+tmpl, err := okapi.NewTemplateFromFiles("public/views/*.html")
+if err != nil {
+    log.Fatal(err)
+}
+if err := tmpl.AddTemplate("banner", `<div class="banner">{{.}}</div>`); err != nil {
+    log.Fatal(err)
+}
+if err := tmpl.AddTemplateFile("public/partials/footer.html"); err != nil {
+    log.Fatal(err)
+}
+o := okapi.Default().WithRenderer(tmpl)
+```
+
+`AddTemplate(name, content)` parses a template string under `name`;
+`AddTemplateFile(path)` parses a file, named by its base name (`footer.html`) or
+by its `{{define}}` blocks. Both join the existing set, so they can use its
+functions and be called from its templates.
+
+Add templates at startup, before the first request: `html/template` refuses to
+parse into a set once any of its templates has executed, so a later call returns
+a `cannot Parse after Execute` error.
+
+### Shortcuts on `*Okapi`
+
+Each constructor has a method on `*Okapi` that builds the template and attaches it
+in one step. These **panic** if the templates cannot be loaded, so use them at
+startup, and use the constructors with `WithRenderer` when you would rather handle
+the error.
+
+| Method | Equivalent to |
+|--------|---------------|
+| `WithDefaultRenderer(pattern)` | `NewTemplateFromFiles(pattern)` |
+| `WithRendererFromFS(fsys, pattern)` | `NewTemplate(fsys, pattern)` |
+| `WithRendererFromDirectory(dir, extensions...)` | `NewTemplateFromDirectory(dir, extensions...)` |
+| `WithRendererConfig(config)` | `NewTemplateWithConfig(config)` |
+
+```go
+o := okapi.Default().WithRendererFromDirectory("public/views")
+```
+
+`okapi.WithRenderer(r)` is also available as an option for `okapi.New(...)`.
 
 ---
 

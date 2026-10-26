@@ -6,8 +6,8 @@ sidebar_position: 6
 # Features
 
 Everything Okapi ships with beyond routing and binding: validation, middleware,
-OpenAPI generation, streaming, templating, TLS, testing, a CLI helper and an HTTP
-client.
+OpenAPI generation, streaming with Server-Sent Events and WebSocket, templating,
+single-page apps, TLS, error handling, testing, a CLI helper and an HTTP client.
 
 - [Validations](validation.md)
 - [Middlewares](middleware.md)

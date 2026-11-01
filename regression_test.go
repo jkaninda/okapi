@@ -92,6 +92,23 @@ func TestOpenAPIAutoSecuritySchemesKeepBoth(t *testing.T) {
 	assert.NoError(t, o.ValidateOpenAPI(), "every route's scheme is declared")
 }
 
+func TestOpenAPIHTTPSecuritySchemeHasNoName(t *testing.T) {
+	o := New().WithOpenAPIDocs(OpenAPI{
+		Title: "Books",
+		SecuritySchemes: SecuritySchemes{
+			{Name: "TokenAuth", Type: "http", Scheme: "bearer"},
+			{Name: "X-API-Key", Type: "apiKey", In: "header"},
+		},
+	})
+	o.Get("/books", anyHandler)
+	require.NoError(t, o.ValidateOpenAPI())
+	schemes := o.OpenAPISpec30().Components.SecuritySchemes
+	require.Contains(t, schemes, "TokenAuth")
+	assert.Empty(t, schemes["TokenAuth"].Value.Name, "name is only valid on apiKey schemes")
+	require.Contains(t, schemes, "X-API-Key")
+	assert.Equal(t, "X-API-Key", schemes["X-API-Key"].Value.Name)
+}
+
 func TestValidateAddrAcceptsHostnames(t *testing.T) {
 	for addr, want := range map[string]bool{
 		":8080":               true,

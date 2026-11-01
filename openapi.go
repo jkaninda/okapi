@@ -209,8 +209,7 @@ func (l License) ToOpenAPI() *openapi3.License {
 func (s Servers) ToOpenAPI() openapi3.Servers {
 	servers := make(openapi3.Servers, 0, len(s))
 	for _, srv := range s {
-		// A server needs a URL. Without any, the document has no servers,
-		// which OpenAPI reads as the server at "/".
+
 		if srv.URL == "" {
 			continue
 		}
@@ -232,12 +231,17 @@ func (s Servers) ToOpenAPI() openapi3.Servers {
 func (ss SecuritySchemes) ToOpenAPI() openapi3.SecuritySchemes {
 	result := make(openapi3.SecuritySchemes)
 	for _, s := range ss {
+
+		var name string
+		if s.Type == "apiKey" {
+			name = s.Name
+		}
 		result[s.Name] = &openapi3.SecuritySchemeRef{
 			Value: &openapi3.SecurityScheme{
 				Extensions:   s.Extensions,
 				Origin:       s.Origin.ToOpenAPI(),
 				Type:         s.Type,
-				Name:         s.Name,
+				Name:         name,
 				Scheme:       s.Scheme,
 				BearerFormat: s.BearerFormat,
 				Flows:        s.Flows.ToOpenAPI(),
